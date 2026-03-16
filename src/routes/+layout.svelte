@@ -72,6 +72,8 @@ import KeyboardShortcutsHint from '$lib/components/ui/sidebar/KeyboardShortcutsH
 
   // Исправляем условие проверки маршрута
   $: isPostFormRoute = $page.url.pathname.includes('/create/post') || $page.url.pathname.includes('/edit/post')
+  $: isLandingRoute =
+    $page.url.pathname === '/lp' || $page.url.pathname.startsWith('/lp/')
 
   // Получаем текущий URL для канонической ссылки
   $: siteBaseUrl = (env.PUBLIC_SITE_URL || $page.url.origin).replace(/\/+$/, '')
@@ -207,25 +209,29 @@ import KeyboardShortcutsHint from '$lib/components/ui/sidebar/KeyboardShortcutsH
   dir={$locale == 'he' && $userSettings.useRtl ? 'rtl' : 'ltr'}
   class="min-h-screen "
   route={$page.route}
+  fullBleed={isLandingRoute}
 >
   <Moderation />
   <ToastContainer />
   <ExpandableImage />
   <ModalContainer />
 
-  <Sidebar
-    route={$page.route.id ?? ''}
-    slot="sidebar"
-    let:style={s}
-    let:class={c}
-    class="xl:pt-0 pt-20 {c}"
-    style={s}
-  />
+  <svelte:fragment slot="sidebar" let:style={s} let:class={c}>
+    {#if !isLandingRoute}
+      <Sidebar
+        route={$page.route.id ?? ''}
+        class="xl:pt-0 pt-20 {c}"
+        style={s}
+      />
+    {/if}
+  </svelte:fragment>
   <main
     slot="main"
     let:style={s}
     let:class={c}
-    class="p-4 sm:p-6 min-w-0 w-full flex flex-col h-full relative {c} xl:pt-0 pt-20"
+    class="{isLandingRoute
+      ? 'min-w-0 w-full flex flex-col h-full relative xl:pt-0 pt-20'
+      : 'p-4 sm:p-6 min-w-0 w-full flex flex-col h-full relative xl:pt-0 pt-20'} {c}"
     style={s}
     id="main"
   >
@@ -233,38 +239,39 @@ import KeyboardShortcutsHint from '$lib/components/ui/sidebar/KeyboardShortcutsH
   </main>
   <Navbar slot="navbar" let:style={s} let:class={c} class={c} style={s} />
   
-  <div 
-    slot="suffix" 
-    let:class={c} 
-    let:style={s} 
-    class="{c} {isPostFormRoute ? 'hidden' : ''}"
-    style={s}
-  >
-    <div class="flex flex-col gap-4 h-[calc(100vh-4rem)] sticky top-16 p-4">
-      <!-- Прокручиваемый контент сайдбара -->
-      <div class="flex flex-col gap-4 flex-1 min-h-0 overflow-auto hover:scrollbar scrollbar-hidden">
-        <!-- CommunityCard или SiteCard -->
-        {#if $page.route.id?.startsWith('/c/') || $page.route.id?.startsWith('/post/')}
-          <div class="flex-shrink-0">
-            {#if $page.data.slots?.sidebar?.component}
-              <svelte:component
-                this={$page.data.slots.sidebar.component}
-                {...$page.data.slots.sidebar.props}
-              />
+  <svelte:fragment slot="suffix" let:class={c} let:style={s}>
+    {#if !isLandingRoute}
+      <div 
+        class="{c} {isPostFormRoute ? 'hidden' : ''}"
+        style={s}
+      >
+        <div class="flex flex-col gap-4 h-[calc(100vh-4rem)] sticky top-16 p-4">
+          <!-- Прокручиваемый контент сайдбара -->
+          <div class="flex flex-col gap-4 flex-1 min-h-0 overflow-auto hover:scrollbar scrollbar-hidden">
+            <!-- CommunityCard или SiteCard -->
+            {#if $page.route.id?.startsWith('/c/') || $page.route.id?.startsWith('/post/')}
+              <div class="flex-shrink-0">
+                {#if $page.data.slots?.sidebar?.component}
+                  <svelte:component
+                    this={$page.data.slots.sidebar.component}
+                    {...$page.data.slots.sidebar.props}
+                  />
+                {/if}
+              </div>
             {/if}
+            
+            <!-- PopularPosts -->
+            <div class="flex flex-col gap-4">
+              <KeyboardShortcutsHint enabled={keyboardShortcutsHintEnabled} />
+              <PopularPosts />
+              <div class="h-px bg-slate-200 dark:bg-zinc-800"></div>
+              <RecentComments />
+            </div>
           </div>
-        {/if}
-        
-        <!-- PopularPosts -->
-        <div class="flex flex-col gap-4">
-          <KeyboardShortcutsHint enabled={keyboardShortcutsHintEnabled} />
-          <PopularPosts />
-          <div class="h-px bg-slate-200 dark:bg-zinc-800"></div>
-          <RecentComments />
         </div>
       </div>
-    </div>
-  </div>
+    {/if}
+  </svelte:fragment>
 </Shell>
 
 <style>

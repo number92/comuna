@@ -78,6 +78,7 @@
   import { GlobeAlt } from 'svelte-hero-icons'
 
   export let route: { id: string | null } | undefined = undefined
+  export let fullBleed = false
 
   $: title = route ? routes[(route.id as keyof typeof routes) ?? ''] : ''
 
@@ -121,7 +122,7 @@
   <div
     class="content min-h-screen {$userSettings.newWidth
       ? 'limit-width'
-      : ''}"
+      : ''} {fullBleed ? 'full-bleed' : ''}"
   >
     <slot
       name="sidebar"
@@ -168,9 +169,17 @@
   .content.limit-width {
     max-width: 1280px;
   }
+
+  .content.full-bleed,
+  .content.full-bleed.limit-width {
+    max-width: none;
+    grid-template-columns: 1fr;
+    grid-template-areas: 'main';
+    justify-items: start;
+  }
   
   @media (max-width: 1279px) {
-    .content.limit-width {
+    .content.limit-width:not(.full-bleed) {
       max-width: 960px;
     }
   }
@@ -180,7 +189,7 @@
   }
 
   @media (min-width: 768px) {
-    .content {
+    .content:not(.full-bleed) {
       grid-template-columns: 1fr 2fr;
       justify-items: end start;
       grid-template-areas: 'sidebar main';
@@ -189,22 +198,26 @@
 
   @media (min-width: 1280px) {
     .content {
+      width: 100%;
+    }
+
+    .content:not(.full-bleed) {
       grid-template-columns: 20% 60% 20%;
       justify-items: end center start;
       grid-template-areas: 'sidebar main suffix';
     }
 
-    .content.limit-width {
+    .content.limit-width:not(.full-bleed) {
       grid-template-columns: 1fr 3fr 1fr;
     }
 
-    :global(.content.limit-width > *:first-child) {
+    :global(.content.limit-width:not(.full-bleed) > *:first-child) {
       max-width: 15rem;
       justify-self: end;
       width: 100%;
     }
 
-    :global(.content.limit-width > *:last-child) {
+    :global(.content.limit-width:not(.full-bleed) > *:last-child) {
       max-width: 20rem;
       justify-self: start;
       width: 100%;

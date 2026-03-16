@@ -5,7 +5,6 @@
   import type { IconSource } from 'svelte-hero-icons'
   import {
     ArrowTrendingUp,
-    ChatBubbleLeftRight,
     CheckCircle,
     ClipboardDocumentList,
     DocumentText,
@@ -111,7 +110,6 @@
   <section class="hero-section">
     <div class="hero-shell">
       <div class="hero-copy">
-        <div class="eyebrow">Landing page / Сообщества</div>
         <h1>Сообщество, которое работает как сабреддит, а не как шумный чат</h1>
         <p class="hero-lead">
           В Comuna авторы создают сообщества, задают правила публикации по
@@ -122,7 +120,6 @@
 
         <div class="hero-actions">
           <a class="cta-primary" href="/comuns?create=1">Создать сообщество</a>
-          <a class="cta-secondary" href="#telegram-migration">Перенести аудиторию из Telegram</a>
         </div>
 
         <ul class="hero-checklist">
@@ -133,71 +130,6 @@
             </li>
           {/each}
         </ul>
-      </div>
-
-      <div class="hero-panel">
-        <div class="panel-window">
-          <div class="panel-window__top">
-            <span>Комьюнити о кино и медиа</span>
-            <span>Редакторский режим</span>
-          </div>
-
-          <div class="panel-stack">
-            <div class="signal-card signal-card--accent">
-              <div class="signal-card__icon">
-                <Icon src={ClipboardDocumentList} size="18" />
-              </div>
-              <div>
-                <strong>Тема: «Рецензии»</strong>
-                <p>
-                  Обязательные поля: оценка, аргументы, вывод, спойлер-метка,
-                  рекомендации по заголовку.
-                </p>
-              </div>
-            </div>
-
-            <div class="signal-card">
-              <div class="signal-card__icon">
-                <Icon src={Sparkles} size="18" />
-              </div>
-              <div>
-                <strong>Шаблон: «Разбор премьеры»</strong>
-                <p>
-                  Пользователь не начинает с пустого листа, а двигается по
-                  понятной структуре публикации.
-                </p>
-              </div>
-            </div>
-
-            <div class="signal-card">
-              <div class="signal-card__icon">
-                <Icon src={ChatBubbleLeftRight} size="18" />
-              </div>
-              <div>
-                <strong>Обсуждение под постом</strong>
-                <p>
-                  Комментарии и реакции живут рядом с публикацией, а не тонут в
-                  ленте чата через десять минут.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div class="metric-row">
-            <div>
-              <span class="metric-label">Роль автора</span>
-              <strong>ведет тему</strong>
-            </div>
-            <div>
-              <span class="metric-label">Роль участника</span>
-              <strong>публикует по шаблону</strong>
-            </div>
-            <div>
-              <span class="metric-label">Результат</span>
-              <strong>контент копится, а не исчезает</strong>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   </section>
@@ -295,7 +227,6 @@
   <section class="cta-section">
     <div class="cta-shell">
       <div>
-        <div class="eyebrow eyebrow--light">Для авторов, редакций и тематических лидеров</div>
         <h2>Если вы уже собрали ядро аудитории, пора дать ему нормальную платформу</h2>
         <p>
           Запускайте сообщество, задавайте правила по тематикам, собирайте
@@ -362,7 +293,6 @@
   }
 
   .hero-copy,
-  .hero-panel,
   .feature-card,
   .template-box,
   .migration-card,
@@ -410,12 +340,6 @@
     font-weight: 600;
     letter-spacing: 0.04em;
     text-transform: uppercase;
-  }
-
-  .eyebrow--light {
-    background: rgba(255, 255, 255, 0.12);
-    border-color: rgba(255, 255, 255, 0.22);
-    color: rgba(255, 255, 255, 0.86);
   }
 
   .hero-actions,
@@ -512,58 +436,6 @@
     margin-top: 0.15rem;
   }
 
-  .hero-panel {
-    padding: 0.75rem;
-    border-radius: 2rem;
-    border: 1px solid rgba(22, 37, 70, 0.08);
-    background:
-      linear-gradient(180deg, rgba(17, 38, 80, 0.96), rgba(11, 20, 46, 0.96)),
-      linear-gradient(135deg, rgba(255, 255, 255, 0.04), transparent);
-    color: #f8fafc;
-    box-shadow: 0 30px 80px rgba(11, 20, 46, 0.28);
-  }
-
-  .panel-window {
-    height: 100%;
-    padding: 1.5rem;
-    border-radius: 1.5rem;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.03));
-  }
-
-  .panel-window__top {
-    display: flex;
-    justify-content: space-between;
-    gap: 1rem;
-    margin-bottom: 1.25rem;
-    color: rgba(226, 232, 240, 0.72);
-    font-size: 0.8rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-
-  .panel-stack {
-    display: grid;
-    gap: 0.9rem;
-  }
-
-  .signal-card {
-    display: grid;
-    grid-template-columns: auto 1fr;
-    gap: 0.85rem;
-    padding: 1rem;
-    border-radius: 1.25rem;
-    border: 1px solid rgba(255, 255, 255, 0.09);
-    background: rgba(255, 255, 255, 0.05);
-  }
-
-  .signal-card--accent {
-    background: linear-gradient(135deg, rgba(209, 96, 50, 0.16), rgba(255, 255, 255, 0.05));
-    border-color: rgba(255, 211, 194, 0.22);
-  }
-
-  .signal-card strong,
   .migration-card h3,
   .feature-card h3,
   .cta-shell h2,
@@ -575,13 +447,6 @@
     letter-spacing: -0.03em;
   }
 
-  .signal-card p {
-    margin: 0.35rem 0 0;
-    color: rgba(226, 232, 240, 0.76);
-    line-height: 1.6;
-  }
-
-  .signal-card__icon,
   .feature-card__icon,
   .migration-card__icon {
     display: inline-flex;
@@ -593,38 +458,10 @@
     flex: none;
   }
 
-  .signal-card__icon {
-    background: rgba(255, 255, 255, 0.08);
-    color: #fff;
-  }
-
   .feature-card__icon,
   .migration-card__icon {
     background: var(--landing-accent-soft);
     color: var(--landing-accent);
-  }
-
-  .metric-row {
-    display: grid;
-    gap: 0.9rem;
-    margin-top: 1rem;
-    padding-top: 1rem;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
-  }
-
-  .metric-row span {
-    display: block;
-    color: rgba(226, 232, 240, 0.62);
-    font-size: 0.8rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-
-  .metric-row strong {
-    display: block;
-    margin-top: 0.25rem;
-    font-size: 1rem;
-    font-weight: 500;
   }
 
   .content-section {
@@ -764,7 +601,6 @@
   }
 
   @media (min-width: 900px) {
-    .hero-shell,
     .split-layout,
     .cta-shell {
       grid-template-columns: minmax(0, 1.05fr) minmax(22rem, 0.95fr);
@@ -775,7 +611,6 @@
     }
 
     .migration-grid,
-    .metric-row,
     .comparison-band {
       grid-template-columns: repeat(3, minmax(0, 1fr));
     }
@@ -808,8 +643,7 @@
     .feature-card,
     .template-box,
     .migration-card,
-    .cta-shell,
-    .panel-window {
+    .cta-shell {
       padding: 1.25rem;
     }
   }

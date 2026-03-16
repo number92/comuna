@@ -9,9 +9,9 @@ export const load = async ({ fetch, params, url }) => {
   const comunResponse = await fetch(new URL(buildComunUrl(slug), url.origin).toString())
   if (!comunResponse.ok) {
     if (comunResponse.status === 404) {
-      throw error(404, 'Комуна не найдена')
+      throw error(404, 'Сообщество не найдено')
     }
-    throw error(comunResponse.status, 'Не удалось загрузить коммуну')
+    throw error(comunResponse.status, 'Не удалось загрузить сообщество')
   }
   const comunPayload = await comunResponse.json()
   const comun = comunPayload?.comun ?? null
@@ -21,7 +21,7 @@ export const load = async ({ fetch, params, url }) => {
   const statsResponse = await fetch(statsUrl.toString())
   if (!statsResponse.ok) {
     if (statsResponse.status === 404) {
-      throw error(404, 'Комуна не найдена')
+      throw error(404, 'Сообщество не найдено')
     }
     throw error(statsResponse.status, 'Не удалось загрузить дорожную карту')
   }

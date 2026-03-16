@@ -202,12 +202,12 @@
     if (!canCreateInComun) {
       createError =
         minimumAuthorRatingToPost > 0
-          ? `Публикация в этой комуне доступна авторам с рейтингом от ${formatRatingValue(minimumAuthorRatingToPost)}.`
-          : 'Сейчас вы не можете публиковать записи в эту коммуну.'
+          ? `Публикация в этом сообществе доступна авторам с рейтингом от ${formatRatingValue(minimumAuthorRatingToPost)}.`
+          : 'Сейчас вы не можете публиковать записи в это сообщество.'
       return
     }
     if (!productTagName) {
-      createError = 'Сначала выберите тег продукта в настройках комуны.'
+      createError = 'Сначала выберите тег продукта в настройках сообщества.'
       return
     }
     if (!createTitle.trim()) {
@@ -239,7 +239,7 @@
         template: template ?? undefined,
       })
       toast({
-        content: 'Пост опубликован в комуне',
+        content: 'Пост опубликован в сообществе',
         type: 'success',
       })
       await goto(`/comuns/${comun.slug}`)
@@ -260,18 +260,18 @@
   <Header pageHeader>
     <div class="flex flex-wrap items-center justify-between gap-3 w-full">
       <div class="min-w-0">
-        <h1 class="text-2xl font-bold">Новая запись в комуне</h1>
+        <h1 class="text-2xl font-bold">Новая запись в сообществе</h1>
         <div class="text-sm text-slate-600 dark:text-zinc-400">
           {#if comun?.name}
             {comun.name}
           {:else}
-            Комуна
+            Сообщество
           {/if}
         </div>
       </div>
       {#if comun?.slug}
         <Button color="ghost" on:click={() => goto(`/comuns/${comun?.slug ?? ''}`)}>
-          Назад к комуне
+          Назад к сообществу
         </Button>
       {/if}
     </div>
@@ -286,7 +286,7 @@
     {:else if !$siteUser}
       <div class="flex flex-col gap-3">
         <p class="text-sm text-slate-500 dark:text-zinc-400">
-          Войдите, чтобы публиковать записи в комуне.
+          Войдите, чтобы публиковать записи в сообществе.
         </p>
         <div>
           <Button on:click={goToLogin}>Войти</Button>
@@ -295,10 +295,10 @@
     {:else if authCheckDone && !canCreateInComun}
       <p class="text-sm text-slate-500 dark:text-zinc-400">
         {#if minimumAuthorRatingToPost > 0}
-          Публикация в этой комуне доступна авторам с рейтингом от
+          Публикация в этом сообществе доступна авторам с рейтингом от
           {formatRatingValue(minimumAuthorRatingToPost)}.
         {:else}
-          Сейчас вы не можете публиковать записи в эту коммуну.
+          Сейчас вы не можете публиковать записи в это сообщество.
         {/if}
       </p>
     {:else}
@@ -313,7 +313,7 @@
           {#if productTagName}
             Тег продукта <span class="font-semibold">#{productTagName}</span> будет добавлен автоматически.
           {:else}
-            У этой комуны пока не выбран тег продукта. Укажите его в настройках комуны перед публикацией.
+            У этого сообщества пока не выбран тег продукта. Укажите его в настройках сообщества перед публикацией.
           {/if}
         </div>
 
@@ -334,13 +334,13 @@
         {#if selectedAuthorBelowMinimum}
           <div class="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/60 dark:bg-rose-950/30 dark:text-rose-200">
             У выбранного автора рейтинг {formatRatingValue(selectedAuthorRating)}, а для публикации в этой
-            комуне нужен рейтинг от {formatRatingValue(minimumAuthorRatingToPost)}.
+            сообществе нужен рейтинг от {formatRatingValue(minimumAuthorRatingToPost)}.
           </div>
         {/if}
 
         {#if comunCategories.length}
           <label class="flex flex-col gap-1">
-            <span class="text-sm text-slate-700 dark:text-zinc-300">Категория внутри комуны</span>
+            <span class="text-sm text-slate-700 dark:text-zinc-300">Категория внутри сообщества</span>
             <select
               bind:value={createCategoryId}
               class="w-full rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"
@@ -385,7 +385,7 @@
             loading={creating}
             disabled={creating || !productTagName}
           >
-            Опубликовать в коммуну
+            Опубликовать в сообщество
           </Button>
           <Button
             color="ghost"

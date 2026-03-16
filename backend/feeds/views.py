@@ -86,6 +86,7 @@ _BOT_ID: int | None = None
 _TOKEN_SIGNER = TimestampSigner(salt="comuna-auth")
 _TOKEN_MAX_AGE = 60 * 60 * 24 * 30
 _FAKE_VIEWS_RAMP_SECONDS = 48 * 60 * 60
+_COMUN_CREATION_MIN_AUTHOR_RATING = 10.0
 _COMUN_ACTIVITY_POINTS = {
     "post": 10,
     "comment": 5,
@@ -708,6 +709,7 @@ def _serialize_user(user: User) -> dict:
                 "author_rating": _author_rating_value(author.rating_total),
             }
         )
+    can_create_comun, create_comun_min_author_rating, max_author_rating = _comun_creation_access_state(user)
     return {
         "id": user.id,
         "username": user.username,
@@ -717,6 +719,9 @@ def _serialize_user(user: User) -> dict:
         "is_staff": user.is_staff,
         "is_author": bool(authors),
         "authors": authors,
+        "max_author_rating": max_author_rating,
+        "can_create_comun": can_create_comun,
+        "create_comun_min_author_rating": create_comun_min_author_rating,
     }
 
 
@@ -1152,6 +1157,24 @@ def _author_avatar_url(request: HttpRequest | None, author: Author) -> str | Non
 
 def _author_rating_value(total_rating: int | None) -> float:
     return round((total_rating or 0) * 0.05, 2)
+
+
+def _user_max_author_rating(user: User | None) -> float:
+    if not user:
+        return 0.0
+    author_ids, _author_links = _public_user_author_ids(user)
+    if not author_ids:
+        return 0.0
+    max_author_rating = 0.0
+    for total_rating in Author.objects.filter(id__in=author_ids).values_list("rating_total", flat=True):
+        max_author_rating = max(max_author_rating, _author_rating_value(total_rating))
+    return round(max_author_rating, 2)
+
+
+def _comun_creation_access_state(user: User | None) -> tuple[bool, float, float]:
+    minimum_rating = round(_COMUN_CREATION_MIN_AUTHOR_RATING, 2)
+    max_author_rating = _user_max_author_rating(user)
+    return max_author_rating > minimum_rating, minimum_rating, max_author_rating
 
 
 def _format_rating_value(value: float | int | None) -> str:
@@ -8283,6 +8306,19 @@ def comuns_list_create(request: HttpRequest) -> HttpResponse:
 
     if not current_user:
         return JsonResponse({"ok": False, "error": "unauthorized"}, status=401)
+
+    can_create_comun, minimum_rating, max_author_rating = _comun_creation_access_state(current_user)
+    if not can_create_comun:
+        return JsonResponse(
+            {
+                "ok": False,
+                "error": "insufficient author rating",
+                "reason": "insufficient_author_rating",
+                "minimum_author_rating": minimum_rating,
+                "max_author_rating": max_author_rating,
+            },
+            status=403,
+        )
 
     try:
         body = json.loads(request.body.decode("utf-8") or "{}")

@@ -213,7 +213,7 @@
   }
 
   $: siteTitle = env.PUBLIC_SITE_TITLE || 'Comuna'
-  $: comunName = comun?.name || 'Комуна'
+  $: comunName = comun?.name || 'Сообщество'
   $: welcomePostView = comun?.welcome_post ? backendPostToPostView(comun.welcome_post) : null
   $: comunTopMembers = comun?.activity?.top_members ?? []
   $: comunParticipantsCount = comun?.activity?.participants_count ?? comunTopMembers.length
@@ -662,7 +662,7 @@
         ...$userSettings,
         myFeedComuns: Array.from(next),
       }
-      toast({ content: 'Комуна убрана из "Моей ленты"' })
+      toast({ content: 'Сообщество убрано из "Моей ленты"' })
       return
     }
     next.add(slug)
@@ -670,7 +670,7 @@
       ...$userSettings,
       myFeedComuns: Array.from(next),
     }
-    toast({ content: 'Посты этой комуны будут попадать в "Мою ленту"' })
+    toast({ content: 'Посты этого сообщества будут попадать в "Мою ленту"' })
   }
 
   const authHeaders = () => {
@@ -723,7 +723,7 @@
     try {
       const response = await fetch(url, $siteToken ? { headers: { Authorization: `Bearer ${$siteToken}` } } : undefined)
       if (!response.ok) {
-        throw new Error('Не удалось загрузить посты комуны')
+        throw new Error('Не удалось загрузить посты сообщества')
       }
       const payload = await response.json()
       applyPostsPayload(payload, reset)
@@ -775,7 +775,7 @@
       })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
-        throw new Error(payload?.error || 'Не удалось загрузить настройки комуны')
+        throw new Error(payload?.error || 'Не удалось загрузить настройки сообщества')
       }
       if (payload?.comun) {
         comun = payload.comun
@@ -802,7 +802,7 @@
     settingsDraft = cloneComun(comun)
     await refreshComunManage()
     if (!comun?.can_moderate) {
-      toast({ content: 'Настройки доступны только модераторам комуны', type: 'warning' })
+      toast({ content: 'Настройки доступны только модераторам сообщества', type: 'warning' })
       return
     }
     settingsOpen = true
@@ -984,7 +984,7 @@
       comun = payload.comun ?? comun
       settingsDraft = cloneComun(comun)
       settingsOpen = false
-      toast({ content: 'Настройки комуны сохранены', type: 'success' })
+      toast({ content: 'Настройки сообщества сохранены', type: 'success' })
       await loadPosts(true)
     } catch (error) {
       settingsError = error instanceof Error ? error.message : 'Ошибка сохранения'
@@ -1197,11 +1197,11 @@
             {/if}
           </div>
           <div class="min-w-0">
-            <Header noMargin>{comun?.name ?? 'Комуна'}</Header>
+            <Header noMargin>{comun?.name ?? 'Сообщество'}</Header>
             {#if comun?.product_tag}
               <div
                 class="mt-1 text-sm text-slate-600 dark:text-zinc-400"
-                title="Записи опубликованные с данным тегом на всем сайте будут отображаться в этой комуне"
+                title="Записи опубликованные с данным тегом на всем сайте будут отображаться в этом сообществе"
               >
                 Тег продукта: <span class="font-medium">#{comun.product_tag.name}</span>
               </div>
@@ -1232,7 +1232,7 @@
           <Button
             color={isSubscribedToComun ? 'ghost' : undefined}
             on:click={toggleComunInMyFeed}
-            title={isSubscribedToComun ? 'Убрать коммуну из Моей ленты' : 'Добавить коммуну в Мою ленту'}
+            title={isSubscribedToComun ? 'Убрать сообщество из Моей ленты' : 'Добавить сообщество в Мою ленту'}
           >
             {isSubscribedToComun ? 'Вы подписаны' : 'Подписаться'}
           </Button>
@@ -1258,7 +1258,7 @@
           {/if}
           {#if isComunCreator() && comun?.slug}
             <Button color="ghost" on:click={() => goto(`/comuns/${comun.slug}/settings`)}>
-              Настройки комуны
+              Настройки сообщества
             </Button>
           {/if}
         </div>
@@ -1357,7 +1357,7 @@
                 Публичная дорожная карта
               </div>
               <div class="truncate text-xs text-slate-500 dark:text-zinc-400">
-                {comun?.name ?? 'Комуна'}
+                {comun?.name ?? 'Сообщество'}
               </div>
             </div>
             <div class="flex items-center gap-2">
@@ -1469,11 +1469,11 @@
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div class="text-sm text-slate-600 dark:text-zinc-400">
           {#if canPostInComun()}
-            Опубликуйте запись прямо в коммуну. Тег продукта будет подставлен автоматически.
+            Опубликуйте запись прямо в сообщество. Тег продукта будет подставлен автоматически.
           {:else if minimumAuthorRatingToPost > 0}
             Публикация открыта для авторов с рейтингом от {formatRatingValue(minimumAuthorRatingToPost)}.
           {:else}
-            Войдите, чтобы опубликовать запись прямо в коммуну.
+            Войдите, чтобы опубликовать запись прямо в сообщество.
           {/if}
         </div>
         <Button on:click={openRoadmapSubmitFlow}>
@@ -1525,7 +1525,7 @@
           {#if isModerator()}
             <div class="rounded-xl border border-slate-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/60 p-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div class="flex flex-col gap-1 min-w-0">
-                <div class="text-xs uppercase tracking-wide text-slate-500 dark:text-zinc-400">Категория внутри комуны</div>
+                <div class="text-xs uppercase tracking-wide text-slate-500 dark:text-zinc-400">Категория внутри сообщества</div>
                 <div class="flex flex-wrap items-center gap-2">
                   <select
                     class="rounded-lg border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1 text-sm"
@@ -1576,9 +1576,9 @@
   {:else}
     <div class="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white/95 dark:bg-zinc-900/85 p-6 text-slate-600 dark:text-zinc-400">
       {#if comun?.product_tag}
-        В этой комуне пока нет публикаций по тегу #{comun.product_tag.name}.
+        В этом сообществе пока нет публикаций по тегу #{comun.product_tag.name}.
       {:else}
-        Модератору нужно выбрать тег продукта в настройках комуны, чтобы сюда начали попадать посты.
+        Модератору нужно выбрать тег продукта в настройках сообщества, чтобы сюда начали попадать посты.
       {/if}
     </div>
   {/if}
@@ -1586,7 +1586,7 @@
 
 <Modal bind:open={settingsOpen} dismissable={settingsCanDismiss} dismissOnBackdrop={true}>
   <div class="w-full max-w-3xl flex flex-col gap-4">
-    <div class="text-lg font-semibold text-slate-900 dark:text-zinc-100">Настройки комуны</div>
+    <div class="text-lg font-semibold text-slate-900 dark:text-zinc-100">Настройки сообщества</div>
     {#if settingsError}
       <div class="rounded-xl border border-rose-200 dark:border-rose-900/50 bg-rose-50 dark:bg-rose-950/20 px-3 py-2 text-sm text-rose-700 dark:text-rose-300">
         {settingsError}
@@ -1675,14 +1675,14 @@
             class="rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"
           />
           <span class="text-xs text-slate-500 dark:text-zinc-400">
-            `0` означает, что писать в коммуну может любой автор. Сейчас установлен порог от
+            `0` означает, что писать в сообщество может любой автор. Сейчас установлен порог от
             {formatRatingValue(settingsDraft.minimum_author_rating_to_post)}.
           </span>
         </label>
 
         {#if canManageComunModerators()}
           <div class="flex flex-col gap-2 rounded-xl border border-slate-200 dark:border-zinc-800 px-3 py-3">
-            <div class="text-sm font-medium text-slate-900 dark:text-zinc-100">Видимость постов комуны в общих лентах</div>
+            <div class="text-sm font-medium text-slate-900 dark:text-zinc-100">Видимость постов сообщества в общих лентах</div>
             <label class="flex items-start gap-2 cursor-pointer">
               <input
                 type="checkbox"
@@ -1697,7 +1697,7 @@
               <span class="min-w-0">
                 <span class="block text-sm text-slate-900 dark:text-zinc-100">Показывать в Горячем</span>
                 <span class="block text-xs text-slate-500 dark:text-zinc-400">
-                  Если выключить, посты, созданные в этой комуне, не попадут на главную.
+                  Если выключить, посты, созданные в этом сообществе, не попадут на главную.
                 </span>
               </span>
             </label>
@@ -1715,7 +1715,7 @@
               <span class="min-w-0">
                 <span class="block text-sm text-slate-900 dark:text-zinc-100">Показывать в Свежее</span>
                 <span class="block text-xs text-slate-500 dark:text-zinc-400">
-                  Если выключить, посты, созданные в этой комуне, останутся только в ленте комуны и персональных лентах.
+                  Если выключить, посты, созданные в этом сообществе, останутся только в ленте сообщества и персональных лентах.
                 </span>
               </span>
             </label>
@@ -1724,9 +1724,9 @@
 
         {#if canManageComunModerators()}
           <div class="flex flex-col gap-2">
-            <div class="text-sm text-slate-700 dark:text-zinc-300">Модераторы комуны</div>
+            <div class="text-sm text-slate-700 dark:text-zinc-300">Модераторы сообщества</div>
             <div class="text-xs text-slate-500 dark:text-zinc-400">
-              Только создатель комуны может назначать и снимать модераторов. Создатель всегда остается модератором.
+              Только создатель сообщества может назначать и снимать модераторов. Создатель всегда остается модератором.
             </div>
             <input
               bind:value={settingsUserSearch}
@@ -1784,7 +1784,7 @@
         {/if}
 
         <div class="flex flex-col gap-2">
-          <div class="text-sm text-slate-700 dark:text-zinc-300">Тег продукта (посты с этим тегом попадут в коммуну)</div>
+          <div class="text-sm text-slate-700 dark:text-zinc-300">Тег продукта (посты с этим тегом попадут в сообщество)</div>
           <div class="flex flex-wrap items-center gap-2">
             {#if settingsDraft.product_tag}
               <span class="rounded-full bg-slate-100 dark:bg-zinc-800 px-3 py-1 text-sm">
@@ -1808,7 +1808,7 @@
                     Добавить тег #{normalizedTagCreateValue}
                   </div>
                   <div class="text-xs text-slate-500 dark:text-zinc-400">
-                    Создаст тег в системе и выберет его для комуны
+                    Создаст тег в системе и выберет его для сообщества
                   </div>
                 </div>
                 <Button

@@ -314,7 +314,7 @@
   $: trackedCount = roadmapLanes.reduce((sum, lane) => sum + Math.max(lane.count, 0), 0)
   $: selectedCategorySlug = String($page.url.searchParams.get('category') || '').trim()
   $: highlightedLane = roadmapLanes.find((lane) => lane.category.slug === selectedCategorySlug) ?? null
-  $: comunName = comun?.name || 'Комуна'
+  $: comunName = comun?.name || 'Сообщество'
   $: pageTitle = `Публичная дорожная карта — ${comunName}`
   $: pageDescription =
     comun?.product_description?.trim() ||
@@ -328,7 +328,7 @@
   $: founderPrompt =
     comun?.product_tag?.name
       ? `Попросите пользователей публиковать идеи с тегом #${comun.product_tag.name}, затем переносите лучшие карточки по этапам.`
-      : 'Задайте тег продукта в настройках комуны, чтобы новые карточки автоматически попадали в дорожную карту.'
+      : 'Задайте тег продукта в настройках сообщества, чтобы новые карточки автоматически попадали в дорожную карту.'
 </script>
 
 <div class="mx-auto flex w-full max-w-7xl flex-col gap-6">
@@ -356,7 +356,7 @@
           </div>
 
           <div class="mt-4 flex flex-wrap gap-2">
-            <a href={`/comuns/${comun?.slug ?? ''}`} class="ghost-link">Комуна</a>
+            <a href={`/comuns/${comun?.slug ?? ''}`} class="ghost-link">Сообщество</a>
             {#if comun?.slug}
               <a href={`/comuns/${comun.slug}?category=backlog`} class="ghost-link">Беклог</a>
             {/if}
@@ -410,7 +410,7 @@
               </Button>
               {#if comun?.slug}
                 <a href={`/comuns/${comun.slug}`} class="ghost-link ghost-link--small">
-                  Открыть ленту комуны
+                  Открыть ленту сообщества
                 </a>
               {/if}
             </div>
@@ -485,15 +485,15 @@
             Публичная дорожная карта пока не настроена
           </div>
           <div class="mt-2 text-sm text-slate-600 dark:text-zinc-400">
-            Добавьте в коммуну категории вроде <span class="font-semibold">backlog</span>,
+            Добавьте в сообщество категории вроде <span class="font-semibold">backlog</span>,
             <span class="font-semibold"> suggestions</span>, <span class="font-semibold">planned</span>,
             <span class="font-semibold"> in-progress</span> и публикуйте карточки по тегу продукта.
           </div>
           <div class="mt-4 flex flex-wrap gap-2">
             {#if comun?.slug}
-              <a href={`/comuns/${comun.slug}`} class="ghost-link">Открыть коммуну</a>
+              <a href={`/comuns/${comun.slug}`} class="ghost-link">Открыть сообщество</a>
               {#if $siteToken}
-                <a href={`/comuns/${comun.slug}/settings`} class="ghost-link">Настройки комуны</a>
+                <a href={`/comuns/${comun.slug}/settings`} class="ghost-link">Настройки сообщества</a>
               {/if}
             {/if}
             <Button on:click={openSubmitFlow}>

@@ -193,7 +193,7 @@
       <div class="text-sm text-slate-500">Загрузка...</div>
     {/if}
   {:else}
-    <div class="text-base text-slate-500">В этой рубрике пока нет публикаций.</div>
+    <div class="text-base text-slate-500">В этом сообществе пока нет публикаций.</div>
   {/if}
 </div>
 

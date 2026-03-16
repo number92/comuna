@@ -10,9 +10,9 @@ export const load = async ({ fetch, params, url }) => {
   const comunResponse = await fetch(new URL(buildComunUrl(slug), url.origin).toString())
   if (!comunResponse.ok) {
     if (comunResponse.status === 404) {
-      throw error(404, 'Комуна не найдена')
+      throw error(404, 'Сообщество не найдено')
     }
-    throw error(comunResponse.status, 'Не удалось загрузить коммуну')
+    throw error(comunResponse.status, 'Не удалось загрузить сообщество')
   }
   const comunPayload = await comunResponse.json()
 
@@ -21,9 +21,9 @@ export const load = async ({ fetch, params, url }) => {
   const postsResponse = await fetch(postsUrl.toString())
   if (!postsResponse.ok) {
     if (postsResponse.status === 404) {
-      throw error(404, 'Комуна не найдена')
+      throw error(404, 'Сообщество не найдено')
     }
-    throw error(postsResponse.status, 'Не удалось загрузить посты комуны')
+    throw error(postsResponse.status, 'Не удалось загрузить посты сообщества')
   }
   const postsPayload = await postsResponse.json()
 

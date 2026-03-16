@@ -163,11 +163,11 @@
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
         if (response.status === 401) throw new Error('Нужна авторизация')
-        if (response.status === 404) throw new Error('Комуна не найдена')
-        throw new Error(payload?.error || 'Не удалось загрузить настройки комуны')
+        if (response.status === 404) throw new Error('Сообщество не найдено')
+        throw new Error(payload?.error || 'Не удалось загрузить настройки сообщества')
       }
       if (!payload?.comun) {
-        throw new Error('Комуна не найдена')
+        throw new Error('Сообщество не найдено')
       }
       comun = payload.comun
       settingsDraft = cloneComun(payload.comun)
@@ -176,7 +176,7 @@
       settingsUserOptions = payload.comun?.options?.users ?? []
       settingsTemplateTypeOptions = normalizeTemplateTypeOptions(payload.comun?.options?.template_types)
       if (!payload.comun?.can_moderate) {
-        settingsError = 'Настройки доступны только модераторам комуны'
+        settingsError = 'Настройки доступны только модераторам сообщества'
       }
     } catch (error) {
       settingsError = error instanceof Error ? error.message : 'Ошибка загрузки'
@@ -420,7 +420,7 @@
       settingsTemplateTypeOptions = normalizeTemplateTypeOptions(
         payload.comun?.options?.template_types
       )
-      toast({ content: 'Настройки комуны сохранены', type: 'success' })
+      toast({ content: 'Настройки сообщества сохранены', type: 'success' })
     } catch (error) {
       settingsError = error instanceof Error ? error.message : 'Ошибка сохранения'
     } finally {
@@ -481,17 +481,17 @@
 
   $: siteTitle = env.PUBLIC_SITE_TITLE || 'Comuna'
   $: pageTitle = comun?.name
-    ? `Настройки комуны ${comun.name} — ${siteTitle}`
-    : `Настройки комуны — ${siteTitle}`
+    ? `Настройки сообщества ${comun.name} — ${siteTitle}`
+    : `Настройки сообщества — ${siteTitle}`
 </script>
 
 <div class="mx-auto flex max-w-3xl flex-col gap-6">
   <div class="flex flex-wrap items-center justify-between gap-3">
     <div class="min-w-0">
       <div class="text-xs uppercase tracking-wide text-slate-500 dark:text-zinc-400">
-        Комуна
+        Сообщество
       </div>
-      <Header noMargin>Настройки комуны</Header>
+      <Header noMargin>Настройки сообщества</Header>
       {#if comun?.name}
         <div class="text-sm text-slate-600 dark:text-zinc-400 truncate">{comun.name}</div>
       {/if}
@@ -500,7 +500,7 @@
       href={slug ? `/comuns/${encodeURIComponent(slug)}` : '/comuns/'}
       class="inline-flex items-center rounded-xl border border-slate-200 dark:border-zinc-800 px-3 py-2 text-sm hover:bg-slate-50 dark:hover:bg-zinc-800/60"
     >
-      Назад к комуне
+      Назад к сообществу
     </a>
   </div>
 
@@ -517,7 +517,7 @@
   {:else if !$siteToken}
     <div class="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white/95 dark:bg-zinc-900/85 p-6 flex flex-col gap-3">
       <div class="text-sm text-slate-700 dark:text-zinc-300">
-        Чтобы открыть настройки комуны, нужно войти в аккаунт.
+        Чтобы открыть настройки сообщества, нужно войти в аккаунт.
       </div>
       <div>
         <Button on:click={openLogin}>Войти</Button>
@@ -525,7 +525,7 @@
     </div>
   {:else if !canModerate()}
     <div class="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white/95 dark:bg-zinc-900/85 p-6 text-sm text-slate-700 dark:text-zinc-300">
-      Настройки доступны только создателю или назначенным модераторам этой комуны.
+      Настройки доступны только создателю или назначенным модераторам этого сообщества.
     </div>
   {:else if settingsDraft}
     <section class="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white/95 dark:bg-zinc-900/85 p-5 sm:p-6">
@@ -618,7 +618,7 @@
             class="rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"
           />
           <span class="text-xs text-slate-500 dark:text-zinc-400">
-            `0` означает, что писать в коммуну может любой автор. Сейчас установлен порог от
+            `0` означает, что писать в сообщество может любой автор. Сейчас установлен порог от
             {formatRatingValue(settingsDraft.minimum_author_rating_to_post)}.
           </span>
         </label>
@@ -626,7 +626,7 @@
         {#if canManageComunModerators()}
           <div class="flex flex-col gap-2 rounded-xl border border-slate-200 dark:border-zinc-800 px-3 py-3">
             <div class="text-sm font-medium text-slate-900 dark:text-zinc-100">
-              Видимость постов комуны в общих лентах
+              Видимость постов сообщества в общих лентах
             </div>
             <label class="flex items-start gap-2 cursor-pointer">
               <input
@@ -638,7 +638,7 @@
               <span class="min-w-0">
                 <span class="block text-sm text-slate-900 dark:text-zinc-100">Показывать в Горячем</span>
                 <span class="block text-xs text-slate-500 dark:text-zinc-400">
-                  Если выключить, посты, созданные в этой комуне, не попадут на главную.
+                  Если выключить, посты, созданные в этом сообществе, не попадут на главную.
                 </span>
               </span>
             </label>
@@ -652,7 +652,7 @@
               <span class="min-w-0">
                 <span class="block text-sm text-slate-900 dark:text-zinc-100">Показывать в Свежее</span>
                 <span class="block text-xs text-slate-500 dark:text-zinc-400">
-                  Если выключить, посты, созданные в этой комуне, останутся в ленте комуны и персональных лентах.
+                  Если выключить, посты, созданные в этом сообществе, останутся в ленте сообщества и персональных лентах.
                 </span>
               </span>
             </label>
@@ -662,7 +662,7 @@
         <div class="flex flex-col gap-2">
           <div class="text-sm text-slate-700 dark:text-zinc-300">Доступные шаблоны публикаций</div>
           <div class="text-xs text-slate-500 dark:text-zinc-400">
-            Определяет, какие типы постов можно публиковать внутри комуны.
+            Определяет, какие типы постов можно публиковать внутри сообщества.
           </div>
           <div class="grid gap-2 sm:grid-cols-2">
             {#each settingsTemplateTypeOptions as option}
@@ -683,9 +683,9 @@
 
         {#if canManageComunModerators()}
           <div class="flex flex-col gap-2">
-            <div class="text-sm text-slate-700 dark:text-zinc-300">Модераторы комуны</div>
+            <div class="text-sm text-slate-700 dark:text-zinc-300">Модераторы сообщества</div>
             <div class="text-xs text-slate-500 dark:text-zinc-400">
-              Только создатель комуны может назначать и снимать модераторов. Создатель всегда остается модератором.
+              Только создатель сообщества может назначать и снимать модераторов. Создатель всегда остается модератором.
             </div>
             <input
               bind:value={settingsUserSearch}
@@ -741,7 +741,7 @@
         {/if}
 
         <div class="flex flex-col gap-2">
-          <div class="text-sm text-slate-700 dark:text-zinc-300">Тег продукта (посты с этим тегом попадут в коммуну)</div>
+          <div class="text-sm text-slate-700 dark:text-zinc-300">Тег продукта (посты с этим тегом попадут в сообщество)</div>
           <div class="flex flex-wrap items-center gap-2">
             {#if settingsDraft.product_tag}
               <span class="rounded-full bg-slate-100 dark:bg-zinc-800 px-3 py-1 text-sm">
@@ -765,7 +765,7 @@
                     Добавить тег #{normalizedTagCreateValue}
                   </div>
                   <div class="text-xs text-slate-500 dark:text-zinc-400">
-                    Создаст тег в системе и выберет его для комуны
+                    Создаст тег в системе и выберет его для сообщества
                   </div>
                 </div>
                 <Button size="sm" on:click={createTagAndChooseDraft} disabled={settingsTagCreating || settingsSaving}>

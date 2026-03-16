@@ -15,6 +15,7 @@
     ClipboardDocumentList,
     Bookmark,
     ChevronDown,
+    Plus,
   } from 'svelte-hero-icons'
   import { notifications, profile } from '$lib/auth.js'
   import SidebarButton from '$lib/components/ui/sidebar/SidebarButton.svelte'
@@ -242,13 +243,15 @@
     </div>
   {/if}
 
-  {#if rubrics.length}
-    <div class="flex flex-col gap-2">
+  <div class="flex flex-col gap-2">
       <span
         class="px-2 py-1 text-sm font-normal text-slate-500 dark:text-zinc-200"
       >
-        Рубрики
+        Сообщества
       </span>
+      <SidebarButton href="/comuns?create=1" on:click={handleNavigation} icon={Plus}>
+        <span slot="label">Создать сообщество</span>
+      </SidebarButton>
       {#each rubrics as rubric}
         <SidebarButton
           href={`/rubrics/${rubric.slug}/posts`}
@@ -264,8 +267,7 @@
           <span slot="label">{rubric.name}</span>
         </SidebarButton>
       {/each}
-    </div>
-  {/if}
+  </div>
 
   <div class="flex flex-col gap-2">
     <span

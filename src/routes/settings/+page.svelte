@@ -776,12 +776,12 @@
 
   <Section id="my-feed" title="Моя лента">
     <Setting itemsClass="!flex-col !items-start">
-      <span slot="title">Рубрики моей ленты</span>
+      <span slot="title">Сообщества моей ленты</span>
       <span slot="description">
-        Выберите интересные рубрики — они будут отображаться в разделе «Моя лента».
+        Выберите интересные сообщества — они будут отображаться в разделе «Моя лента».
       </span>
       {#if myFeedRubricsLoading}
-        <span class="text-sm text-slate-500">Загружаем рубрики...</span>
+        <span class="text-sm text-slate-500">Загружаем сообщества...</span>
       {:else if myFeedRubrics.length}
         <div class="grid gap-3 sm:grid-cols-2 w-full">
           {#each myFeedRubrics as rubric}
@@ -800,7 +800,7 @@
           Открыть мою ленту
         </a>
       {:else}
-        <span class="text-sm text-slate-500">Рубрики пока недоступны.</span>
+        <span class="text-sm text-slate-500">Сообщества пока недоступны.</span>
       {/if}
     </Setting>
     <Setting itemsClass="!flex-col !items-start">

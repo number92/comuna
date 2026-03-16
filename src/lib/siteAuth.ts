@@ -35,6 +35,9 @@ export type SiteUser = {
   is_staff?: boolean
   is_author: boolean
   authors: SiteAuthorLink[]
+  max_author_rating?: number
+  can_create_comun?: boolean
+  create_comun_min_author_rating?: number
 }
 
 export type SiteUserPost = {

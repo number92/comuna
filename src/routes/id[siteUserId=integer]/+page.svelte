@@ -111,7 +111,7 @@
   $: profilePath = profile?.id ? `/id${profile.id}` : $page.url.pathname
   $: title = profile ? `${userDisplayName(profile)} — ${siteTitle}` : siteTitle
   $: description = profile
-    ? `Профиль пользователя @${profile.username} на ${siteTitle}: посты и комунны.`
+    ? `Профиль пользователя @${profile.username} на ${siteTitle}: посты и сообщества.`
     : `Профиль пользователя на ${siteTitle}.`
   $: canonicalUrl = new URL(
     profilePath,
@@ -313,7 +313,7 @@
                 </div>
                 {#if author.rubric}
                   <div class="mt-1 text-xs text-slate-500 dark:text-zinc-400 truncate">
-                    Рубрика: {author.rubric}
+                    Сообщество: {author.rubric}
                   </div>
                 {/if}
                 {#if author.description}
@@ -334,7 +334,7 @@
   </section>
 
   <section class="flex flex-col gap-3">
-    <div class="text-lg font-semibold text-slate-900 dark:text-zinc-100">Комуны</div>
+    <div class="text-lg font-semibold text-slate-900 dark:text-zinc-100">Сообщества</div>
     {#if comuns.length}
       <div class="grid gap-3 sm:grid-cols-2">
         {#each comuns as comun}

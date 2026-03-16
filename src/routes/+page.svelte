@@ -150,7 +150,7 @@
     const rubric = (author.rubric ?? '').trim()
     const parts = [`@${author.username}`]
     if (title) parts.push(title)
-    if (rubric) parts.push(`Рубрика: ${rubric}`)
+    if (rubric) parts.push(`Сообщество: ${rubric}`)
     if (description) parts.push(description)
     return parts.join(' · ')
   }
@@ -1067,7 +1067,7 @@
           Настройки папки
         </h2>
         <p class="mt-1 text-sm text-slate-500 dark:text-zinc-400">
-          Добавляйте и исключайте авторов, рубрики и теги для текущей папки. Изменения сохраняются автоматически.
+          Добавляйте и исключайте авторов, сообщества и теги для текущей папки. Изменения сохраняются автоматически.
         </p>
       </div>
 
@@ -1112,7 +1112,7 @@
                       </div>
                     {/if}
                     <div class="text-xs text-slate-500 dark:text-zinc-400">
-                      {author.rubric ? `Рубрика: ${author.rubric}` : 'Без рубрики'}
+                      {author.rubric ? `Сообщество: ${author.rubric}` : 'Без сообщества'}
                     </div>
                     {#if author.description}
                       <div class="text-xs text-slate-500 dark:text-zinc-400 line-clamp-2">
@@ -1192,7 +1192,7 @@
                       </div>
                     {/if}
                     <div class="text-xs text-slate-500 dark:text-zinc-400">
-                      {author.rubric ? `Рубрика: ${author.rubric}` : 'Без рубрики'}
+                      {author.rubric ? `Сообщество: ${author.rubric}` : 'Без сообщества'}
                     </div>
                     {#if author.description}
                       <div class="text-xs text-slate-500 dark:text-zinc-400 line-clamp-2">
@@ -1252,7 +1252,7 @@
           </label>
 
           <label class="flex flex-col gap-1 text-sm min-w-0">
-            <span>Рубрики</span>
+            <span>Сообщества</span>
             <input
               type="text"
               bind:value={folderSettingsRubricSearch}
@@ -1293,7 +1293,7 @@
             </div>
             <div class="mt-2 flex flex-col gap-2">
               <div class="text-xs uppercase tracking-wide text-slate-500 dark:text-zinc-400">
-                Выбранные рубрики
+                Выбранные сообщества
               </div>
               {#each getFolderSelectedRubrics() as rubric}
                 <div class="flex items-start justify-between gap-3 rounded-lg border border-slate-200 dark:border-zinc-700 bg-slate-50/70 dark:bg-zinc-900/60 px-3 py-2">
@@ -1322,7 +1322,7 @@
                 </div>
               {:else}
                 <div class="text-xs text-slate-500 dark:text-zinc-400">
-                  Пока рубрики не выбраны
+                  Пока сообщества не выбраны
                 </div>
               {/each}
             </div>
@@ -1530,7 +1530,7 @@
             Можно быстро настроить ленту под настроение на 3 часа — действует в текущей сессии.
           </div>
           <div class="text-sm text-slate-600 dark:text-zinc-300">
-            Выбор рубрик и составление черного списка доступны в настройках сайта.
+            Выбор сообществ и составление черного списка доступны в настройках сайта.
           </div>
           <a href="/settings" class="text-sm text-blue-600 dark:text-blue-400 hover:underline">
             Перейти в настройки

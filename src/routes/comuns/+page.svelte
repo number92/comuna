@@ -1,15 +1,23 @@
 <script lang="ts">
+  import { browser } from '$app/environment'
+  import { page } from '$app/stores'
   import Header from '$lib/components/ui/layout/pages/Header.svelte'
   import { Button, Modal, toast } from 'mono-svelte'
   import { buildComunsUrl, type BackendComun } from '$lib/api/backend'
-  import { siteToken, siteUser, uploadSiteImage } from '$lib/siteAuth'
+  import { refreshSiteUser, siteToken, siteUser, uploadSiteImage } from '$lib/siteAuth'
   import { goto } from '$app/navigation'
 
   export let data
 
+  const COMMUNITY_CREATION_MIN_AUTHOR_RATING = 10
+  const COMMUNITIES_FAQ_HREF = '/faq'
+  const COMMUNITIES_LANDING_HREF = '/communities/about'
+
   let comuns: BackendComun[] = data.comuns ?? []
   let createOpen = false
+  let insufficientOpen = false
   let creating = false
+  let createIntentHandled = false
 
   let name = ''
   let slug = ''
@@ -34,7 +42,23 @@
   const comunInitial = (name?: string | null) =>
     (name ?? '').trim().slice(0, 1).toUpperCase() || 'C'
 
-  const canCreate = () => !!$siteToken
+  const formatRatingValue = (value?: number | null) => {
+    const numeric = Math.max(Number(value ?? 0) || 0, 0)
+    return Number.isInteger(numeric) ? String(numeric) : numeric.toFixed(2).replace(/\.?0+$/, '')
+  }
+
+  const currentUserMaxAuthorRating = (user = $siteUser) => {
+    const authorRatings = (user?.authors ?? []).map((author) => Math.max(Number(author.author_rating ?? 0) || 0, 0))
+    const explicitRating = Math.max(Number(user?.max_author_rating ?? 0) || 0, 0)
+    return Math.max(explicitRating, ...authorRatings, 0)
+  }
+
+  const canCreate = (user = $siteUser) =>
+    Boolean(
+      $siteToken &&
+        (user?.can_create_comun ??
+          currentUserMaxAuthorRating(user) > Number(user?.create_comun_min_author_rating ?? COMMUNITY_CREATION_MIN_AUTHOR_RATING))
+    )
 
   const resetForm = () => {
     name = ''
@@ -54,17 +78,38 @@
     }
   }
 
-  const openCreate = () => {
+  const openCreate = async () => {
     if (!canCreate()) {
-      goto('/account?next=/comuns')
-      return
+      if (!$siteToken) {
+        goto('/account?next=/comuns?create=1')
+        return
+      }
+
+      const user = $siteUser ?? (await refreshSiteUser())
+      if (!user) {
+        goto('/account?next=/comuns?create=1')
+        return
+      }
+      if (!canCreate(user)) {
+        insufficientOpen = true
+        return
+      }
     }
     createOpen = true
   }
 
+  $: if (browser && $page.url.searchParams.get('create') === '1' && !createIntentHandled) {
+    createIntentHandled = true
+    void openCreate()
+  }
+
+  $: if (browser && $page.url.searchParams.get('create') !== '1') {
+    createIntentHandled = false
+  }
+
   const pickCreateLogo = () => {
     if (!canCreate()) {
-      goto('/account?next=/comuns')
+      void openCreate()
       return
     }
     createLogoInput?.click()
@@ -90,7 +135,7 @@
 
   const createComun = async () => {
     if (!name.trim()) {
-      toast({ content: 'Введите название комуны', type: 'warning' })
+      toast({ content: 'Введите название сообщества', type: 'warning' })
       return
     }
     creating = true
@@ -109,11 +154,15 @@
       })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok || !payload?.comun?.slug) {
-        throw new Error(payload?.error || 'Не удалось создать коммуну')
+        if (payload?.reason === 'insufficient_author_rating') {
+          insufficientOpen = true
+          throw new Error('У вас недостаточно рейтинга для создания сообщества')
+        }
+        throw new Error(payload?.error || 'Не удалось создать сообщество')
       }
       createOpen = false
       resetForm()
-      toast({ content: 'Комуна создана', type: 'success' })
+      toast({ content: 'Сообщество создано', type: 'success' })
       goto(`/comuns/${payload.comun.slug}/settings`)
     } catch (error) {
       toast({ content: error instanceof Error ? error.message : 'Ошибка создания', type: 'error' })
@@ -127,14 +176,14 @@
   <section class="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white/95 dark:bg-zinc-900/85 p-5 sm:p-6">
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div class="min-w-0">
-        <Header noMargin>Комуны</Header>
+        <Header noMargin>Сообщества</Header>
         <div class="text-sm text-slate-600 dark:text-zinc-400">
-          Пространства вокруг продукта: карточка проекта, тег продукта и внутренние категории постов.
+          Пространства вокруг продукта: отдельная страница, обсуждения, категории постов, беклог и дорожная карта.
         </div>
       </div>
-      <Button on:click={openCreate}>
+      <Button on:click={() => void openCreate()}>
         {#if $siteUser}
-          Создать коммуну
+          Создать сообщество
         {:else}
           Войти и создать
         {/if}
@@ -197,16 +246,16 @@
     </div>
   {:else}
     <div class="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white/95 dark:bg-zinc-900/85 p-6 text-slate-600 dark:text-zinc-400">
-      Пока нет созданных коммун.
+      Пока нет созданных сообществ.
     </div>
   {/if}
 </div>
 
 <Modal bind:open={createOpen} on:close={resetForm}>
   <div class="w-full max-w-2xl flex flex-col gap-4">
-    <div class="text-lg font-semibold text-slate-900 dark:text-zinc-100">Создать коммуну</div>
+    <div class="text-lg font-semibold text-slate-900 dark:text-zinc-100">Создать сообщество</div>
     <div class="text-sm text-slate-600 dark:text-zinc-400">
-      После создания откроется страница комуны, где можно выбрать тег продукта, внутренние категории и приветственный пост.
+      После создания откроется страница сообщества, где можно выбрать тег продукта, внутренние категории и приветственный пост.
     </div>
 
     <label class="flex flex-col gap-1">
@@ -283,8 +332,37 @@
     <div class="flex justify-end gap-2 pt-2">
       <Button color="ghost" on:click={() => (createOpen = false)} disabled={creating}>Отмена</Button>
       <Button on:click={createComun} disabled={creating || logoUploading}>
-        {creating ? 'Создаем...' : 'Создать коммуну'}
+        {creating ? 'Создаем...' : 'Создать сообщество'}
       </Button>
+    </div>
+  </div>
+</Modal>
+
+<Modal bind:open={insufficientOpen}>
+  <div class="w-full max-w-xl flex flex-col gap-4">
+    <div class="text-lg font-semibold text-slate-900 dark:text-zinc-100">Недостаточно рейтинга</div>
+    <div class="text-sm leading-6 text-slate-600 dark:text-zinc-400">
+      У вас недостаточно рейтинга для создания сообщества. Сейчас ваш максимальный рейтинг автора:
+      <span class="font-semibold text-slate-900 dark:text-zinc-100">{formatRatingValue(currentUserMaxAuthorRating())}</span>.
+      Для создания нужен рейтинг выше
+      <span class="font-semibold text-slate-900 dark:text-zinc-100">{formatRatingValue($siteUser?.create_comun_min_author_rating ?? COMMUNITY_CREATION_MIN_AUTHOR_RATING)}</span>.
+    </div>
+    <div class="grid gap-3 sm:grid-cols-2">
+      <a
+        href={COMMUNITIES_FAQ_HREF}
+        class="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900 px-4 py-4 text-sm font-medium text-slate-900 dark:text-zinc-100 hover:border-slate-300 dark:hover:border-zinc-700 transition-colors"
+      >
+        Открыть FAQ
+      </a>
+      <a
+        href={COMMUNITIES_LANDING_HREF}
+        class="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900 px-4 py-4 text-sm font-medium text-slate-900 dark:text-zinc-100 hover:border-slate-300 dark:hover:border-zinc-700 transition-colors"
+      >
+        Что такое сообщества
+      </a>
+    </div>
+    <div class="flex justify-end gap-2 pt-1">
+      <Button color="ghost" on:click={() => (insufficientOpen = false)}>Закрыть</Button>
     </div>
   </div>
 </Modal>

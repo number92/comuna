@@ -10,6 +10,7 @@
     InformationCircle,
     QuestionMarkCircle,
     ChevronDown,
+    Plus,
     PencilSquare,
     ClipboardDocumentList,
     Bookmark,
@@ -317,13 +318,15 @@
     </div>
   {/if}
 
-  {#if rubrics.length}
-    <div class="flex flex-col gap-2">
+  <div class="flex flex-col gap-2">
       <span
         class="px-2 py-1 text-sm font-normal text-slate-500 dark:text-zinc-200"
       >
-        Рубрики
+        Сообщества
       </span>
+      <SidebarButton href="/comuns?create=1" icon={Plus}>
+        <span slot="label">Создать сообщество</span>
+      </SidebarButton>
       {#each rubrics as rubric}
         <SidebarButton href={`/rubrics/${rubric.slug}/posts`}>
           <div slot="icon" class="w-7 h-7 rounded-full overflow-hidden bg-slate-100 dark:bg-zinc-800 flex items-center justify-center">
@@ -336,8 +339,7 @@
           <span slot="label">{rubric.name}</span>
         </SidebarButton>
       {/each}
-    </div>
-  {/if}
+  </div>
 
   {#if HAS_LEMMY_INSTANCE}
     <div class="flex flex-col gap-2">

@@ -5,6 +5,7 @@
   import { onMount } from 'svelte'
   import { Button, toast } from 'mono-svelte'
   import Header from '$lib/components/ui/layout/pages/Header.svelte'
+  import TemplateTypeDropdown from '$lib/components/comuns/TemplateTypeDropdown.svelte'
   import {
     buildComunUrl,
     buildTagsEnsureUrl,
@@ -252,17 +253,11 @@
     settingsDraft = { ...settingsDraft, product_tag_id: null, product_tag: null }
   }
 
-  const toggleDraftTemplateType = (templateType: PostTemplateCode) => {
+  const setDraftAllowedTemplateTypes = (values: PostTemplateCode[]) => {
     if (!settingsDraft) return
-    const current = new Set(comunAllowedTemplateTypes(settingsDraft))
-    if (current.has(templateType)) current.delete(templateType)
-    else current.add(templateType)
-    const orderedTemplateTypes = settingsTemplateTypeOptions
-      .map((option) => option.value)
-      .filter((value) => current.has(value))
     settingsDraft = {
       ...settingsDraft,
-      allowed_template_types: orderedTemplateTypes,
+      allowed_template_types: normalizeAllowedPostTemplateTypes(values),
     }
   }
 
@@ -339,7 +334,6 @@
     .slice(0, 30)
   $: normalizedUserSearch = settingsUserSearch.trim().toLowerCase()
   $: draftModeratorIdSet = new Set<number>(comunModeratorIds(settingsDraft))
-  $: draftAllowedTemplateTypeSet = new Set<string>(comunAllowedTemplateTypes(settingsDraft))
   $: settingsHasChanges = settingsComparable(settingsDraft) !== settingsComparable(comun)
   $: filteredUserOptions = (settingsUserOptions ?? [])
     .filter((user) => {
@@ -420,9 +414,25 @@
       if (!response.ok) {
         throw new Error(payload?.error || 'Не удалось добавить категорию')
       }
-      comun = payload.comun ?? comun
-      settingsDraft = cloneComun(comun)
-      settingsCategoryOptions = payload.comun?.options?.categories ?? settingsCategoryOptions
+      const nextComun = payload.comun ?? comun
+      comun = nextComun
+      settingsDraft = cloneComun(nextComun)
+      settingsCategoryOptions =
+        payload.comun?.options?.categories ?? payload.comun?.categories ?? settingsCategoryOptions
+      await refreshComunManage()
+      const createdCategory = (settingsCategoryOptions ?? []).find(
+        (category) =>
+          normalizeCategoryInput(category.name).toLowerCase() === categoryName.toLowerCase()
+      )
+      if (createdCategory && settingsDraft) {
+        settingsDraft = {
+          ...settingsDraft,
+          category_ids: normalizeIds([
+            ...comunCategoryIds(settingsDraft),
+            createdCategory.id,
+          ]),
+        }
+      }
       settingsCategorySearch = ''
       toast({ content: 'Категория создана внутри сообщества', type: 'success' })
     } catch (error) {
@@ -466,7 +476,8 @@
       }
       comun = payload.comun ?? comun
       settingsDraft = cloneComun(comun)
-      settingsCategoryOptions = payload.comun?.options?.categories ?? settingsCategoryOptions
+      settingsCategoryOptions =
+        payload.comun?.options?.categories ?? payload.comun?.categories ?? settingsCategoryOptions
       settingsTagOptions = payload.comun?.options?.tags ?? settingsTagOptions
       settingsUserOptions = payload.comun?.options?.users ?? settingsUserOptions
       settingsTemplateTypeOptions = normalizeTemplateTypeOptions(
@@ -716,21 +727,13 @@
           <div class="text-xs text-slate-500 dark:text-zinc-400">
             Определяет, какие типы постов можно публиковать внутри сообщества.
           </div>
-          <div class="grid gap-2 sm:grid-cols-2">
-            {#each settingsTemplateTypeOptions as option}
-              <label class="rounded-xl border border-slate-200 dark:border-zinc-800 px-3 py-2 flex items-start gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={draftAllowedTemplateTypeSet.has(option.value)}
-                  on:change={() => toggleDraftTemplateType(option.value)}
-                  class="mt-0.5"
-                />
-                <span class="block text-sm font-medium text-slate-900 dark:text-zinc-100">
-                  {option.label}
-                </span>
-              </label>
-            {/each}
-          </div>
+          <TemplateTypeDropdown
+            options={settingsTemplateTypeOptions}
+            selectedValues={comunAllowedTemplateTypes(settingsDraft)}
+            disabled={settingsSaving}
+            helperText="Можно искать по названию и выбрать несколько шаблонов. Хотя бы один шаблон должен остаться доступным."
+            on:change={(event) => setDraftAllowedTemplateTypes(event.detail)}
+          />
         </div>
 
         {#if canManageComunModerators()}

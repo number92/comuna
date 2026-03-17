@@ -2,6 +2,7 @@
   import { browser } from '$app/environment'
   import { page } from '$app/stores'
   import Header from '$lib/components/ui/layout/pages/Header.svelte'
+  import TemplateTypeDropdown from '$lib/components/comuns/TemplateTypeDropdown.svelte'
   import { Button, Modal, toast } from 'mono-svelte'
   import { buildComunsUrl, buildTagsEnsureUrl, type BackendComun } from '$lib/api/backend'
   import {
@@ -133,17 +134,8 @@
     void addCreateTag()
   }
 
-  const toggleCreateTemplateType = (templateType: PostTemplateCode) => {
-    const current = new Set(normalizeAllowedPostTemplateTypes(selectedTemplateTypes))
-    if (current.has(templateType)) {
-      if (current.size === 1) return
-      current.delete(templateType)
-    } else {
-      current.add(templateType)
-    }
-    selectedTemplateTypes = templateTypeOptions
-      .map((option) => option.value)
-      .filter((value) => current.has(value))
+  const setSelectedTemplateTypes = (values: PostTemplateCode[]) => {
+    selectedTemplateTypes = normalizeAllowedPostTemplateTypes(values)
   }
 
   const authHeaders = () => {
@@ -441,18 +433,12 @@
           Выберите, какие форматы постов можно публиковать в этом сообществе.
         </div>
       </div>
-      <div class="grid gap-2 sm:grid-cols-2">
-        {#each templateTypeOptions as option}
-          <label class="flex items-center gap-3 rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900 px-3 py-3">
-            <input
-              type="checkbox"
-              checked={normalizeAllowedPostTemplateTypes(selectedTemplateTypes).includes(option.value)}
-              on:change={() => toggleCreateTemplateType(option.value)}
-            />
-            <span class="text-sm text-slate-800 dark:text-zinc-200">{option.label}</span>
-          </label>
-        {/each}
-      </div>
+      <TemplateTypeDropdown
+        options={templateTypeOptions}
+        selectedValues={normalizeAllowedPostTemplateTypes(selectedTemplateTypes)}
+        helperText="Можно выбрать несколько шаблонов. Хотя бы один должен остаться включенным."
+        on:change={(event) => setSelectedTemplateTypes(event.detail)}
+      />
     </div>
 
     <div class="flex justify-end gap-2 pt-2">

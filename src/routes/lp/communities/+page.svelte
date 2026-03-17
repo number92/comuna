@@ -22,70 +22,140 @@
     text: string
   }
 
-  const siteName = env.PUBLIC_SITE_TITLE || 'Comuna'
-  const title = `Сообщества для авторов и редакций — ${siteName}`
-  const description =
-    'Запускайте сообщества в Comuna, задавайте правила публикации по тематикам, собирайте шаблоны постов и переводите аудиторию из Telegram в более сильный формат общения.'
+  type ComparisonPoint = {
+    number: string
+    title: string
+    text: string
+  }
 
-  const pillars: LandingCard[] = [
+  type VisualCommunity = {
+    image: string
+    title: string
+    text: string
+  }
+
+  const siteName = env.PUBLIC_SITE_TITLE || 'Comuna'
+  const title = `Платформа для онлайн-сообществ — ${siteName}`
+  const description =
+    'Создайте сообщество на Comuna и управляйте не только обсуждением, но и правилами участия: кто пишет, кто комментирует, какие типы постов доступны, по каким шаблонам публикуются материалы и как выглядит сама страница.'
+
+  const authorControls: LandingCard[] = [
+    {
+      icon: UserGroup,
+      eyebrow: 'Роли и доступ',
+      title: 'Вы решаете, кто пишет, а кто только читает и комментирует',
+      text: 'Не все участники должны иметь одинаковые права. Настройте роли так, чтобы контент выпускали нужные люди, а обсуждение оставалось живым и управляемым.',
+    },
     {
       icon: ClipboardDocumentList,
-      eyebrow: 'Правила внутри тематик',
-      title: 'У каждой рубрики свой сценарий публикации',
-      text: 'Вы определяете, что именно должен заполнить автор: структуру, обязательные поля, формат заголовка, тональность и ограничения.',
+      eyebrow: 'Типы постов',
+      title: 'Каждый формат публикации можно оформить как отдельный сценарий',
+      text: 'Новости, подборки, обзоры, разборы и AMA не обязаны жить в одном хаосе. Для каждого типа поста задаются свои ожидания и структура.',
     },
     {
       icon: Sparkles,
-      eyebrow: 'Шаблоны постов',
-      title: 'Повторяемые форматы превращаются в продукт',
-      text: 'Подборки, рецензии, анонсы, разборы и AMA можно оформить как шаблоны, чтобы публикации выглядели стабильно и собирались быстрее.',
+      eyebrow: 'Шаблоны',
+      title: 'Пользователь публикует не из пустоты, а по понятному шаблону',
+      text: 'Шаблоны помогают включать людей в создание контента и при этом не жертвовать качеством, стилем и логикой материалов.',
     },
     {
       icon: ShieldCheck,
-      eyebrow: 'Управление качеством',
-      title: 'Сообщество не расползается по стилю и теме',
-      text: 'Правила и шаблоны снижают шум, уменьшают ручную модерацию и помогают новым авторам публиковаться без постоянных объяснений в личке.',
+      eyebrow: 'Своя среда',
+      title: 'Правила, модерация и оформление становятся частью платформы',
+      text: 'Сообщество получает не просто канал с сообщениями, а собственную страницу с правилами, подачей и узнаваемой логикой участия.',
+    },
+  ]
+
+  const messengerGaps: ComparisonPoint[] = [
+    {
+      number: '01',
+      title: 'В одном потоке смешиваются объявления, обсуждения и важные материалы',
+      text: 'В мессенджере все быстро уходит вниз. Людям трудно возвращаться к полезному контенту и невозможно воспринимать его как растущую базу знаний.',
     },
     {
-      icon: UserGroup,
-      eyebrow: 'Не просто чат',
-      title: 'Контент, обсуждение и подписка живут в одном месте',
-      text: 'Люди не теряются в потоке сообщений: у каждой публикации есть собственная ссылка, обсуждение, реакция и место в архиве сообщества.',
+      number: '02',
+      title: 'Участие в сообществе сводится к чтению и случайным репликам',
+      text: 'Если вы хотите, чтобы люди писали по теме, соблюдали формат и развивали направление вместе с вами, чат почти не дает для этого инструментов.',
+    },
+    {
+      number: '03',
+      title: 'Автор не управляет архитектурой комьюнити',
+      text: 'Нельзя удобно задать типы постов, сценарии публикации, роли и логику участия. В итоге комьюнити держится на ручных объяснениях и энтузиазме.',
     },
   ]
 
   const migrationWins: LandingCard[] = [
     {
       icon: Megaphone,
-      eyebrow: 'Что сохраняется',
-      title: 'Ощущение живого канала и прямого контакта',
-      text: 'Вы по-прежнему общаетесь с ядром аудитории, запускаете обсуждения, публикуете важные апдейты и собираете обратную связь вокруг своей темы.',
+      eyebrow: 'Контакт с аудиторией',
+      title: 'Вы не теряете близость с подписчиками',
+      text: 'Люди по-прежнему приходят к вам за темой, голосом автора и ощущением прямого общения. Просто теперь это общение живет в более сильной среде.',
     },
     {
       icon: DocumentText,
-      eyebrow: 'Что добавляется',
-      title: 'Нормальная структура вместо бесконечной ленты',
-      text: 'Посты можно находить, перечитывать, обсуждать отдельно друг от друга и использовать как постоянно растущую базу знаний сообщества.',
+      eyebrow: 'Структура',
+      title: 'Контент перестает исчезать и начинает работать на вас месяцами',
+      text: 'Каждая публикация получает свою страницу, обсуждение и место в архиве. Со временем это превращается в актив сообщества, а не в пропавший поток.',
     },
     {
       icon: ArrowTrendingUp,
-      eyebrow: 'Что растет',
-      title: 'Вовлечение без потери контроля',
-      text: 'Подписчики начинают не только читать, но и публиковать по вашим правилам, а лучшие материалы усиливают сам бренд сообщества.',
+      eyebrow: 'Рост участия',
+      title: 'Подписчики могут не только читать, но и включаться глубже',
+      text: 'Когда у сообщества есть роли, типы постов и шаблоны, аудитория получает больше способов быть полезной: публиковать, обсуждать, дополнять и возвращаться.',
+    },
+  ]
+
+  const growthBenefits: LandingCard[] = [
+    {
+      icon: UserGroup,
+      eyebrow: 'Трафик внутри платформы',
+      title: 'Сообщество автора встраивается в экосистему сайта',
+      text: 'Ваш контент видят не только текущие подписчики. Другие пользователи платформы могут находить публикации, переходить в сообщество, читать материалы и подписываться на него.',
+    },
+    {
+      icon: DocumentText,
+      eyebrow: 'Трафик из поиска',
+      title: 'Страницы сообщества и публикации индексируются поисковыми системами',
+      text: 'Материалы сообщества могут получать органический трафик из поиска. Это значит, что хорошие тексты работают не один день, а продолжают приводить новых читателей и участников.',
+    },
+    {
+      icon: ArrowTrendingUp,
+      eyebrow: 'Эффект роста',
+      title: 'Каждая сильная публикация начинает работать на рост самого сообщества',
+      text: 'Контент приводит новых людей, новые люди подписываются, а сообщество постепенно превращается в самостоятельную точку входа для вашей темы и вашего имени.',
+    },
+  ]
+
+  const showcaseCommunities: VisualCommunity[] = [
+    {
+      image: '/communities/technology.webp',
+      title: 'Технологическое сообщество',
+      text: 'Подходит для новостей, разборов продуктов, инженерных колонок и экспертных обсуждений.',
+    },
+    {
+      image: '/communities/science.webp',
+      title: 'Научная вертикаль',
+      text: 'Можно оформить правила для рецензий, заметок, дискуссий и популяризаторских публикаций.',
+    },
+    {
+      image: '/communities/music.webp',
+      title: 'Культурное комьюнити',
+      text: 'Редакционные подборки, рецензии, анонсы и пользовательские посты живут в одном узнаваемом пространстве.',
     },
   ]
 
   const checklist = [
-    'Создайте сообщество как самостоятельную площадку вокруг своей темы.',
-    'Задайте правила публикации отдельно для разных тематик и форматов.',
-    'Соберите библиотеку шаблонов, чтобы пользователи публиковали качественнее.',
-    'Перетяните аудиторию из Telegram или чата и дайте ей больше способов участвовать.',
+    'Настройте, кто может писать в сообществе, а кто может комментировать.',
+    'Определите типы постов и правила публикации для разных тематик.',
+    'Соберите шаблоны, чтобы пользователи публиковали качественно и предсказуемо.',
+    'Оформите страницу сообщества так, чтобы у него было собственное лицо.',
+    'Получайте новых читателей из экосистемы сайта и из поисковых систем.',
   ]
 
   const templateExamples = [
-    'Рецензия: оценка, тезисы, сильные и слабые стороны, вывод.',
+    'Обзор: тезис, аргументы, примеры, вывод, рейтинг.',
     'Подборка: критерии отбора, карточки объектов, рекомендации редакции.',
-    'Разбор кейса: контекст, решение, результат, выводы для сообщества.',
+    'Кейс: контекст, решение, результат, что можно повторить у себя.',
   ]
 
   let signupModalOpen = false
@@ -108,14 +178,21 @@
 
 <div class="landing-page">
   <section class="hero-section">
-    <div class="hero-shell">
+    <div class="hero-shell hero-shell--split">
       <div class="hero-copy">
-        <h1>Сообщество, которое работает как сабреддит, а не как шумный чат</h1>
+        <div class="eyebrow">Платформа для онлайн-сообществ</div>
+        <h1>Сообщество, которое работает</h1>
         <p class="hero-lead">
-          В Comuna авторы создают сообщества, задают правила публикации по
-          тематикам и собирают шаблоны постов, внутри которых участники выпускают
-          статьи. В итоге вы ведете комьюнити не потоком сообщений, а
-          управляемой контентной системой.
+          Comuna помогает автору создать не просто канал, а полноценное
+          пространство для сообщества. Здесь вы управляете не только вниманием
+          аудитории, но и тем, как люди участвуют, публикуют и взаимодействуют
+          друг с другом.
+        </p>
+        <p class="hero-sublead">
+          Вы решаете, кто пишет в сообществе, кто комментирует, какие типы
+          постов доступны, по каким шаблонам создаются публикации и как выглядит
+          сама страница. Людям нужно больше, чем поток сообщений. Им нужно место
+          для нормального участия.
         </p>
 
         <div class="hero-actions">
@@ -131,55 +208,168 @@
           {/each}
         </ul>
       </div>
+
+      <div class="hero-visual">
+        <article class="hero-visual__card hero-visual__card--large">
+          <img
+            src="/communities/technology.webp"
+            alt="Пример технологического сообщества"
+          />
+          <div class="hero-visual__caption">
+            <span>Управляемая среда</span>
+            <strong>Роли, типы постов, шаблоны и собственный стиль страницы</strong>
+          </div>
+        </article>
+
+        <div class="hero-visual__grid">
+          <article class="hero-visual__card">
+            <img
+              src="/communities/science.webp"
+              alt="Пример научного сообщества"
+              loading="lazy"
+            />
+            <div class="hero-visual__caption hero-visual__caption--compact">
+              <span>Для тематики</span>
+              <strong>с отдельными правилами публикации</strong>
+            </div>
+          </article>
+
+          <div class="hero-visual__note">
+            <div class="hero-visual__note-label">Что получает автор</div>
+            <strong>Контроль над логикой комьюнити</strong>
+            <p>
+              Не нужно объяснять каждому участнику вручную, как правильно
+              публиковать и где искать важное.
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   </section>
 
   <section class="content-section">
     <div class="section-shell">
       <div class="section-heading">
-        <div class="eyebrow">Почему это сильнее обычного канала</div>
-        <h2>Вы управляете не только обсуждением, но и качеством публикаций</h2>
+        <div class="eyebrow">Главная ошибка</div>
+        <h2>Мессенджер создает иллюзию комьюнити, но не дает среду для его роста</h2>
         <p>
-          Хорошее сообщество растет вокруг понятных правил. В Comuna они
-          зашиваются в сам процесс публикации, а не висят отдельным постом,
-          который никто не перечитывает.
+          Каналы и чаты удобны для сигнала, но слабы для построения сообщества.
+          Как только вы хотите выстроить правила, вернуть людей к старым
+          материалам и дать аудитории больше форм участия, поток начинает
+          работать против вас.
+        </p>
+      </div>
+
+      <div class="message-grid">
+        {#each messengerGaps as gap}
+          <article class="message-card">
+            <div class="message-card__number">{gap.number}</div>
+            <h3>{gap.title}</h3>
+            <p>{gap.text}</p>
+          </article>
+        {/each}
+      </div>
+
+      <div class="comparison-band">
+        <div>
+          <span>В мессенджере</span>
+          <strong>люди читают, пишут в поток и быстро теряют контекст</strong>
+        </div>
+        <div>
+          <span>В Comuna</span>
+          <strong>люди читают, комментируют, публикуют и возвращаются к материалам</strong>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="content-section content-section--contrast">
+    <div class="section-shell">
+      <div class="section-heading">
+        <div class="eyebrow">Что получает автор</div>
+        <h2>Вы задаете архитектуру сообщества, а не надеетесь на хаотичную активность</h2>
+        <p>
+          Хорошее комьюнити растет не само по себе. Ему нужна среда, где роли,
+          формат участия и качество контента заложены в саму платформу.
         </p>
       </div>
 
       <div class="card-grid">
-        {#each pillars as pillar}
+        {#each authorControls as item}
           <article class="feature-card">
             <div class="feature-card__icon">
-              <Icon src={pillar.icon} size="20" />
+              <Icon src={item.icon} size="20" />
             </div>
-            <div class="feature-card__eyebrow">{pillar.eyebrow}</div>
-            <h3>{pillar.title}</h3>
-            <p>{pillar.text}</p>
+            <div class="feature-card__eyebrow">{item.eyebrow}</div>
+            <h3>{item.title}</h3>
+            <p>{item.text}</p>
           </article>
         {/each}
       </div>
     </div>
   </section>
 
-  <section class="content-section content-section--contrast">
+  <section class="content-section">
     <div class="section-shell split-layout">
       <div class="section-heading section-heading--compact">
-        <div class="eyebrow">Шаблоны публикаций</div>
-        <h2>Повторяемые форматы перестают быть ручной работой</h2>
+        <div class="eyebrow">Шаблоны и публикации</div>
+        <h2>Людям проще включаться, когда формат участия уже продуман</h2>
         <p>
-          Если у вас есть статьи, которые выходят снова и снова, оформите их как
-          шаблоны. Тогда пользователи будут делать меньше случайных ошибок, а
-          редактура станет заметно легче.
+          Задайте типы постов и шаблоны публикации, чтобы пользователь не
+          начинал с пустого листа. Тогда автор пишет по сценарию, а сообщество
+          получает предсказуемо качественный контент.
+        </p>
+
+        <div class="template-box">
+          <div class="template-box__title">Примеры шаблонов внутри сообщества</div>
+          <ul>
+            {#each templateExamples as example}
+              <li>{example}</li>
+            {/each}
+          </ul>
+        </div>
+      </div>
+
+      <div class="template-visual">
+        <img
+          src="/img/communityBackground1.webp"
+          alt="Оформленная страница сообщества"
+          loading="lazy"
+        />
+        <div class="template-visual__note">
+          <span>Шаблон публикации</span>
+          <strong>Материал выходит по понятной структуре</strong>
+          <p>
+            Автору легче начать, редактору легче проверять, читателю легче
+            воспринимать.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="content-section content-section--gallery">
+    <div class="section-shell">
+      <div class="section-heading">
+        <div class="eyebrow">Своя витрина</div>
+        <h2>Страница сообщества должна выглядеть как отдельное место, а не как еще один чат</h2>
+        <p>
+          У сообщества должно быть собственное лицо. Оформление, тематика,
+          публикации и правила создают ощущение пространства, в которое хочется
+          возвращаться и которое хочется развивать.
         </p>
       </div>
 
-      <div class="template-box">
-        <div class="template-box__title">Примеры форматов внутри сообщества</div>
-        <ul>
-          {#each templateExamples as example}
-            <li>{example}</li>
-          {/each}
-        </ul>
+      <div class="showcase-grid">
+        {#each showcaseCommunities as community}
+          <article class="showcase-card">
+            <img src={community.image} alt={community.title} loading="lazy" />
+            <div class="showcase-card__body">
+              <h3>{community.title}</h3>
+              <p>{community.text}</p>
+            </div>
+          </article>
+        {/each}
       </div>
     </div>
   </section>
@@ -187,12 +377,13 @@
   <section class="content-section" id="telegram-migration">
     <div class="section-shell">
       <div class="section-heading">
-        <div class="eyebrow">Миграция из Telegram и чатов</div>
-        <h2>Не теряйте аудиторию. Переведите ее в более сильный формат общения.</h2>
+        <div class="eyebrow">Переход из Telegram и чатов</div>
+        <h2>Можно перевести аудиторию на платформу и не потерять ощущение близости</h2>
         <p>
-          Можно не ломать привычку подписчиков читать вас регулярно. Вместо этого
-          вы даете им пространство, где знакомая коммуникация сохраняется, но к
-          ней добавляются нормальные публикации, комментарии, роли и архив.
+          Вам не нужно отказываться от своей аудитории или ломать ее привычки.
+          Вы просто переносите взаимодействие в место, где подписчики получают
+          больше возможностей: читать, обсуждать, публиковать и возвращаться к
+          лучшим материалам.
         </p>
       </div>
 
@@ -210,16 +401,33 @@
           </article>
         {/each}
       </div>
+    </div>
+  </section>
 
-      <div class="comparison-band">
-        <div>
-          <span>В Telegram</span>
-          <strong>контент быстро уходит вниз, а обсуждение смешивается с потоком</strong>
-        </div>
-        <div>
-          <span>В Comuna</span>
-          <strong>каждый материал получает свой дом, а комьюнити растет вокруг него</strong>
-        </div>
+  <section class="content-section content-section--contrast">
+    <div class="section-shell">
+      <div class="section-heading">
+        <div class="eyebrow">Рост аудитории</div>
+        <h2>Сообщество на платформе помогает не только удерживать, но и привлекать новых людей</h2>
+        <p>
+          Когда сообщество живет внутри сайта, оно получает дополнительный канал
+          роста. Публикации работают не только на ваших текущих подписчиков, но и
+          на новых пользователей, которые находят контент внутри платформы и через
+          поисковые системы.
+        </p>
+      </div>
+
+      <div class="card-grid">
+        {#each growthBenefits as item}
+          <article class="feature-card">
+            <div class="feature-card__icon">
+              <Icon src={item.icon} size="20" />
+            </div>
+            <div class="feature-card__eyebrow">{item.eyebrow}</div>
+            <h3>{item.title}</h3>
+            <p>{item.text}</p>
+          </article>
+        {/each}
       </div>
     </div>
   </section>
@@ -227,11 +435,11 @@
   <section class="cta-section">
     <div class="cta-shell">
       <div>
-        <h2>Если вы уже собрали ядро аудитории, пора дать ему нормальную платформу</h2>
+        <h2>Если у вас уже есть канал, редакция или клуб по интересам, пора дать ему настоящую платформу</h2>
         <p>
-          Запускайте сообщество, задавайте правила по тематикам, собирайте
-          шаблоны и переносите подписчиков в пространство, где контент можно не
-          только читать, но и развивать вместе.
+          Создайте сообщество, настройте роли, шаблоны и правила, оформите свою
+          страницу и переведите аудиторию туда, где комьюнити действительно
+          может расти.
         </p>
       </div>
 
@@ -286,16 +494,21 @@
     padding: 2rem 0 3rem;
   }
 
-  .hero-shell {
+  .hero-shell,
+  .section-shell,
+  .cta-shell {
     display: grid;
     gap: 1.5rem;
-    align-items: stretch;
   }
 
   .hero-copy,
+  .hero-visual__note,
+  .message-card,
   .feature-card,
   .template-box,
+  .template-visual__note,
   .migration-card,
+  .showcase-card,
   .cta-shell {
     backdrop-filter: blur(16px);
   }
@@ -317,9 +530,19 @@
     letter-spacing: -0.06em;
   }
 
+  .hero-sublead {
+    margin: 1rem 0 0;
+    color: var(--landing-muted);
+    font-size: 1.05rem;
+    line-height: 1.65;
+  }
+
   .hero-lead,
   .section-heading p,
+  .message-card p,
   .feature-card p,
+  .template-visual__note p,
+  .showcase-card p,
   .migration-card p,
   .cta-shell p {
     color: var(--landing-muted);
@@ -436,15 +659,101 @@
     margin-top: 0.15rem;
   }
 
+  .hero-visual {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .hero-visual__grid {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .hero-visual__card,
+  .template-visual,
+  .showcase-card {
+    position: relative;
+    overflow: hidden;
+    border-radius: 1.8rem;
+    border: 1px solid var(--landing-line);
+    background: rgba(255, 255, 255, 0.6);
+    box-shadow: 0 18px 60px rgba(35, 44, 79, 0.08);
+  }
+
+  .hero-visual__card img,
+  .template-visual img,
+  .showcase-card img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .hero-visual__card--large {
+    min-height: 26rem;
+  }
+
+  .hero-visual__card:not(.hero-visual__card--large) {
+    min-height: 14rem;
+  }
+
+  .hero-visual__caption {
+    position: absolute;
+    left: 1rem;
+    right: 1rem;
+    bottom: 1rem;
+    display: grid;
+    gap: 0.35rem;
+    padding: 1rem 1.1rem;
+    border-radius: 1.3rem;
+    background: rgba(14, 24, 46, 0.78);
+    color: #fff;
+  }
+
+  .hero-visual__caption span,
+  .hero-visual__note-label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.72);
+  }
+
+  .hero-visual__caption strong,
+  .hero-visual__note strong,
+  .message-card h3,
   .migration-card h3,
   .feature-card h3,
+  .showcase-card h3,
   .cta-shell h2,
   .section-heading h2,
-  .template-box__title {
+  .template-box__title,
+  .template-visual__note strong {
     display: block;
     margin: 0;
     font-weight: 500;
     letter-spacing: -0.03em;
+  }
+
+  .hero-visual__caption--compact strong {
+    font-size: 1.05rem;
+    line-height: 1.25;
+  }
+
+  .hero-visual__note {
+    padding: 1.4rem;
+    border-radius: 1.8rem;
+    border: 1px solid var(--landing-line);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.78)),
+      linear-gradient(135deg, rgba(209, 96, 50, 0.12), transparent);
+    box-shadow: 0 18px 60px rgba(35, 44, 79, 0.08);
+  }
+
+  .hero-visual__note p {
+    margin: 0.65rem 0 0;
+    color: var(--landing-muted);
+    line-height: 1.6;
   }
 
   .feature-card__icon,
@@ -464,17 +773,62 @@
     color: var(--landing-accent);
   }
 
+  .message-grid,
+  .card-grid,
+  .migration-grid,
+  .showcase-grid {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .message-card,
+  .feature-card,
+  .template-box,
+  .migration-card {
+    padding: 1.5rem;
+    border-radius: 1.6rem;
+    border: 1px solid var(--landing-line);
+    background: var(--landing-paper);
+    box-shadow: 0 18px 60px rgba(35, 44, 79, 0.06);
+  }
+
+  .message-card {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.8)),
+      linear-gradient(135deg, rgba(23, 61, 138, 0.08), transparent);
+  }
+
+  .message-card__number {
+    color: var(--landing-accent-dark);
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .message-card h3,
+  .feature-card h3,
+  .migration-card h3,
+  .showcase-card h3 {
+    margin-top: 0.8rem;
+    font-size: 1.45rem;
+    line-height: 1.1 !important;
+  }
+
   .content-section {
     padding: 1rem 0 3.5rem;
   }
 
   .content-section--contrast {
+    padding-top: 0.25rem;
+  }
+
+  .content-section--gallery {
     padding-top: 0;
   }
 
   .section-shell {
-    display: grid;
-    gap: 1.5rem;
+    align-items: start;
   }
 
   .section-heading {
@@ -492,22 +846,6 @@
     max-width: 16ch;
   }
 
-  .card-grid,
-  .migration-grid {
-    display: grid;
-    gap: 1rem;
-  }
-
-  .feature-card,
-  .template-box,
-  .migration-card {
-    padding: 1.5rem;
-    border-radius: 1.6rem;
-    border: 1px solid var(--landing-line);
-    background: var(--landing-paper);
-    box-shadow: 0 18px 60px rgba(35, 44, 79, 0.06);
-  }
-
   .feature-card__eyebrow,
   .migration-card__eyebrow {
     margin-top: 1rem;
@@ -518,18 +856,12 @@
     text-transform: uppercase;
   }
 
-  .feature-card h3,
-  .migration-card h3 {
-    margin-top: 0.65rem;
-    font-size: 1.45rem;
-    line-height: 1.1 !important;
-  }
-
   .split-layout {
     align-items: start;
   }
 
   .template-box {
+    margin-top: 1.5rem;
     background:
       linear-gradient(180deg, rgba(255, 255, 255, 0.86), rgba(255, 255, 255, 0.76)),
       linear-gradient(135deg, rgba(209, 96, 50, 0.08), transparent);
@@ -546,6 +878,37 @@
     margin: 1rem 0 0;
     padding-left: 1.1rem;
     color: var(--landing-muted);
+  }
+
+  .template-visual {
+    min-height: 24rem;
+  }
+
+  .template-visual__note {
+    position: absolute;
+    left: 1rem;
+    right: 1rem;
+    bottom: 1rem;
+    padding: 1rem 1.1rem;
+    border-radius: 1.35rem;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    background: rgba(14, 24, 46, 0.82);
+    color: #fff;
+  }
+
+  .template-visual__note span {
+    display: block;
+    margin-bottom: 0.35rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.72);
+  }
+
+  .template-visual__note p {
+    margin: 0.5rem 0 0;
+    color: rgba(255, 255, 255, 0.78);
   }
 
   .migration-card__head {
@@ -580,6 +943,25 @@
     line-height: 1.45;
   }
 
+  .showcase-card img {
+    aspect-ratio: 1.2 / 1;
+  }
+
+  .showcase-card__body {
+    display: grid;
+    gap: 0.5rem;
+    padding: 1.3rem;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.8));
+  }
+
+  .showcase-card__body h3 {
+    margin: 0;
+  }
+
+  .showcase-card__body p {
+    margin: 0;
+  }
+
   .cta-section {
     padding: 0 0 4rem;
   }
@@ -600,19 +982,29 @@
     color: rgba(255, 255, 255, 0.72);
   }
 
-  @media (min-width: 900px) {
+  @media (min-width: 960px) {
+    .hero-shell--split,
     .split-layout,
     .cta-shell {
       grid-template-columns: minmax(0, 1.05fr) minmax(22rem, 0.95fr);
     }
 
+    .hero-visual__grid {
+      grid-template-columns: minmax(0, 1.05fr) minmax(16rem, 0.95fr);
+    }
+
+    .message-grid,
     .card-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .migration-grid,
-    .comparison-band {
+    .showcase-grid,
+    .migration-grid {
       grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .comparison-band {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .cta-buttons {
@@ -621,7 +1013,7 @@
     }
   }
 
-  @media (max-width: 899px) {
+  @media (max-width: 959px) {
     .hero-section {
       padding-top: 1rem;
     }
@@ -640,11 +1032,31 @@
     }
 
     .hero-copy,
+    .hero-visual__note,
+    .message-card,
     .feature-card,
     .template-box,
+    .template-visual__note,
     .migration-card,
+    .showcase-card__body,
     .cta-shell {
       padding: 1.25rem;
+    }
+
+    .hero-visual__card--large {
+      min-height: 18rem;
+    }
+
+    .hero-visual__card:not(.hero-visual__card--large),
+    .template-visual {
+      min-height: 14rem;
+    }
+
+    .hero-visual__caption,
+    .template-visual__note {
+      left: 0.75rem;
+      right: 0.75rem;
+      bottom: 0.75rem;
     }
   }
 </style>

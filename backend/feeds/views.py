@@ -8531,6 +8531,12 @@ def comun_detail_manage(request: HttpRequest, slug: str) -> HttpResponse:
             }
         )
 
+    if request.method == "DELETE":
+        if not _comun_can_manage_moderators(current_user, comun):
+            return JsonResponse({"ok": False, "error": "forbidden"}, status=403)
+        comun.delete()
+        return JsonResponse({"ok": True, "deleted": True, "posts_kept": True})
+
     if request.method not in ("PATCH", "POST"):
         return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)
     if not _comun_is_moderator(current_user, comun):

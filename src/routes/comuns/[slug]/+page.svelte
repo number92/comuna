@@ -44,6 +44,8 @@
   let settingsLoading = false
   let settingsSaving = false
   let settingsLogoUploading = false
+  let deleteComunOpen = false
+  let deleteComunSaving = false
   let settingsError = ''
   let settingsTagSearch = ''
   let settingsTagCreating = false
@@ -202,6 +204,7 @@
   const isModerator = () => Boolean(comun?.can_moderate && $siteToken)
   const canPostInComun = () => Boolean(comun?.can_post && $siteToken)
   const canManageComunModerators = () => Boolean(comun?.can_manage_moderators && $siteToken)
+  const canDeleteComun = () => Boolean(comun?.can_manage_moderators && $siteToken)
   const isComunCreator = () =>
     Boolean($siteToken && $siteUser?.id && comun?.creator?.id && $siteUser.id === comun.creator.id)
   const formatRatingValue = (value?: number | null) => {
@@ -990,6 +993,40 @@
       settingsError = error instanceof Error ? error.message : 'Ошибка сохранения'
     } finally {
       settingsSaving = false
+    }
+  }
+
+  const openDeleteComunModal = () => {
+    if (!canDeleteComun() || deleteComunSaving) return
+    deleteComunOpen = true
+  }
+
+  const closeDeleteComunModal = () => {
+    if (deleteComunSaving) return
+    deleteComunOpen = false
+  }
+
+  const deleteComun = async () => {
+    if (!comun?.slug || !canDeleteComun() || deleteComunSaving) return
+    deleteComunSaving = true
+    settingsError = ''
+    try {
+      const response = await fetch(buildComunUrl(comun.slug), {
+        method: 'DELETE',
+        headers: authHeaders(),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(payload?.error || 'Не удалось удалить сообщество')
+      }
+      deleteComunOpen = false
+      settingsOpen = false
+      toast({ content: 'Сообщество удалено', type: 'success' })
+      await goto('/comuns')
+    } catch (error) {
+      settingsError = error instanceof Error ? error.message : 'Не удалось удалить сообщество'
+    } finally {
+      deleteComunSaving = false
     }
   }
 
@@ -1872,12 +1909,48 @@
         </label>
       </div>
 
+      {#if canDeleteComun()}
+        <div class="rounded-2xl border border-rose-200 dark:border-rose-900/50 bg-rose-50/80 dark:bg-rose-950/20 px-4 py-4">
+          <div class="text-sm font-semibold text-rose-700 dark:text-rose-300">Удаление сообщества</div>
+          <div class="mt-2 text-sm text-rose-700 dark:text-rose-300">
+            Посты пользователей не будут удалены. Они останутся на сайте без привязки к сообществу.
+          </div>
+          <div class="mt-3">
+            <Button
+              color="ghost"
+              on:click={openDeleteComunModal}
+              disabled={settingsSaving || settingsLogoUploading || deleteComunSaving}
+            >
+              Удалить сообщество
+            </Button>
+          </div>
+        </div>
+      {/if}
+
       <div class="flex justify-end gap-2 pt-2">
-        <Button on:click={saveSettings} disabled={settingsSaving || settingsLogoUploading}>
+        <Button on:click={saveSettings} disabled={settingsSaving || settingsLogoUploading || deleteComunSaving}>
           {settingsSaving ? 'Сохраняем...' : 'Сохранить'}
         </Button>
       </div>
     {/if}
+  </div>
+</Modal>
+
+<Modal bind:open={deleteComunOpen} dismissable={!deleteComunSaving} dismissOnBackdrop={!deleteComunSaving}>
+  <div class="w-full max-w-lg flex flex-col gap-4">
+    <div class="text-lg font-semibold text-slate-900 dark:text-zinc-100">Удалить сообщество?</div>
+    <div class="text-sm text-slate-700 dark:text-zinc-300">
+      Сообщество будет удалено без возможности восстановления.
+    </div>
+    <div class="rounded-2xl border border-rose-200 dark:border-rose-900/50 bg-rose-50 dark:bg-rose-950/20 px-4 py-3 text-sm text-rose-700 dark:text-rose-300">
+      Посты пользователей не будут удалены. Они останутся на сайте без привязки к сообществу.
+    </div>
+    <div class="flex justify-end gap-2">
+      <Button color="ghost" on:click={closeDeleteComunModal} disabled={deleteComunSaving}>Отмена</Button>
+      <Button on:click={deleteComun} disabled={deleteComunSaving}>
+        {deleteComunSaving ? 'Удаляем...' : 'Удалить сообщество'}
+      </Button>
+    </div>
   </div>
 </Modal>
 

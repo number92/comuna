@@ -29,10 +29,12 @@
   let settingsSaving = false
   let settingsLogoUploading = false
   let settingsTagCreating = false
+  let settingsCategoryCreating = false
   let settingsError = ''
   let lastAuthRefreshToken: string | null = null
 
   let settingsTagSearch = ''
+  let settingsCategorySearch = ''
   let settingsUserSearch = ''
   let settingsCategoryOptions: BackendComunCategory[] = []
   type ComunTagOption = BackendTag & { id: number }
@@ -288,6 +290,9 @@
   const normalizeTagInput = (value: string) =>
     value.trim().replace(/^#+/, '').replace(/\s+/g, ' ').trim()
 
+  const normalizeCategoryInput = (value: string) =>
+    value.trim().replace(/\s+/g, ' ').trim()
+
   const formatRatingValue = (value?: number | null) => {
     const normalized = Math.max(Number(value ?? 0) || 0, 0)
     return new Intl.NumberFormat('ru-RU', {
@@ -309,6 +314,21 @@
     ((settingsDraft?.category_ids as number[] | undefined) ??
       (settingsDraft?.categories ?? []).map((item) => item.id)) as number[]
   )
+  $: normalizedCategorySearch = settingsCategorySearch.trim().toLowerCase()
+  $: normalizedCategoryCreateValue = normalizeCategoryInput(settingsCategorySearch)
+  $: hasExactCategoryMatch = (settingsCategoryOptions ?? []).some((category) => {
+    const needle = normalizedCategoryCreateValue.toLowerCase()
+    if (!needle) return false
+    return normalizeCategoryInput(category.name).toLowerCase() === needle
+  })
+  $: filteredCategoryOptions = (settingsCategoryOptions ?? [])
+    .filter((category) => {
+      if (!normalizedCategorySearch) return true
+      return [category.name, category.description ?? ''].some((value) =>
+        value.toLowerCase().includes(normalizedCategorySearch)
+      )
+    })
+    .slice(0, 40)
   $: filteredTagOptions = (settingsTagOptions ?? [])
     .filter((tag) => {
       if (!normalizedTagSearch) return true
@@ -377,6 +397,38 @@
       })
     } finally {
       settingsTagCreating = false
+    }
+  }
+
+  const createCategoryAndSelectDraft = async () => {
+    const categoryName = normalizeCategoryInput(settingsCategorySearch)
+    if (!slug || !settingsDraft || !categoryName || settingsCategoryCreating) return
+    settingsCategoryCreating = true
+    settingsError = ''
+    try {
+      const response = await fetch(buildComunUrl(slug), {
+        method: 'PATCH',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          category_ids:
+            settingsDraft.category_ids ??
+            (settingsDraft.categories ?? []).map((category) => category.id),
+          category_names: [categoryName],
+        }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(payload?.error || 'Не удалось добавить категорию')
+      }
+      comun = payload.comun ?? comun
+      settingsDraft = cloneComun(comun)
+      settingsCategoryOptions = payload.comun?.options?.categories ?? settingsCategoryOptions
+      settingsCategorySearch = ''
+      toast({ content: 'Категория добавлена в сообщество', type: 'success' })
+    } catch (error) {
+      settingsError = error instanceof Error ? error.message : 'Не удалось добавить категорию'
+    } finally {
+      settingsCategoryCreating = false
     }
   }
 
@@ -795,23 +847,51 @@
 
         <div class="flex flex-col gap-2">
           <div class="text-sm text-slate-700 dark:text-zinc-300">Внутренние категории</div>
+          <div class="text-xs text-slate-500 dark:text-zinc-400">
+            Можно выбрать существующие категории или создать свою прямо здесь.
+          </div>
+          <div class="flex gap-2">
+            <input
+              bind:value={settingsCategorySearch}
+              placeholder="Например: Релизы, Баги, Исследования"
+              class="flex-1 rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"
+            />
+            <Button
+              size="sm"
+              on:click={createCategoryAndSelectDraft}
+              disabled={settingsCategoryCreating || !normalizedCategoryCreateValue}
+            >
+              {settingsCategoryCreating ? '...' : 'Добавить'}
+            </Button>
+          </div>
+          {#if normalizedCategoryCreateValue && !hasExactCategoryMatch}
+            <div class="rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900/60 px-3 py-2 text-sm text-slate-700 dark:text-zinc-300">
+              Новой категории пока нет. Нажмите `Добавить`, чтобы создать и сразу подключить ее к сообществу.
+            </div>
+          {/if}
           <div class="grid gap-2 sm:grid-cols-2">
-            {#each settingsCategoryOptions as category}
-              <label class="rounded-xl border border-slate-200 dark:border-zinc-800 px-3 py-2 flex items-start gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={draftCategoryIdSet.has(category.id)}
-                  on:change={() => toggleDraftCategory(category.id)}
-                  class="mt-0.5"
-                />
-                <span class="min-w-0">
-                  <span class="block text-sm font-medium text-slate-900 dark:text-zinc-100">{category.name}</span>
-                  {#if category.description}
-                    <span class="block text-xs text-slate-500 dark:text-zinc-400">{category.description}</span>
-                  {/if}
-                </span>
-              </label>
-            {/each}
+            {#if filteredCategoryOptions.length}
+              {#each filteredCategoryOptions as category}
+                <label class="rounded-xl border border-slate-200 dark:border-zinc-800 px-3 py-2 flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={draftCategoryIdSet.has(category.id)}
+                    on:change={() => toggleDraftCategory(category.id)}
+                    class="mt-0.5"
+                  />
+                  <span class="min-w-0">
+                    <span class="block text-sm font-medium text-slate-900 dark:text-zinc-100">{category.name}</span>
+                    {#if category.description}
+                      <span class="block text-xs text-slate-500 dark:text-zinc-400">{category.description}</span>
+                    {/if}
+                  </span>
+                </label>
+              {/each}
+            {:else}
+              <div class="rounded-xl border border-slate-200 dark:border-zinc-800 px-3 py-2 text-sm text-slate-500 dark:text-zinc-400 sm:col-span-2">
+                {normalizedCategorySearch ? 'Категории не найдены' : 'Категории пока не добавлены'}
+              </div>
+            {/if}
           </div>
         </div>
 

@@ -6590,6 +6590,44 @@ def _ensure_tag_by_name(raw_name: str) -> tuple[Tag | None, bool]:
     return Tag.objects.create(name=normalized, lemma=lemma), True
 
 
+def _normalize_comun_category_name(raw_name: object) -> str:
+    return re.sub(r"\s+", " ", str(raw_name or "").strip())
+
+
+def _generate_unique_comun_category_slug(name: str) -> str:
+    base_slug = slugify(str(name or "").strip())[:120]
+    if not base_slug:
+        return ""
+    slug = base_slug
+    suffix = 2
+    while ComunCategory.objects.filter(slug=slug).exists():
+        suffix_literal = f"-{suffix}"
+        max_base_length = max(120 - len(suffix_literal), 1)
+        slug = f"{base_slug[:max_base_length]}{suffix_literal}"
+        suffix += 1
+    return slug
+
+
+def _ensure_comun_category_by_name(raw_name: object) -> tuple[ComunCategory | None, bool]:
+    normalized_name = _normalize_comun_category_name(raw_name)
+    if not normalized_name:
+        return None, False
+    category = (
+        ComunCategory.objects.filter(name__iexact=normalized_name)
+        .order_by("sort_order", "name")
+        .first()
+    )
+    if category:
+        if not category.is_active:
+            category.is_active = True
+            category.save(update_fields=["is_active"])
+        return category, False
+    slug = _generate_unique_comun_category_slug(normalized_name)
+    if not slug:
+        return None, False
+    return ComunCategory.objects.create(name=normalized_name, slug=slug), True
+
+
 @csrf_exempt
 def tags_ensure(request: HttpRequest) -> HttpResponse:
     if request.method != "POST":
@@ -8564,15 +8602,26 @@ def comun_detail_manage(request: HttpRequest, slug: str) -> HttpResponse:
 
     comun.save()
 
-    if "category_ids" in body:
-        comun.categories.set(
-            ComunCategory.objects.filter(id__in=_parse_int_list(body.get("category_ids")), is_active=True)
-        )
+    if "category_ids" in body or "category_names" in body:
+        selected_categories: dict[int, ComunCategory] = {
+            category.id: category
+            for category in ComunCategory.objects.filter(
+                id__in=_parse_int_list(body.get("category_ids")),
+                is_active=True,
+            )
+        }
+        raw_category_names = body.get("category_names") if isinstance(body.get("category_names"), list) else []
+        for raw_category_name in raw_category_names:
+            category, _created = _ensure_comun_category_by_name(raw_category_name)
+            if not category:
+                continue
+            selected_categories[category.id] = category
+        comun.categories.set(selected_categories.keys())
 
     comun = (
         Comun.objects.filter(id=comun.id)
         .select_related("creator", "product_tag", "welcome_post")
-        .prefetch_related("moderators", "categories")
+        .prefetch_related("moderators", "categories", "tags")
         .get()
     )
     return JsonResponse(

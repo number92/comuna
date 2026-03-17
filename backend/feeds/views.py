@@ -849,6 +849,7 @@ def _serialize_comun_profile_card(
     role: str = "moderator",
 ) -> dict:
     product_tag = comun.product_tag
+    tags = list(comun.tags.filter(is_active=True).order_by("name"))
     return {
         "id": comun.id,
         "name": comun.name,
@@ -868,6 +869,14 @@ def _serialize_comun_profile_card(
             if product_tag
             else None
         ),
+        "tags": [
+            {
+                "id": tag.id,
+                "name": tag.name,
+                "lemma": tag.lemma or _lemmatize_tag(tag.name) or tag.name,
+            }
+            for tag in tags
+        ],
         "categories_count": comun.categories.filter(is_active=True).count()
         if not hasattr(comun, "_prefetched_objects_cache") or "categories" not in comun._prefetched_objects_cache
         else len([cat for cat in comun.categories.all() if getattr(cat, "is_active", True)]),
@@ -6723,6 +6732,20 @@ def _parse_int_list(value: object) -> list[int]:
     return result
 
 
+def _generate_unique_comun_slug(name: str) -> str:
+    base_slug = slugify(str(name or "").strip())[:160]
+    if not base_slug:
+        return ""
+    slug = base_slug
+    suffix = 2
+    while Comun.objects.filter(slug=slug).exists():
+        suffix_literal = f"-{suffix}"
+        max_base_length = max(160 - len(suffix_literal), 1)
+        slug = f"{base_slug[:max_base_length]}{suffix_literal}"
+        suffix += 1
+    return slug
+
+
 def _can_access_thematic_folders_page(user: User | None) -> bool:
     if not user:
         return False
@@ -7929,6 +7952,7 @@ def _serialize_comun(
     categories = list(comun.categories.filter(is_active=True).order_by("sort_order", "name"))
     moderators = list(comun.moderators.select_related("site_profile").order_by("username"))
     product_tag = comun.product_tag
+    tags = list(comun.tags.filter(is_active=True).order_by("name"))
     welcome_post_payload = None
     if comun.welcome_post_id:
         welcome_post = (
@@ -7994,6 +8018,14 @@ def _serialize_comun(
             if product_tag
             else None
         ),
+        "tags": [
+            {
+                "id": tag.id,
+                "name": tag.name,
+                "lemma": tag.lemma or _lemmatize_tag(tag.name) or tag.name,
+            }
+            for tag in tags
+        ],
         "welcome_post_id": comun.welcome_post_id,
         "welcome_post": welcome_post_payload,
         "can_moderate": _comun_is_moderator(current_user, comun),
@@ -8005,6 +8037,7 @@ def _serialize_comun(
     if include_manage_fields:
         payload["category_ids"] = [category.id for category in categories]
         payload["moderator_ids"] = [moderator.id for moderator in moderators]
+        payload["tag_ids"] = [tag.id for tag in tags]
         payload["product_tag_id"] = comun.product_tag_id
         payload["welcome_post_ref"] = str(comun.welcome_post_id or "")
     if include_options:
@@ -8293,7 +8326,7 @@ def comuns_list_create(request: HttpRequest) -> HttpResponse:
         comuns = list(
             Comun.objects.filter(is_active=True)
             .select_related("creator", "product_tag")
-            .prefetch_related("moderators", "categories")
+            .prefetch_related("moderators", "categories", "tags")
             .order_by("sort_order", "name")
         )
         payload = [
@@ -8329,23 +8362,38 @@ def comuns_list_create(request: HttpRequest) -> HttpResponse:
     name = str(body.get("name") or "").strip()
     if not name:
         return JsonResponse({"ok": False, "error": "name required"}, status=400)
-    slug_raw = str(body.get("slug") or "").strip()
-    slug = slugify(slug_raw or name)[:160]
+    slug = _generate_unique_comun_slug(name)
     if not slug:
         return JsonResponse({"ok": False, "error": "slug required"}, status=400)
-    if Comun.objects.filter(slug=slug).exists():
-        return JsonResponse({"ok": False, "error": "slug already exists"}, status=400)
     if Comun.objects.filter(name__iexact=name).exists():
         return JsonResponse({"ok": False, "error": "name already exists"}, status=400)
 
     website_url = str(body.get("website_url") or "").strip()
     logo_url = str(body.get("logo_url") or "").strip()
-    product_description = str(body.get("product_description") or "").strip()
+    product_description = str(body.get("description") or body.get("product_description") or "").strip()
     target_audience = str(body.get("target_audience") or "").strip()
+    allowed_template_types = normalize_allowed_post_templates(body.get("allowed_template_types"))
+    tag_ids = _parse_int_list(body.get("tag_ids"))[:5]
+    raw_tag_names = body.get("tag_names") if isinstance(body.get("tag_names"), list) else []
     category_ids = _parse_int_list(body.get("category_ids"))
     product_tag_id = _parse_post_reference_to_id(body.get("product_tag_id"))
     product_tag_name = str(body.get("product_tag_name") or "").strip()
     welcome_post_id = _parse_post_reference_to_id(body.get("welcome_post_id") or body.get("welcome_post_ref"))
+    selected_tag_ids: list[int] = []
+    seen_tag_ids: set[int] = set()
+    for tag_id in tag_ids:
+        if tag_id in seen_tag_ids:
+            continue
+        seen_tag_ids.add(tag_id)
+        selected_tag_ids.append(tag_id)
+    for raw_tag_name in raw_tag_names:
+        tag, _created = _ensure_tag_by_name(str(raw_tag_name or ""))
+        if not tag or tag.id in seen_tag_ids:
+            continue
+        seen_tag_ids.add(tag.id)
+        selected_tag_ids.append(tag.id)
+        if len(selected_tag_ids) >= 5:
+            break
 
     comun = Comun.objects.create(
         name=name,
@@ -8355,10 +8403,13 @@ def comuns_list_create(request: HttpRequest) -> HttpResponse:
         logo_url=logo_url,
         product_description=product_description,
         target_audience=target_audience,
+        allowed_post_templates=allowed_template_types,
     )
     comun.moderators.add(current_user)
     if category_ids:
         comun.categories.set(ComunCategory.objects.filter(id__in=category_ids, is_active=True))
+    if selected_tag_ids:
+        comun.tags.set(Tag.objects.filter(id__in=selected_tag_ids, is_active=True))
     if product_tag_id:
         product_tag = Tag.objects.filter(id=product_tag_id, is_active=True).first()
         if product_tag:
@@ -8376,7 +8427,7 @@ def comuns_list_create(request: HttpRequest) -> HttpResponse:
     comun = (
         Comun.objects.filter(id=comun.id)
         .select_related("creator", "product_tag", "welcome_post")
-        .prefetch_related("moderators", "categories")
+        .prefetch_related("moderators", "categories", "tags")
         .get()
     )
     return JsonResponse({"ok": True, "comun": _serialize_comun(request, comun, current_user=current_user, include_manage_fields=True)})
@@ -8389,7 +8440,7 @@ def comun_detail_manage(request: HttpRequest, slug: str) -> HttpResponse:
         comun = (
             Comun.objects.filter(slug=slug)
             .select_related("creator", "product_tag", "welcome_post")
-            .prefetch_related("moderators", "categories")
+            .prefetch_related("moderators", "categories", "tags")
             .get()
         )
     except Comun.DoesNotExist:

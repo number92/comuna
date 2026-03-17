@@ -651,6 +651,13 @@ class Comun(models.Model):
         related_name="comuns",
         verbose_name="Внутренние категории",
     )
+    tags = models.ManyToManyField(
+        Tag,
+        blank=True,
+        related_name="comuns_tagged",
+        verbose_name="Теги",
+        help_text="Теги сообщества для поиска и сортировки.",
+    )
     website_url = models.URLField(max_length=500, blank=True, verbose_name="Веб-сайт")
     logo_url = models.URLField(max_length=500, blank=True, verbose_name="Логотип (URL)")
     product_description = models.TextField(blank=True, verbose_name="Описание продукта")

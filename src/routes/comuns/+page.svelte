@@ -3,7 +3,11 @@
   import { page } from '$app/stores'
   import Header from '$lib/components/ui/layout/pages/Header.svelte'
   import { Button, Modal, toast } from 'mono-svelte'
-  import { buildComunsUrl, type BackendComun } from '$lib/api/backend'
+  import { buildComunsUrl, buildTagsEnsureUrl, type BackendComun } from '$lib/api/backend'
+  import {
+    normalizeAllowedPostTemplateTypes,
+    type PostTemplateCode,
+  } from '$lib/postTemplates'
   import { refreshSiteUser, siteToken, siteUser, uploadSiteImage } from '$lib/siteAuth'
   import { goto } from '$app/navigation'
 
@@ -20,13 +24,20 @@
   let createIntentHandled = false
 
   let name = ''
-  let slug = ''
-  let websiteUrl = ''
   let logoUrl = ''
   let logoUploading = false
-  let productDescription = ''
-  let targetAudience = ''
+  let createTagInput = ''
+  let createTagSaving = false
+  let description = ''
+  let selectedTemplateTypes: PostTemplateCode[] = ['basic']
+  let createTags: Array<{ id: number; name: string; lemma?: string | null }> = []
   let createLogoInput: HTMLInputElement | null = null
+  const templateTypeOptions: Array<{ value: PostTemplateCode; label: string }> = [
+    { value: 'basic', label: 'Пост' },
+    { value: 'movie_review', label: 'Кинообзор' },
+    { value: 'post_vote_poll', label: 'Голосование за посты' },
+    { value: 'music_release', label: 'Музыкальный релиз' },
+  ]
 
   const hashString = (value?: string | null) => {
     const source = (value ?? '').trim() || 'comuna'
@@ -64,12 +75,75 @@
 
   const resetForm = () => {
     name = ''
-    slug = ''
-    websiteUrl = ''
     logoUrl = ''
     logoUploading = false
-    productDescription = ''
-    targetAudience = ''
+    createTagInput = ''
+    createTagSaving = false
+    createTags = []
+    description = ''
+    selectedTemplateTypes = ['basic']
+  }
+
+  const normalizeTagInput = (value: string) =>
+    value.trim().replace(/^#+/, '').replace(/\s+/g, ' ').trim()
+
+  const removeCreateTag = (tagId: number) => {
+    createTags = createTags.filter((tag) => tag.id !== tagId)
+  }
+
+  const addCreateTag = async () => {
+    const tagName = normalizeTagInput(createTagInput)
+    if (!tagName || createTagSaving) return
+    if (createTags.length >= 5) {
+      toast({ content: 'Можно добавить не больше 5 тегов', type: 'warning' })
+      return
+    }
+    createTagSaving = true
+    try {
+      const response = await fetch(buildTagsEnsureUrl(), {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ name: tagName }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || !payload?.tag?.id) {
+        throw new Error(payload?.error || 'Не удалось добавить тег')
+      }
+      const nextTag = {
+        id: Number(payload.tag.id),
+        name: String(payload.tag.name ?? tagName),
+        lemma: payload.tag.lemma ? String(payload.tag.lemma) : null,
+      }
+      if (createTags.some((tag) => tag.id === nextTag.id)) {
+        createTagInput = ''
+        return
+      }
+      createTags = [...createTags, nextTag].slice(0, 5)
+      createTagInput = ''
+    } catch (error) {
+      toast({ content: error instanceof Error ? error.message : 'Не удалось добавить тег', type: 'error' })
+    } finally {
+      createTagSaving = false
+    }
+  }
+
+  const onCreateTagKeydown = (event: KeyboardEvent) => {
+    if (event.key !== 'Enter') return
+    event.preventDefault()
+    void addCreateTag()
+  }
+
+  const toggleCreateTemplateType = (templateType: PostTemplateCode) => {
+    const current = new Set(normalizeAllowedPostTemplateTypes(selectedTemplateTypes))
+    if (current.has(templateType)) {
+      if (current.size === 1) return
+      current.delete(templateType)
+    } else {
+      current.add(templateType)
+    }
+    selectedTemplateTypes = templateTypeOptions
+      .map((option) => option.value)
+      .filter((value) => current.has(value))
   }
 
   const authHeaders = () => {
@@ -147,11 +221,11 @@
         headers: authHeaders(),
         body: JSON.stringify({
           name,
-          slug,
-          website_url: websiteUrl,
           logo_url: logoUrl,
-          product_description: productDescription,
-          target_audience: targetAudience,
+          description,
+          product_description: description,
+          tag_ids: createTags.map((tag) => tag.id),
+          allowed_template_types: normalizeAllowedPostTemplateTypes(selectedTemplateTypes),
         }),
       })
       const payload = await response.json().catch(() => ({}))
@@ -229,15 +303,21 @@
                   {comun.product_description}
                 </div>
               {/if}
-              {#if comun.target_audience}
-                <div class="mt-2 text-xs text-slate-500 dark:text-zinc-400">
-                  ЦА: {comun.target_audience}
+              {#if comun.tags?.length}
+                <div class="mt-3 flex flex-wrap gap-2">
+                  {#each comun.tags.slice(0, 4) as tag}
+                    <span class="rounded-full bg-slate-100 dark:bg-zinc-800 px-2 py-1 text-xs text-slate-600 dark:text-zinc-300">
+                      #{tag.name}
+                    </span>
+                  {/each}
+                  {#if comun.tags.length > 4}
+                    <span class="rounded-full bg-slate-100 dark:bg-zinc-800 px-2 py-1 text-xs text-slate-500 dark:text-zinc-400">
+                      +{comun.tags.length - 4}
+                    </span>
+                  {/if}
                 </div>
               {/if}
               <div class="mt-2 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-zinc-400">
-                {#if comun.website_url}
-                  <span class="truncate max-w-full">{comun.website_url}</span>
-                {/if}
                 <span>{comun.categories_count ?? comun.categories?.length ?? 0} категорий</span>
                 <span>{comun.moderators_count ?? comun.moderators?.length ?? 0} модераторов</span>
               </div>
@@ -257,22 +337,12 @@
   <div class="w-full max-w-2xl flex flex-col gap-4">
     <div class="text-lg font-semibold text-slate-900 dark:text-zinc-100">Создать сообщество</div>
     <div class="text-sm text-slate-600 dark:text-zinc-400">
-      После создания откроется страница сообщества, где можно выбрать тег продукта, внутренние категории и приветственный пост.
+      После создания откроются настройки сообщества, где можно донастроить категории, тег продукта и приветственный пост.
     </div>
 
     <label class="flex flex-col gap-1">
       <span class="text-sm text-slate-700 dark:text-zinc-300">Название</span>
       <input bind:value={name} class="rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2" />
-    </label>
-
-    <label class="flex flex-col gap-1">
-      <span class="text-sm text-slate-700 dark:text-zinc-300">Slug (необязательно)</span>
-      <input bind:value={slug} placeholder="my-startup" class="rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2" />
-    </label>
-
-    <label class="flex flex-col gap-1">
-      <span class="text-sm text-slate-700 dark:text-zinc-300">Веб-сайт</span>
-      <input bind:value={websiteUrl} type="url" placeholder="https://..." class="rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2" />
     </label>
 
     <div class="flex flex-col gap-2">
@@ -322,14 +392,68 @@
     </div>
 
     <label class="flex flex-col gap-1">
-      <span class="text-sm text-slate-700 dark:text-zinc-300">Описание продукта</span>
-      <textarea bind:value={productDescription} rows="4" class="rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"></textarea>
+      <span class="text-sm text-slate-700 dark:text-zinc-300">Описание</span>
+      <textarea bind:value={description} rows="4" class="rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"></textarea>
     </label>
 
-    <label class="flex flex-col gap-1">
-      <span class="text-sm text-slate-700 dark:text-zinc-300">Целевая аудитория</span>
-      <textarea bind:value={targetAudience} rows="2" class="rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"></textarea>
-    </label>
+    <div class="flex flex-col gap-3">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <div class="text-sm text-slate-700 dark:text-zinc-300">Теги</div>
+          <div class="text-xs text-slate-500 dark:text-zinc-400">
+            До 5 тегов для удобства поиска и сортировки сообщества.
+          </div>
+        </div>
+        <div class="text-xs text-slate-500 dark:text-zinc-400">{createTags.length}/5</div>
+      </div>
+      <div class="flex gap-2">
+        <input
+          bind:value={createTagInput}
+          placeholder="Например: saas, дизайн, аналитика"
+          class="flex-1 rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"
+          on:keydown={onCreateTagKeydown}
+          disabled={createTagSaving || createTags.length >= 5}
+        />
+        <Button on:click={() => void addCreateTag()} disabled={createTagSaving || !createTagInput.trim() || createTags.length >= 5}>
+          {createTagSaving ? 'Добавляем...' : 'Добавить'}
+        </Button>
+      </div>
+      {#if createTags.length}
+        <div class="flex flex-wrap gap-2">
+          {#each createTags as tag}
+            <button
+              type="button"
+              class="inline-flex items-center gap-2 rounded-full border border-slate-200 dark:border-zinc-700 bg-slate-50 dark:bg-zinc-900 px-3 py-1 text-sm text-slate-700 dark:text-zinc-200"
+              on:click={() => removeCreateTag(tag.id)}
+            >
+              <span>#{tag.name}</span>
+              <span class="text-slate-400 dark:text-zinc-500">×</span>
+            </button>
+          {/each}
+        </div>
+      {/if}
+    </div>
+
+    <div class="flex flex-col gap-3">
+      <div>
+        <div class="text-sm text-slate-700 dark:text-zinc-300">Доступные шаблоны публикации</div>
+        <div class="text-xs text-slate-500 dark:text-zinc-400">
+          Выберите, какие форматы постов можно публиковать в этом сообществе.
+        </div>
+      </div>
+      <div class="grid gap-2 sm:grid-cols-2">
+        {#each templateTypeOptions as option}
+          <label class="flex items-center gap-3 rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900 px-3 py-3">
+            <input
+              type="checkbox"
+              checked={normalizeAllowedPostTemplateTypes(selectedTemplateTypes).includes(option.value)}
+              on:change={() => toggleCreateTemplateType(option.value)}
+            />
+            <span class="text-sm text-slate-800 dark:text-zinc-200">{option.label}</span>
+          </label>
+        {/each}
+      </div>
+    </div>
 
     <div class="flex justify-end gap-2 pt-2">
       <Button color="ghost" on:click={() => (createOpen = false)} disabled={creating}>Отмена</Button>

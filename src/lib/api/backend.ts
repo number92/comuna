@@ -412,6 +412,8 @@ export type BackendComun = {
   logo_url?: string | null
   product_description?: string | null
   target_audience?: string | null
+  tags?: BackendTag[]
+  tag_ids?: number[]
   minimum_author_rating_to_post?: number
   rating?: BackendComunRating
   hide_from_home?: boolean
@@ -468,6 +470,7 @@ export type BackendPublicSiteUserComun = {
   logo_url?: string | null
   product_description?: string | null
   target_audience?: string | null
+  tags?: BackendTag[]
   role?: 'creator' | 'moderator' | string
   can_moderate?: boolean
   categories_count?: number

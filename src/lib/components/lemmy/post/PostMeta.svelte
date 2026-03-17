@@ -29,6 +29,7 @@
   import { Plus, Check } from 'svelte-hero-icons'
   import { profile } from '$lib/auth'
   import { siteUser } from '$lib/siteAuth'
+  import { communityLink as buildCommunityLink } from '$lib/lemmy/generic'
   import { addSubscription } from '$lib/lemmy/user'
   import { client } from '$lib/lemmy'
   import Subscribe from '../../../../routes/communities/Subscribe.svelte'
@@ -46,6 +47,7 @@
   export let view: View = 'cozy'
   export let subscribed: SubscribedType | undefined = undefined
   export let userUrlOverride: string | undefined = undefined
+  export let communityUrlOverride: string | undefined = undefined
   export let subscribeUrl: string | undefined = undefined
   export let subscribeLabel: string = 'Подписаться'
   export let disableUserLink: boolean = false
@@ -114,6 +116,9 @@
   }
 
   $: userLink = userUrlOverride ?? `/u/${user?.name}${user?.local === true ? '' : `@${getInstanceFromActorId(user?.actor_id, user?.local)}`}`
+  $: resolvedCommunityLink = community
+    ? (communityUrlOverride ?? buildCommunityLink(community))
+    : undefined
 
   function scrollToTop() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -340,7 +345,13 @@
       
       <div class="flex items-center gap-1 !text-slate-400 dark:!text-zinc-500">
         {#if community}
-          <span class="!text-black dark:!text-white font-normal">{community.title}</span>
+          <a
+            href={resolvedCommunityLink}
+            class="!text-black dark:!text-white font-normal hover:underline"
+            data-sveltekit-preload-data="tap"
+          >
+            {community.title}
+          </a>
         {/if}
         {#if published}
           <span>{formatCustomDate(published)}</span>

@@ -877,9 +877,7 @@ def _serialize_comun_profile_card(
             }
             for tag in tags
         ],
-        "categories_count": comun.categories.filter(is_active=True).count()
-        if not hasattr(comun, "_prefetched_objects_cache") or "categories" not in comun._prefetched_objects_cache
-        else len([cat for cat in comun.categories.all() if getattr(cat, "is_active", True)]),
+        "categories_count": _comun_categories_count(comun),
     }
 
 
@@ -6594,13 +6592,13 @@ def _normalize_comun_category_name(raw_name: object) -> str:
     return re.sub(r"\s+", " ", str(raw_name or "").strip())
 
 
-def _generate_unique_comun_category_slug(name: str) -> str:
+def _generate_unique_comun_category_slug(comun: Comun, name: str) -> str:
     base_slug = slugify(str(name or "").strip())[:120]
     if not base_slug:
         return ""
     slug = base_slug
     suffix = 2
-    while ComunCategory.objects.filter(slug=slug).exists():
+    while ComunCategory.objects.filter(comun=comun, slug=slug).exists():
         suffix_literal = f"-{suffix}"
         max_base_length = max(120 - len(suffix_literal), 1)
         slug = f"{base_slug[:max_base_length]}{suffix_literal}"
@@ -6608,12 +6606,15 @@ def _generate_unique_comun_category_slug(name: str) -> str:
     return slug
 
 
-def _ensure_comun_category_by_name(raw_name: object) -> tuple[ComunCategory | None, bool]:
+def _ensure_comun_category_by_name(
+    comun: Comun,
+    raw_name: object,
+) -> tuple[ComunCategory | None, bool]:
     normalized_name = _normalize_comun_category_name(raw_name)
     if not normalized_name:
         return None, False
     category = (
-        ComunCategory.objects.filter(name__iexact=normalized_name)
+        ComunCategory.objects.filter(comun=comun, name__iexact=normalized_name)
         .order_by("sort_order", "name")
         .first()
     )
@@ -6621,11 +6622,15 @@ def _ensure_comun_category_by_name(raw_name: object) -> tuple[ComunCategory | No
         if not category.is_active:
             category.is_active = True
             category.save(update_fields=["is_active"])
+        if not comun.categories.filter(id=category.id).exists():
+            comun.categories.add(category)
         return category, False
-    slug = _generate_unique_comun_category_slug(normalized_name)
+    slug = _generate_unique_comun_category_slug(comun, normalized_name)
     if not slug:
         return None, False
-    return ComunCategory.objects.create(name=normalized_name, slug=slug), True
+    category = ComunCategory.objects.create(comun=comun, name=normalized_name, slug=slug)
+    comun.categories.add(category)
+    return category, True
 
 
 @csrf_exempt
@@ -7924,6 +7929,28 @@ def _serialize_comun_category(category: ComunCategory) -> dict:
     }
 
 
+def _comun_categories_list(comun: Comun) -> list[ComunCategory]:
+    prefetched_objects_cache = getattr(comun, "_prefetched_objects_cache", {})
+    cached = prefetched_objects_cache.get("categories")
+    if cached is not None:
+        return sorted(
+            [
+                category
+                for category in cached
+                if getattr(category, "is_active", True) and getattr(category, "comun_id", None) == comun.id
+            ],
+            key=lambda category: (
+                int(getattr(category, "sort_order", 0) or 0),
+                str(getattr(category, "name", "") or "").lower(),
+            ),
+        )
+    return list(comun.categories.filter(comun_id=comun.id, is_active=True).order_by("sort_order", "name"))
+
+
+def _comun_categories_count(comun: Comun) -> int:
+    return len(_comun_categories_list(comun))
+
+
 def _recalculate_comun_rating(comun_id: int) -> tuple[int, int, int]:
     counts = ComunVote.objects.filter(comun_id=comun_id).aggregate(
         up=Count("id", filter=Q(value=1)),
@@ -7987,7 +8014,7 @@ def _serialize_comun(
     include_options: bool = False,
     include_activity: bool = False,
 ) -> dict:
-    categories = list(comun.categories.filter(is_active=True).order_by("sort_order", "name"))
+    categories = _comun_categories_list(comun)
     moderators = list(comun.moderators.select_related("site_profile").order_by("username"))
     product_tag = comun.product_tag
     tags = list(comun.tags.filter(is_active=True).order_by("name"))
@@ -8082,7 +8109,7 @@ def _serialize_comun(
         payload["options"] = {
             "categories": [
                 _serialize_comun_category(category)
-                for category in ComunCategory.objects.filter(is_active=True).order_by("sort_order", "name")
+                for category in categories
             ],
             "tags": [
                 {
@@ -8445,7 +8472,9 @@ def comuns_list_create(request: HttpRequest) -> HttpResponse:
     )
     comun.moderators.add(current_user)
     if category_ids:
-        comun.categories.set(ComunCategory.objects.filter(id__in=category_ids, is_active=True))
+        comun.categories.set(
+            ComunCategory.objects.filter(id__in=category_ids, is_active=True, comun=comun)
+        )
     if selected_tag_ids:
         comun.tags.set(Tag.objects.filter(id__in=selected_tag_ids, is_active=True))
     if product_tag_id:
@@ -8608,11 +8637,12 @@ def comun_detail_manage(request: HttpRequest, slug: str) -> HttpResponse:
             for category in ComunCategory.objects.filter(
                 id__in=_parse_int_list(body.get("category_ids")),
                 is_active=True,
+                comun=comun,
             )
         }
         raw_category_names = body.get("category_names") if isinstance(body.get("category_names"), list) else []
         for raw_category_name in raw_category_names:
-            category, _created = _ensure_comun_category_by_name(raw_category_name)
+            category, _created = _ensure_comun_category_by_name(comun, raw_category_name)
             if not category:
                 continue
             selected_categories[category.id] = category
@@ -8769,7 +8799,7 @@ def comun_posts(request: HttpRequest, slug: str) -> HttpResponse:
         )
         category = None
         if category_id:
-            category = comun.categories.filter(id=category_id, is_active=True).first()
+            category = comun.categories.filter(id=category_id, is_active=True, comun=comun).first()
             if not category:
                 return JsonResponse(
                     {"ok": False, "error": "category not found"},
@@ -8906,13 +8936,13 @@ def comun_posts(request: HttpRequest, slug: str) -> HttpResponse:
     selected_category = None
     if selected_category_slug:
         selected_category = (
-            comun.categories.filter(slug=selected_category_slug, is_active=True).first()
+            comun.categories.filter(slug=selected_category_slug, is_active=True, comun=comun).first()
         )
         if not selected_category:
             return JsonResponse({"ok": False, "error": "category not found"}, status=404)
 
     now = timezone.now()
-    visible_categories = list(comun.categories.filter(is_active=True).order_by("sort_order", "name"))
+    visible_categories = _comun_categories_list(comun)
     all_posts_query = _comun_posts_base_queryset(comun, now)
     if not comun.product_tag_id:
         return JsonResponse(
@@ -9049,7 +9079,7 @@ def comun_post_category_update(request: HttpRequest, slug: str, post_id: int) ->
     category_id = _parse_post_reference_to_id(body.get("category_id"))
     category = None
     if category_id:
-        category = comun.categories.filter(id=category_id, is_active=True).first()
+        category = comun.categories.filter(id=category_id, is_active=True, comun=comun).first()
         if not category:
             return JsonResponse({"ok": False, "error": "category not found"}, status=400)
 

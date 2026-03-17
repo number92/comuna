@@ -595,8 +595,16 @@ class StaticPageContent(models.Model):
 
 
 class ComunCategory(models.Model):
-    name = models.CharField(max_length=120, unique=True)
-    slug = models.SlugField(max_length=120, unique=True)
+    comun = models.ForeignKey(
+        "Comun",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="owned_categories",
+        verbose_name="Сообщество",
+    )
+    name = models.CharField(max_length=120)
+    slug = models.SlugField(max_length=120)
     description = models.TextField(blank=True)
     sort_order = models.PositiveIntegerField(default=0)
     is_active = models.BooleanField(default=True)
@@ -605,6 +613,16 @@ class ComunCategory(models.Model):
 
     class Meta:
         ordering = ["sort_order", "name"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["comun", "slug"],
+                name="feeds_unique_comun_category_slug_per_comun",
+            ),
+            models.UniqueConstraint(
+                fields=["comun", "name"],
+                name="feeds_unique_comun_category_name_per_comun",
+            ),
+        ]
         verbose_name = "Категория комуны"
         verbose_name_plural = "Категории коммун"
 

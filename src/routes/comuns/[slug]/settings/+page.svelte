@@ -424,7 +424,7 @@
       settingsDraft = cloneComun(comun)
       settingsCategoryOptions = payload.comun?.options?.categories ?? settingsCategoryOptions
       settingsCategorySearch = ''
-      toast({ content: 'Категория добавлена в сообщество', type: 'success' })
+      toast({ content: 'Категория создана внутри сообщества', type: 'success' })
     } catch (error) {
       settingsError = error instanceof Error ? error.message : 'Не удалось добавить категорию'
     } finally {
@@ -848,7 +848,7 @@
         <div class="flex flex-col gap-2">
           <div class="text-sm text-slate-700 dark:text-zinc-300">Внутренние категории</div>
           <div class="text-xs text-slate-500 dark:text-zinc-400">
-            Можно выбрать существующие категории или создать свою прямо здесь.
+            Эти категории принадлежат только этому сообществу. Можно создать свои прямо здесь.
           </div>
           <div class="flex gap-2">
             <input
@@ -866,7 +866,7 @@
           </div>
           {#if normalizedCategoryCreateValue && !hasExactCategoryMatch}
             <div class="rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900/60 px-3 py-2 text-sm text-slate-700 dark:text-zinc-300">
-              Новой категории пока нет. Нажмите `Добавить`, чтобы создать и сразу подключить ее к сообществу.
+              Новой категории пока нет. Нажмите `Добавить`, чтобы создать ее только для этого сообщества и сразу подключить.
             </div>
           {/if}
           <div class="grid gap-2 sm:grid-cols-2">

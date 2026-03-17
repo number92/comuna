@@ -53,12 +53,14 @@
     return Math.max(explicitRating, ...authorRatings, 0)
   }
 
-  const canCreate = (user = $siteUser) =>
-    Boolean(
-      $siteToken &&
-        (user?.can_create_comun ??
-          currentUserMaxAuthorRating(user) >= Number(user?.create_comun_min_author_rating ?? COMMUNITY_CREATION_MIN_AUTHOR_RATING))
+  const canCreate = (user = $siteUser) => {
+    if (!$siteToken) return false
+    if (user?.is_staff) return true
+    return Boolean(
+      user?.can_create_comun ??
+        currentUserMaxAuthorRating(user) >= Number(user?.create_comun_min_author_rating ?? COMMUNITY_CREATION_MIN_AUTHOR_RATING)
     )
+  }
 
   const resetForm = () => {
     name = ''

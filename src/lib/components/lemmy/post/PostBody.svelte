@@ -112,6 +112,7 @@
   let localPoll: BackendPoll | null = null
   let lastPollRef: BackendPoll | null = null
   let pollVoting = false
+  let pollRenderState = ''
   const maxPreviewLength = 250;
   const hydratedPostLinkSnapshots = new Map<number, PostLinkSnapshot>()
 
@@ -174,6 +175,17 @@
     return nextPoll
   }
 
+  const formatPollVoteLabel = (count: number): string => {
+    const safeCount = Math.max(0, Math.floor(count))
+    const mod10 = safeCount % 10
+    const mod100 = safeCount % 100
+    if (mod10 === 1 && mod100 !== 11) return `${safeCount} голос`
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) {
+      return `${safeCount} голоса`
+    }
+    return `${safeCount} голосов`
+  }
+
   const normalizeTextForCompare = (value: string): string =>
     value
       .replace(/\s+/g, ' ')
@@ -186,6 +198,15 @@
     lastPollRef = poll
     localPoll = clonePoll(poll)
   }
+
+  $: pollRenderState =
+    localPoll
+      ? JSON.stringify({
+          total: localPoll.total_voter_count,
+          selected: localPoll.user_selection ?? [],
+          options: localPoll.options.map((option) => option.voter_count),
+        })
+      : ''
 
   const stripLeadingTitleFromHtml = (html: string): string => {
     const rawTitle = (title || '').trim()
@@ -1028,22 +1049,27 @@
           const count = Math.max(Number(optionPayload?.voter_count || 0), 0)
           const percent = totalVoters > 0 ? Math.round((count / totalVoters) * 100) : 0
           const isSelected = selectedSet.has(index)
-          const label = totalVoters > 0 ? `${count} (${percent}%)` : `${count}`
-          return `<li class="post-poll-option${isSelected ? ' is-selected' : ''}" data-option-index="${index}">
-            ${isSelected ? '✓ ' : ''}${escapeHtml(option)} <b>${label}</b>
-          </li>`
+          return `<div class="post-poll-option post-inline-poll__option${isSelected ? ' is-selected' : ''}" data-option-index="${index}">
+            <div class="post-inline-poll__control" aria-hidden="true">
+              <span class="post-inline-poll__marker"></span>
+            </div>
+            <div class="post-inline-poll__option-main">
+              <div class="post-inline-poll__option-row">
+                <span class="post-inline-poll__option-text">${escapeHtml(option)}</span>
+                <span class="post-inline-poll__option-percent">${percent}%</span>
+              </div>
+              <progress class="post-inline-poll__progress${isSelected ? ' is-selected' : ''}" value="${percent}" max="100"></progress>
+              <div class="post-inline-poll__option-meta">
+                <span>${formatPollVoteLabel(count)}</span>
+                ${isSelected ? '<span class="post-inline-poll__option-badge">Ваш голос</span>' : ''}
+              </div>
+            </div>
+          </div>`
         })
         .join('')
-      const metaParts: string[] = []
-      if (allowsMultipleAnswers) {
-        metaParts.push('Можно выбрать несколько вариантов')
-      }
-      if (activePoll?.is_closed) {
-        metaParts.push('Опрос завершен')
-      } else {
-        metaParts.push('Нажмите вариант, чтобы проголосовать')
-      }
-      metaParts.push(`Голосов: ${totalVoters}`)
+      const statusLabel = activePoll?.is_closed
+        ? 'Опрос завершен'
+        : 'Нажмите на вариант, чтобы проголосовать'
       const pollId = typeof raw?.uid === 'string' && raw.uid.trim() ? raw.uid.trim() : ''
       const attrs = [
         `data-poll-multiple="${allowsMultipleAnswers ? '1' : '0'}"`,
@@ -1054,9 +1080,16 @@
         .join(' ')
 
       return `<div class="post-poll post-inline-poll" ${attrs}>
-        <div class="post-poll-question"><b>${escapeHtml(question)}</b></div>
-        <ul class="post-poll-options">${optionItems}</ul>
-        <div class="post-poll-meta">${metaParts.join(' · ')}</div>
+        <div class="post-inline-poll__head">
+          <div class="post-inline-poll__eyebrow">Опрос</div>
+          <div class="post-inline-poll__question">${escapeHtml(question)}</div>
+          <div class="post-inline-poll__mode">${escapeHtml(modeLabel)}</div>
+        </div>
+        <div class="post-inline-poll__options">${optionItems}</div>
+        <div class="post-inline-poll__footer">
+          <span>${escapeHtml(statusLabel)}</span>
+          <span>${formatPollVoteLabel(totalVoters)}</span>
+        </div>
       </div>`
     }
 
@@ -1915,6 +1948,7 @@
           'img',
           'audio',
           'source',
+          'progress',
           'figure',
           'figcaption',
           'input',
@@ -1934,6 +1968,8 @@
           'alt',
           'width',
           'height',
+          'value',
+          'max',
           'class',
           'title',
           'allow',
@@ -2097,7 +2133,7 @@
     firstImageSrcset = null;
     hasPreview = false;
     processedBody = extractPreviewContent(body);
-    void localPoll
+    void pollRenderState
   }
 
   // Сбрасываем состояние превью только при смене исходного контента/режима отображения
@@ -2475,10 +2511,104 @@
     box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.14);
   }
 
+  :global(.post-content .post-inline-poll__option.is-selected .post-inline-poll__marker) {
+    border-color: rgba(110, 231, 183, 0.92);
+    background:
+      radial-gradient(circle at 50% 50%, rgba(16, 185, 129, 0.95) 0 34%, transparent 35%),
+      rgba(16, 185, 129, 0.18);
+    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.14);
+  }
+
+  :global(.post-content .post-inline-poll__option-main) {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+  }
+
+  :global(.post-content .post-inline-poll__option-row) {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
   :global(.post-content .post-inline-poll__option-text) {
     color: #f8fafc;
     font-size: 0.92rem;
     line-height: 1.45;
+  }
+
+  :global(.post-content .post-inline-poll__option-percent) {
+    flex: 0 0 auto;
+    color: #86efac;
+    font-size: 0.84rem;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  :global(.post-content .post-inline-poll__progress) {
+    width: 100%;
+    height: 0.5rem;
+    appearance: none;
+    border: none;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(148, 163, 184, 0.2);
+  }
+
+  :global(.post-content .post-inline-poll__progress::-webkit-progress-bar) {
+    background: rgba(148, 163, 184, 0.2);
+    border-radius: 999px;
+  }
+
+  :global(.post-content .post-inline-poll__progress::-webkit-progress-value) {
+    border-radius: 999px;
+    background: linear-gradient(90deg, rgba(74, 222, 128, 0.72), rgba(16, 185, 129, 0.98));
+  }
+
+  :global(.post-content .post-inline-poll__progress::-moz-progress-bar) {
+    border-radius: 999px;
+    background: linear-gradient(90deg, rgba(74, 222, 128, 0.72), rgba(16, 185, 129, 0.98));
+  }
+
+  :global(.post-content .post-inline-poll__progress.is-selected::-webkit-progress-value) {
+    background: linear-gradient(90deg, rgba(96, 165, 250, 0.9), rgba(59, 130, 246, 1));
+  }
+
+  :global(.post-content .post-inline-poll__progress.is-selected::-moz-progress-bar) {
+    background: linear-gradient(90deg, rgba(96, 165, 250, 0.9), rgba(59, 130, 246, 1));
+  }
+
+  :global(.post-content .post-inline-poll__option-meta) {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+    color: rgba(226, 232, 240, 0.76);
+    font-size: 0.78rem;
+    line-height: 1.35;
+  }
+
+  :global(.post-content .post-inline-poll__option-badge) {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    border-radius: 999px;
+    padding: 0.16rem 0.48rem;
+    background: rgba(59, 130, 246, 0.18);
+    color: #bfdbfe;
+    font-weight: 600;
+  }
+
+  :global(.post-content .post-inline-poll__footer) {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    color: rgba(226, 232, 240, 0.72);
+    font-size: 0.8rem;
+    line-height: 1.4;
   }
 
   :global(.dark .post-content .post-inline-poll) {

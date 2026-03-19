@@ -221,8 +221,10 @@
   $: comunTopMembers = comun?.activity?.top_members ?? []
   $: comunParticipantsCount = comun?.activity?.participants_count ?? comunTopMembers.length
   $: minimumAuthorRatingToPost = Math.max(Number(comun?.minimum_author_rating_to_post ?? 0) || 0, 0)
+  $: comunCategories = comun?.categories ?? []
+  $: hasComunCategories = comunCategories.length > 0
   $: comunBacklogCategory =
-    (comun?.categories ?? []).find((category) => category.slug === COMUN_BACKLOG_CATEGORY_SLUG) ?? null
+    comunCategories.find((category) => category.slug === COMUN_BACKLOG_CATEGORY_SLUG) ?? null
   $: myFeedComunSlugs = ($userSettings.myFeedComuns ?? []).map((slug) => slug.trim()).filter(Boolean)
   $: currentComunSlug = (comun?.slug ?? '').trim()
   $: isSubscribedToComun = !!currentComunSlug && myFeedComunSlugs.includes(currentComunSlug)
@@ -1357,27 +1359,29 @@
         </div>
       {/if}
 
-      <div class="flex flex-wrap gap-2 pt-1">
-        <button
-          type="button"
-          class="rounded-full px-3 py-1.5 text-sm border transition-colors {selectedCategorySlug ? 'border-slate-200 dark:border-zinc-800 hover:bg-slate-50 dark:hover:bg-zinc-800/60' : 'border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300'}"
-          on:click={() => setCategoryFilter('')}
-          disabled={loadingCategory}
-        >
-          Все
-        </button>
-        {#each comun?.categories ?? [] as category}
+      {#if hasComunCategories}
+        <div class="flex flex-wrap gap-2 pt-1">
           <button
             type="button"
-            class="rounded-full px-3 py-1.5 text-sm border transition-colors {selectedCategorySlug === category.slug ? 'border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300' : 'border-slate-200 dark:border-zinc-800 hover:bg-slate-50 dark:hover:bg-zinc-800/60'}"
-            on:click={() => setCategoryFilter(category.slug)}
+            class="rounded-full px-3 py-1.5 text-sm border transition-colors {selectedCategorySlug ? 'border-slate-200 dark:border-zinc-800 hover:bg-slate-50 dark:hover:bg-zinc-800/60' : 'border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300'}"
+            on:click={() => setCategoryFilter('')}
             disabled={loadingCategory}
-            title={category.description || category.name}
           >
-            {category.name}
+            Все
           </button>
-        {/each}
-      </div>
+          {#each comunCategories as category}
+            <button
+              type="button"
+              class="rounded-full px-3 py-1.5 text-sm border transition-colors {selectedCategorySlug === category.slug ? 'border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300' : 'border-slate-200 dark:border-zinc-800 hover:bg-slate-50 dark:hover:bg-zinc-800/60'}"
+              on:click={() => setCategoryFilter(category.slug)}
+              disabled={loadingCategory}
+              title={category.description || category.name}
+            >
+              {category.name}
+            </button>
+          {/each}
+        </div>
+      {/if}
     </div>
   </section>
 

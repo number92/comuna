@@ -1249,10 +1249,6 @@
               >
                 Тег продукта: <span class="font-medium">#{comun.product_tag.name}</span>
               </div>
-            {:else if comun?.source_rubric}
-              <div class="mt-1 text-sm text-slate-600 dark:text-zinc-400">
-                Основано на рубрике: <span class="font-medium">{comun.source_rubric.name}</span>
-              </div>
             {/if}
             {#if comun?.creator?.username}
               <div class="mt-1 text-xs text-slate-500 dark:text-zinc-400">

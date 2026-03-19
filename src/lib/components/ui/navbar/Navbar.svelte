@@ -72,6 +72,10 @@
   const PUBLIC_PROJECT_RULES = env.PUBLIC_PROJECT_RULES || '/rules';
   const PUBLIC_PROJECT_FAQ = env.PUBLIC_PROJECT_FAQ || '/faq';
   const SHOW_FOLDERS = false;
+  $: currentComunName =
+    (($page.route.id ?? '').startsWith('/comuns/[slug]') ? String(($page.data as any)?.comun?.name ?? '').trim() : '') ||
+    ''
+  $: navbarTitle = currentComunName || 'Comuna'
   
   // Переменная для случайного слогана
   let randomTagline = '';
@@ -203,7 +207,7 @@
           on:keydown={(e) => (e.key === 'Enter' || e.key === ' ') && goToHome()}
         >
           <span class="text-xl font-medium tracking-tight font-roboto text-slate-900 dark:text-white">
-            Comuna
+            {navbarTitle}
           </span>
         </div>
       </div>

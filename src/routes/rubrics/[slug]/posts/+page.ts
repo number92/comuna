@@ -1,10 +1,23 @@
-import { buildRubricPostsUrl } from '$lib/api/backend'
-import { error } from '@sveltejs/kit'
+import { buildComunsUrl, buildRubricPostsUrl, type BackendComun } from '$lib/api/backend'
+import { error, redirect } from '@sveltejs/kit'
 
 const PAGE_SIZE = 10
 
 export const load = async ({ params, fetch, url }) => {
   const slug = params.slug
+  const comunsResponse = await fetch(new URL(buildComunsUrl(), url.origin).toString())
+
+  if (comunsResponse.ok) {
+    const comunsPayload = await comunsResponse.json().catch(() => ({}))
+    const matchingComun = (Array.isArray(comunsPayload?.comuns) ? comunsPayload.comuns : []).find(
+      (comun: BackendComun) => comun?.source_rubric?.slug === slug
+    )
+
+    if (matchingComun?.slug) {
+      throw redirect(308, `/comuns/${matchingComun.slug}`)
+    }
+  }
+
   const requestUrl = new URL(buildRubricPostsUrl(slug), url.origin)
   requestUrl.searchParams.set('limit', String(PAGE_SIZE))
 

@@ -28,7 +28,7 @@
   import LoginModal from '$lib/components/auth/LoginModal.svelte'
   import { env } from '$env/dynamic/public'
   import { HAS_LEMMY_INSTANCE } from '$lib/instance'
-  import { buildRubricsUrl, buildThematicFeedsListUrl } from '$lib/api/backend'
+  import { buildComunsUrl, type BackendComun, buildThematicFeedsListUrl } from '$lib/api/backend'
   import { userSettings } from '$lib/settings'
   import { siteUser } from '$lib/siteAuth'
 
@@ -66,7 +66,7 @@
   let showFederated = false; // Флаг показа федерациях сообществ
 
   let loginModalOpen = false;
-  let rubrics: Array<{ name: string; slug: string; icon_url?: string | null; icon_thumb_url?: string | null }> = [];
+  let comuns: BackendComun[] = [];
   let thematicFeeds: Array<{
     name: string
     slug: string
@@ -129,14 +129,14 @@
     console.log('Показаны все локальные + первые федерация. Всего:', topCommunities.length, 'Есть еще:', hasMoreCommunities);
   }
 
-  async function loadRubrics() {
+  async function loadComuns() {
     try {
-      const response = await fetch(buildRubricsUrl());
+      const response = await fetch(buildComunsUrl());
       if (!response.ok) return;
       const data = await response.json();
-      rubrics = data.rubrics ?? [];
+      comuns = data.comuns ?? [];
     } catch (e) {
-      rubrics = [];
+      comuns = [];
     }
   }
 
@@ -183,7 +183,7 @@
       console.log('Отображается сообществ:', topCommunities.length, 'Есть еще:', hasMoreCommunities);
       console.log('hasMoreCommunities =', hasMoreCommunities);
     }
-    loadRubrics();
+    loadComuns();
     loadThematicFeeds();
   });
 
@@ -327,16 +327,16 @@
       <SidebarButton href="/comuns?create=1" icon={Plus}>
         <span slot="label">Создать сообщество</span>
       </SidebarButton>
-      {#each rubrics as rubric}
-        <SidebarButton href={`/rubrics/${rubric.slug}/posts`}>
+      {#each comuns as comun}
+        <SidebarButton href={`/comuns/${comun.slug}`}>
           <div slot="icon" class="w-7 h-7 rounded-full overflow-hidden bg-slate-100 dark:bg-zinc-800 flex items-center justify-center">
-            {#if rubric.icon_thumb_url || rubric.icon_url}
-              <img src={rubric.icon_thumb_url ?? rubric.icon_url} alt={rubric.name} class="w-full h-full object-cover" />
+            {#if comun.logo_url}
+              <img src={comun.logo_url} alt={comun.name} class="w-full h-full object-cover" />
             {:else}
               <Icon src={DocumentText} size="20" />
             {/if}
           </div>
-          <span slot="label">{rubric.name}</span>
+          <span slot="label">{comun.name}</span>
         </SidebarButton>
       {/each}
   </div>

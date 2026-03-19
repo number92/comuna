@@ -5,7 +5,6 @@
   import { onDestroy, onMount } from 'svelte'
   import { Button, Modal, toast } from 'mono-svelte'
   import Portal from '$lib/mono/popover/Portal.svelte'
-  import Header from '$lib/components/ui/layout/pages/Header.svelte'
   import Post from '$lib/components/lemmy/post/Post.svelte'
   import { feedKeyboardShortcuts } from '$lib/actions/feedKeyboardShortcuts'
   import {
@@ -1246,7 +1245,9 @@
             {/if}
           </div>
           <div class="min-w-0">
-            <Header noMargin>{comun?.name ?? 'Сообщество'}</Header>
+            <h1 class="text-2xl font-semibold tracking-tight text-slate-900 dark:text-zinc-100">
+              {comun?.name ?? 'Сообщество'}
+            </h1>
             {#if comun?.product_tag}
               <div
                 class="mt-1 text-sm text-slate-600 dark:text-zinc-400"

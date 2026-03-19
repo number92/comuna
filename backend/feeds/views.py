@@ -8606,7 +8606,9 @@ def comun_detail_manage(request: HttpRequest, slug: str) -> HttpResponse:
     except json.JSONDecodeError:
         return JsonResponse({"ok": False, "error": "invalid json"}, status=400)
 
-    if "name" in body and (current_user and current_user.is_staff):
+    if "name" in body:
+        if not _comun_can_manage_moderators(current_user, comun):
+            return JsonResponse({"ok": False, "error": "forbidden"}, status=403)
         name = str(body.get("name") or "").strip()
         if not name:
             return JsonResponse({"ok": False, "error": "name required"}, status=400)

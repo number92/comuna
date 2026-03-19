@@ -110,6 +110,7 @@
 
   const settingsComparable = (value: BackendComun | null) =>
     JSON.stringify({
+      name: (value?.name ?? '').trim(),
       website_url: (value?.website_url ?? '').trim(),
       logo_url: (value?.logo_url ?? '').trim(),
       product_description: (value?.product_description ?? '').trim(),
@@ -456,6 +457,7 @@
         method: 'PATCH',
         headers: authHeaders(),
         body: JSON.stringify({
+          name: canManageComunModerators() ? settingsDraft.name ?? '' : undefined,
           website_url: settingsDraft.website_url ?? '',
           logo_url: settingsDraft.logo_url ?? '',
           product_description: settingsDraft.product_description ?? '',
@@ -632,6 +634,16 @@
   {:else if settingsDraft}
     <section class="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white/95 dark:bg-zinc-900/85 p-5 sm:p-6">
       <div class="grid gap-4">
+        <label class="flex flex-col gap-1">
+          <span class="text-sm text-slate-700 dark:text-zinc-300">Название сообщества</span>
+          <input
+            bind:value={settingsDraft.name}
+            type="text"
+            class="rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"
+            disabled={!canManageComunModerators()}
+          />
+        </label>
+
         <label class="flex flex-col gap-1">
           <span class="text-sm text-slate-700 dark:text-zinc-300">Веб-сайт</span>
           <input

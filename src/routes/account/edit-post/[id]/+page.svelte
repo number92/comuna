@@ -7,7 +7,7 @@
   import TipTapEditor from '$lib/components/editor/TipTapEditor.svelte'
   import EditorJS from '$lib/components/editor/EditorJS.svelte'
   import PostTemplateFields from '$lib/components/site/post-templates/PostTemplateFields.svelte'
-  import { buildBackendPostPath, buildRubricsUrl } from '$lib/api/backend'
+  import { buildBackendPostPath, buildComunsUrl, type BackendComun } from '$lib/api/backend'
   import {
     fetchUserPost,
     refreshSiteUser,
@@ -42,14 +42,6 @@
 
   export let data: { postId: number }
 
-  type RubricOption = {
-    name: string
-    slug: string
-    icon_url?: string | null
-    icon_thumb_url?: string | null
-    allowed_template_types?: string[]
-  }
-
   type PublishIdentityOption = {
     value: string
     label: string
@@ -68,17 +60,17 @@
   let loading = true
   let loadError = ''
   let post: SiteUserPost | null = null
-  let rubricsLoading = false
-  let rubrics: RubricOption[] = []
+  let comunsLoading = false
+  let comuns: BackendComun[] = []
   let rubricMenuOpen = false
   let rubricSearchQuery = ''
   let rubricMenuRef: HTMLDivElement | null = null
-  let filteredRubrics: RubricOption[] = []
+  let filteredComuns: BackendComun[] = []
   let identityMenuOpen = false
   let identityMenuRef: HTMLDivElement | null = null
   let templateMenuOpen = false
   let templateMenuRef: HTMLDivElement | null = null
-  let selectedRubric: RubricOption | undefined
+  let selectedComun: BackendComun | undefined
   let publishIdentityOptions: PublishIdentityOption[] = []
   let selectedIdentity: PublishIdentityOption | undefined
   let selectedChannelIdentity: PublishIdentityOption | undefined
@@ -91,7 +83,7 @@
   let editContent = ''
   let editTags = ''
   let editAuthor = ''
-  let editRubric = ''
+  let editComunSlug = ''
   let isJsonContent = true
   let editTemplateType: '' | PostTemplateType = ''
   let editMovieReviewData: MovieReviewTemplateData = createEmptyMovieReviewTemplateData()
@@ -114,14 +106,15 @@
   let firstDraftChangeAt: number | null = null
   let firstDraftAutosaveCompleted = false
 
-  $: selectedRubric = rubrics.find((rubric) => rubric.slug === editRubric)
-  $: filteredRubrics = (() => {
+  $: selectedComun = comuns.find((comun) => comun.slug === editComunSlug)
+  $: filteredComuns = (() => {
     const query = rubricSearchQuery.trim().toLowerCase()
-    if (!query) return rubrics
-    return rubrics.filter((rubric) => {
-      const name = (rubric.name || '').toLowerCase()
-      const slug = (rubric.slug || '').toLowerCase()
-      return name.includes(query) || slug.includes(query)
+    if (!query) return comuns
+    return comuns.filter((comun) => {
+      const name = (comun.name || '').toLowerCase()
+      const slug = (comun.slug || '').toLowerCase()
+      const description = (comun.product_description || '').toLowerCase()
+      return name.includes(query) || slug.includes(query) || description.includes(query)
     })
   })()
   $: publishIdentityOptions = (() => {
@@ -160,7 +153,9 @@
   $: editorTemplateBlocksKey = `${editTemplateType || 'basic'}:${editorEnabledTemplateBlockTypes.join(',')}`
   $: allowedTemplateTypes = (() => {
     const values = new Set<string>(['basic'])
-    for (const item of normalizeAllowedPostTemplateTypes(selectedRubric?.allowed_template_types)) {
+    for (const item of normalizeAllowedPostTemplateTypes(
+      selectedComun?.allowed_template_types ?? selectedComun?.allowed_post_templates
+    )) {
       values.add(item)
     }
     if (editTemplateType) values.add(editTemplateType)
@@ -243,7 +238,7 @@
         editAuthor && editAuthor !== SITE_AUTHOR_CHOICE
           ? editAuthor.replace(/^channel:/, '')
           : undefined,
-      rubric_slug: editRubric || undefined,
+      rubric_slug: selectedComun?.source_rubric?.slug || undefined,
       tags,
       template: editTemplateType ? template : null,
     }
@@ -336,7 +331,8 @@
   const fillForm = (currentPost: SiteUserPost) => {
     editTitle = currentPost.title || ''
     editContent = currentPost.content || ''
-    editRubric = currentPost.rubric_slug || ''
+    editComunSlug =
+      comuns.find((comun) => comun.source_rubric?.slug === currentPost.rubric_slug)?.slug || ''
     editAuthor = resolveAuthorValue(currentPost)
     editMovieReviewData = createEmptyMovieReviewTemplateData()
     editPostVotePollData = createEmptyPostVotePollTemplateData()
@@ -376,24 +372,24 @@
     }
   }
 
-  const loadRubrics = async () => {
-    if (rubricsLoading) return
-    rubricsLoading = true
+  const loadComuns = async () => {
+    if (comunsLoading) return
+    comunsLoading = true
     const headers: Record<string, string> = {}
     if ($siteToken) {
       headers.Authorization = `Bearer ${$siteToken}`
     }
     try {
-      const response = await fetch(buildRubricsUrl({ includeHidden: true }), {
+      const response = await fetch(buildComunsUrl(), {
         headers,
         cache: 'no-store',
       })
-      const data = await response.json()
-      rubrics = Array.isArray(data?.rubrics)
-        ? data.rubrics.map((rubric: any) => ({
-            ...rubric,
+      const data = await response.json().catch(() => ({}))
+      comuns = Array.isArray(data?.comuns)
+        ? data.comuns.map((comun: BackendComun) => ({
+            ...comun,
             allowed_template_types: normalizeAllowedPostTemplateTypes(
-              rubric?.allowed_template_types ?? rubric?.allowed_post_templates
+              comun?.allowed_template_types ?? comun?.allowed_post_templates
             ),
           }))
         : []
@@ -401,9 +397,9 @@
         data?.template_editor_blocks_by_template
       )
     } catch {
-      rubrics = []
+      comuns = []
     } finally {
-      rubricsLoading = false
+      comunsLoading = false
     }
   }
 
@@ -416,7 +412,7 @@
         await goto('/settings')
         return
       }
-      await loadRubrics()
+      await loadComuns()
       const loadedPost = await fetchUserPost(data.postId)
       post = loadedPost
       fillForm(loadedPost)
@@ -500,7 +496,7 @@
       saveError = 'Текст поста не может быть пустым'
       return false
     }
-    if (!editRubric) {
+    if (!editComunSlug) {
       saveError = 'Выберите сообщество'
       return false
     }
@@ -567,8 +563,8 @@
     await goto(`/account/edit-post/${post.id}/preview`)
   }
 
-  const selectRubric = (slug: string) => {
-    editRubric = slug
+  const selectComun = (slug: string) => {
+    editComunSlug = slug
     rubricMenuOpen = false
     rubricSearchQuery = ''
   }
@@ -625,9 +621,10 @@
     clearDraftSavedNoticeHideTimer()
   })
 
-  $: if (post?.is_draft && !editRubric && selectedChannelIdentity?.rubric_slug) {
+  $: if (post?.is_draft && !editComunSlug && selectedChannelIdentity?.rubric_slug) {
     const authorRubric = selectedChannelIdentity.rubric_slug || ''
-    if (authorRubric) editRubric = authorRubric
+    const authorComun = comuns.find((comun) => comun.source_rubric?.slug === authorRubric)
+    if (authorComun?.slug) editComunSlug = authorComun.slug
   }
 
   $: currentEditSnapshot = JSON.stringify(buildEditPayload())
@@ -743,10 +740,10 @@
                 {/if}
               </div>
 
-              {#if rubricsLoading}
+              {#if comunsLoading}
                 <div class="mt-3 flex min-h-[32px] items-center gap-2 text-sm text-slate-500 dark:text-zinc-400">
                   <Spinner size="sm" />
-                  Загрузка тем...
+                  Загрузка сообществ...
                 </div>
               {:else}
                 <div class="relative mt-3" bind:this={rubricMenuRef}>
@@ -761,7 +758,7 @@
                       if (!nextState) rubricSearchQuery = ''
                     }}
                   >
-                    <span class="truncate">{selectedRubric?.name || 'Без темы'}</span>
+                    <span class="truncate">{selectedComun?.name || 'Выберите сообщество'}</span>
                     <svg
                       class="h-5 w-5 shrink-0 text-slate-700 dark:text-zinc-300"
                       viewBox="0 0 20 20"
@@ -789,32 +786,37 @@
                           class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-500"
                         />
                       </div>
-                      {#if filteredRubrics.length}
-                        {#each filteredRubrics as rubric}
+                      {#if filteredComuns.length}
+                        {#each filteredComuns as comun}
                           <button
                             type="button"
                             class={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left hover:bg-slate-50 dark:hover:bg-zinc-800 ${
-                              editRubric === rubric.slug ? 'bg-slate-100 dark:bg-zinc-800' : ''
+                              editComunSlug === comun.slug ? 'bg-slate-100 dark:bg-zinc-800' : ''
                             }`}
-                            on:click={() => selectRubric(rubric.slug)}
+                            on:click={() => selectComun(comun.slug)}
                           >
                             <div class="h-10 w-10 shrink-0 overflow-hidden rounded-full border border-slate-200 bg-slate-100 text-sm font-semibold text-slate-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-                              {#if rubric.icon_thumb_url || rubric.icon_url}
+                              {#if comun.logo_url}
                                 <img
-                                  src={rubric.icon_thumb_url ?? rubric.icon_url}
-                                  alt={rubric.name}
+                                  src={comun.logo_url}
+                                  alt={comun.name}
                                   class="h-full w-full object-cover"
                                 />
                               {:else}
                                 <div class="flex h-full w-full items-center justify-center">
-                                  {rubric.name?.[0] ?? 'R'}
+                                  {comun.name?.[0] ?? 'C'}
                                 </div>
                               {/if}
                             </div>
                             <div class="min-w-0 flex-1">
                               <div class="whitespace-normal text-sm font-medium text-slate-900 dark:text-zinc-100">
-                                {rubric.name}
+                                {comun.name}
                               </div>
+                              {#if comun.product_description}
+                                <div class="mt-1 line-clamp-2 text-xs text-slate-500 dark:text-zinc-400">
+                                  {comun.product_description}
+                                </div>
+                              {/if}
                             </div>
                           </button>
                         {/each}

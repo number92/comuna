@@ -16,9 +16,7 @@
     updateUserPost,
   } from '$lib/siteAuth'
   import {
-    buildBackendPostPath,
     buildComunsUrl,
-    buildRubricsUrl,
     type BackendComun,
   } from '$lib/api/backend'
   import { userSettings } from '$lib/settings'
@@ -44,7 +42,6 @@
   let createContent = ''
   let createTags = ''
   let createAuthor = ''
-  let createRubric = ''
   let createComunSlug = ''
   let createComunCategoryId = ''
   let creating = false
@@ -53,7 +50,6 @@
   let draftCreating = false
   let draftId: number | null = null
   let draftShareToken = ''
-  let rubricsLoading = false
   let comunsLoading = false
   let autosavePrimed = false
   let initialFormSnapshot = ''
@@ -61,18 +57,9 @@
   let lastObservedFormSnapshot = ''
   let currentFormSnapshot = ''
   let autosaveTimeout: ReturnType<typeof setTimeout> | null = null
-  type RubricOption = {
-    name: string
-    slug: string
-    icon_url?: string | null
-    icon_thumb_url?: string | null
-    allowed_template_types?: string[]
-  }
-  let rubrics: RubricOption[] = []
   let rubricMenuOpen = false
   let rubricSearchQuery = ''
   let rubricMenuRef: HTMLDivElement | null = null
-  let filteredRubrics: RubricOption[] = []
   let filteredComuns: BackendComun[] = []
   let identityMenuOpen = false
   let identityMenuRef: HTMLDivElement | null = null
@@ -82,7 +69,6 @@
   let allowedTemplateTypeSet = new Set<string>()
   let availableTemplateTypeOptions = POST_TEMPLATE_TYPE_OPTIONS
   let selectedTemplateOption = POST_TEMPLATE_TYPE_OPTIONS[0]
-  let selectedRubric: RubricOption | undefined
   let publishIdentityOptions: PublishIdentityOption[] = []
   let selectedIdentity: PublishIdentityOption | undefined
   let selectedChannelIdentity: PublishIdentityOption | undefined
@@ -114,7 +100,6 @@
     rubric_slug?: string | null
   }
 
-  $: selectedRubric = rubrics.find((rubric) => rubric.slug === createRubric)
   $: normalizedMyFeedComunSlugs = ($userSettings.myFeedComuns ?? [])
     .map((slug) => String(slug || '').trim())
     .filter(Boolean)
@@ -123,22 +108,11 @@
   )
   $: selectedComun = availableComuns.find((comun) => comun.slug === createComunSlug)
   $: selectedComunCategories = selectedComun?.categories ?? []
-  $: selectedTargetKind = selectedComun ? 'comun' : 'rubric'
-  $: selectedTargetLabel = selectedComun?.name || selectedRubric?.name || 'Без темы'
+  $: selectedTargetLabel = selectedComun?.name || 'Выберите сообщество'
   $: selectedAllowedTemplateTypes = normalizeAllowedPostTemplateTypes(
     selectedComun?.allowed_template_types ??
-      selectedComun?.allowed_post_templates ??
-      selectedRubric?.allowed_template_types
+      selectedComun?.allowed_post_templates
   )
-  $: filteredRubrics = (() => {
-    const query = rubricSearchQuery.trim().toLowerCase()
-    if (!query) return rubrics
-    return rubrics.filter((rubric) => {
-      const name = (rubric.name || '').toLowerCase()
-      const slug = (rubric.slug || '').toLowerCase()
-      return name.includes(query) || slug.includes(query)
-    })
-  })()
   $: filteredComuns = (() => {
     const query = rubricSearchQuery.trim().toLowerCase()
     if (!query) return availableComuns
@@ -235,7 +209,6 @@
         createAuthor && createAuthor !== SITE_AUTHOR_CHOICE
           ? createAuthor.replace(/^channel:/, '')
           : undefined,
-      rubric_slug: createRubric || undefined,
       tags: tags.length ? tags : undefined,
       template: template ?? undefined,
     }
@@ -246,7 +219,6 @@
     content: createContent,
     tags: createTags,
     author: createAuthor,
-    rubric: createRubric,
     comunSlug: createComunSlug,
     comunCategoryId: createComunCategoryId,
     templateType: createTemplateType,
@@ -289,7 +261,6 @@
     try {
       const parsed = JSON.parse(raw)
       const nextAuthor = String(parsed?.author || '')
-      const nextRubric = String(parsed?.rubric || '')
       const nextComunSlug = String(parsed?.comunSlug || '')
       const nextComunCategoryId = String(parsed?.comunCategoryId || '')
       const nextTemplateType = String(parsed?.templateType || '') as '' | PostTemplateType
@@ -297,13 +268,11 @@
       const nextFirstChangeAt = Number(parsed?.first_change_at ?? 0)
       const authorExists =
         !nextAuthor || publishIdentityOptions.some((item) => item.value === nextAuthor)
-      const rubricExists = !nextRubric || rubrics.some((item) => item.slug === nextRubric)
       const comunExists = !nextComunSlug || availableComuns.some((item) => item.slug === nextComunSlug)
       createTitle = String(parsed?.title || '')
       createContent = String(parsed?.content || '')
       createTags = String(parsed?.tags || '')
       createAuthor = authorExists ? nextAuthor : createAuthor
-      createRubric = rubricExists ? nextRubric : createRubric
       createComunSlug = comunExists ? nextComunSlug : ''
       createComunCategoryId = comunExists ? nextComunCategoryId : ''
       createTemplateType =
@@ -386,25 +355,6 @@
     }
   }
 
-  const publishDraftOrCreatePost = async () => {
-    if (!draftId) {
-      return await createUserPost(buildDraftPayload())
-    }
-
-    try {
-      return await updateUserPost(draftId, {
-        ...buildDraftPayload(),
-        is_draft: false,
-      })
-    } catch (error) {
-      if (!isMissingDraftError(error)) throw error
-      draftId = null
-      draftShareToken = ''
-      persistLocalDraftBuffer()
-      return await createUserPost(buildDraftPayload())
-    }
-  }
-
   const validateRestoredDraftId = async () => {
     if (!draftId) return
     try {
@@ -421,7 +371,6 @@
 
   const flushDraftSave = async (options?: { keepalive?: boolean; allowWhileCreating?: boolean }) => {
     if (!autosavePrimed || !$siteUser || creating) return
-    if (selectedTargetKind === 'comun') return
     const targetSnapshot = JSON.stringify(buildLocalDraftState())
     if (targetSnapshot === lastSavedFormSnapshot) return
     if (draftCreating && !draftId && !options?.allowWhileCreating) return
@@ -465,40 +414,6 @@
     return source.charAt(0).toUpperCase()
   }
 
-  const loadRubrics = async () => {
-    if (rubricsLoading) return
-    rubricsLoading = true
-    const headers: Record<string, string> = {}
-    if ($siteToken) {
-      headers.Authorization = `Bearer ${$siteToken}`
-    }
-    try {
-      const response = await fetch(buildRubricsUrl({ includeHidden: true }), {
-        headers,
-        cache: 'no-store',
-      })
-      const data = await response.json()
-      rubrics = Array.isArray(data?.rubrics)
-        ? data.rubrics.map((rubric: any) => ({
-            ...rubric,
-            allowed_template_types: normalizeAllowedPostTemplateTypes(
-              rubric?.allowed_template_types ?? rubric?.allowed_post_templates
-            ),
-          }))
-        : []
-      templateEditorBlockSettings = normalizeTemplateEditorBlockSettings(
-        data?.template_editor_blocks_by_template
-      )
-      if (!createRubric && rubrics.length === 1) {
-        createRubric = rubrics[0].slug
-      }
-    } catch {
-      rubrics = []
-    } finally {
-      rubricsLoading = false
-    }
-  }
-
   const loadComuns = async () => {
     if (comunsLoading) return
     comunsLoading = true
@@ -520,6 +435,9 @@
             ),
           }))
         : []
+      templateEditorBlockSettings = normalizeTemplateEditorBlockSettings(
+        data?.template_editor_blocks_by_template
+      )
     } catch {
       comuns = []
     } finally {
@@ -529,7 +447,6 @@
 
   const queueDraftSave = () => {
     if (!autosavePrimed || !$siteUser || creating || draftCreating) return
-    if (selectedTargetKind === 'comun') return
     if (currentFormSnapshot === lastSavedFormSnapshot) return
     clearAutosaveTimeout()
     draftError = ''
@@ -580,7 +497,6 @@
       try {
         await refreshSiteUser()
         if ($siteUser) {
-          await loadRubrics()
           await loadComuns()
           await tick()
           initialFormSnapshot = JSON.stringify(buildLocalDraftState())
@@ -645,13 +561,6 @@
       ? `channel:${$siteUser.authors[0]?.username || ''}`
       : SITE_AUTHOR_CHOICE
   }
-  $: if (!createRubric && selectedChannelIdentity?.rubric_slug) {
-    const authorRubric = selectedChannelIdentity.rubric_slug || ''
-    if (authorRubric && !createComunSlug) createRubric = authorRubric
-  }
-  $: if (createComunSlug && createRubric) {
-    createRubric = ''
-  }
   $: if (
     createComunSlug &&
     createComunCategoryId &&
@@ -698,47 +607,33 @@
       createError = 'Выберите автора публикации.'
       return
     }
-    if (!createRubric && !createComunSlug) {
+    if (!createComunSlug) {
       createError = 'Выберите сообщество для публикации.'
       return
     }
     creating = true
     try {
-      if (createComunSlug) {
-        await createComunPost(createComunSlug, {
-          title: createTitle.trim(),
-          content: createContent.trim(),
-          author_source: createAuthor === SITE_AUTHOR_CHOICE ? ('site' as const) : undefined,
-          author_username:
-            createAuthor && createAuthor !== SITE_AUTHOR_CHOICE
-              ? createAuthor.replace(/^channel:/, '')
-              : undefined,
-          comun_category_id: createComunCategoryId ? Number(createComunCategoryId) : null,
-          template: buildTemplate() ?? undefined,
-        })
-        clearLocalDraftBuffer()
-        draftId = null
-        draftShareToken = ''
-        resetForm()
-        toast({
-          content:
-            'Ваш пост опубликован! Не забудьте поделиться ссылкой на него в социальных сетях',
-          type: 'success',
-        })
-        await goto(`/comuns/${encodeURIComponent(createComunSlug)}`)
-      } else {
-        const createdPost = await publishDraftOrCreatePost()
-        clearLocalDraftBuffer()
-        draftId = null
-        draftShareToken = ''
-        resetForm()
-        toast({
-          content:
-            'Ваш пост опубликован! Не забудьте поделиться ссылкой на него в социальных сетях',
-          type: 'success',
-        })
-        await goto(buildBackendPostPath({ id: createdPost.id, title: createdPost.title }))
-      }
+      await createComunPost(createComunSlug, {
+        title: createTitle.trim(),
+        content: createContent.trim(),
+        author_source: createAuthor === SITE_AUTHOR_CHOICE ? ('site' as const) : undefined,
+        author_username:
+          createAuthor && createAuthor !== SITE_AUTHOR_CHOICE
+            ? createAuthor.replace(/^channel:/, '')
+            : undefined,
+        comun_category_id: createComunCategoryId ? Number(createComunCategoryId) : null,
+        template: buildTemplate() ?? undefined,
+      })
+      clearLocalDraftBuffer()
+      draftId = null
+      draftShareToken = ''
+      resetForm()
+      toast({
+        content:
+          'Ваш пост опубликован! Не забудьте поделиться ссылкой на него в социальных сетях',
+        type: 'success',
+      })
+      await goto(`/comuns/${encodeURIComponent(createComunSlug)}`)
     } catch (err) {
       createError = (err as Error)?.message ?? 'Не удалось создать пост'
     } finally {
@@ -746,17 +641,8 @@
     }
   }
 
-  const selectRubric = (slug: string) => {
-    createRubric = slug
-    createComunSlug = ''
-    createComunCategoryId = ''
-    rubricMenuOpen = false
-    rubricSearchQuery = ''
-  }
-
   const selectComun = (slug: string) => {
     createComunSlug = slug
-    createRubric = ''
     createComunCategoryId = ''
     rubricMenuOpen = false
     rubricSearchQuery = ''
@@ -894,10 +780,10 @@
                 {/if}
               </div>
 
-              {#if rubricsLoading}
+              {#if comunsLoading}
                 <div class="mt-3 flex min-h-[32px] items-center gap-2 text-sm text-slate-500 dark:text-zinc-400">
                   <Spinner size="sm" />
-                  Загрузка тем...
+                  Загрузка сообществ...
                 </div>
               {:else}
                 <div class="relative mt-3" bind:this={rubricMenuRef}>
@@ -936,7 +822,7 @@
                         <input
                           type="text"
                           bind:value={rubricSearchQuery}
-                          placeholder="Поиск рубрики или комуны"
+                          placeholder="Поиск сообщества"
                           class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-500"
                         />
                       </div>
@@ -978,43 +864,7 @@
                           </button>
                         {/each}
                       {/if}
-                      {#if filteredComuns.length && filteredRubrics.length}
-                        <div class="mx-3 my-1 border-t border-slate-200 dark:border-zinc-800"></div>
-                      {/if}
-                      {#if filteredRubrics.length}
-                        <div class="px-3 pb-1 pt-3 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500 dark:text-zinc-500">
-                          Рубрики сайта
-                        </div>
-                        {#each filteredRubrics as rubric}
-                          <button
-                            type="button"
-                            class={`flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left hover:bg-slate-50 dark:hover:bg-zinc-800 ${
-                              createRubric === rubric.slug ? 'bg-slate-100 dark:bg-zinc-800' : ''
-                            }`}
-                            on:click={() => selectRubric(rubric.slug)}
-                          >
-                            <div class="h-10 w-10 shrink-0 overflow-hidden rounded-full border border-slate-200 bg-slate-100 text-sm font-semibold text-slate-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
-                              {#if rubric.icon_thumb_url || rubric.icon_url}
-                                <img
-                                  src={rubric.icon_thumb_url ?? rubric.icon_url}
-                                  alt={rubric.name}
-                                  class="h-full w-full object-cover"
-                                />
-                              {:else}
-                                <div class="flex h-full w-full items-center justify-center">
-                                  {rubric.name?.[0] ?? 'R'}
-                                </div>
-                              {/if}
-                            </div>
-                            <div class="min-w-0 flex-1">
-                              <div class="whitespace-normal text-sm font-medium text-slate-900 dark:text-zinc-100">
-                                {rubric.name}
-                              </div>
-                            </div>
-                          </button>
-                        {/each}
-                      {/if}
-                      {#if !filteredComuns.length && !filteredRubrics.length}
+                      {#if !filteredComuns.length}
                         <div class="px-3 py-3 text-sm text-slate-500 dark:text-zinc-400">
                           Ничего не найдено
                         </div>

@@ -1245,6 +1245,10 @@
               >
                 Тег продукта: <span class="font-medium">#{comun.product_tag.name}</span>
               </div>
+            {:else if comun?.source_rubric}
+              <div class="mt-1 text-sm text-slate-600 dark:text-zinc-400">
+                Основано на рубрике: <span class="font-medium">{comun.source_rubric.name}</span>
+              </div>
             {/if}
             {#if comun?.creator?.username}
               <div class="mt-1 text-xs text-slate-500 dark:text-zinc-400">
@@ -1514,7 +1518,7 @@
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div class="text-sm text-slate-600 dark:text-zinc-400">
           {#if canPostInComun()}
-            Опубликуйте запись прямо в сообщество. Тег продукта будет подставлен автоматически.
+            Опубликуйте запись прямо в сообщество. Оно будет привязано автоматически.
           {:else if minimumAuthorRatingToPost > 0}
             Публикация открыта для авторов с рейтингом от {formatRatingValue(minimumAuthorRatingToPost)}.
           {:else}
@@ -1622,8 +1626,10 @@
     <div class="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white/95 dark:bg-zinc-900/85 p-6 text-slate-600 dark:text-zinc-400">
       {#if comun?.product_tag}
         В этом сообществе пока нет публикаций по тегу #{comun.product_tag.name}.
+      {:else if comun?.source_rubric}
+        В этом сообществе пока нет публикаций из рубрики {comun.source_rubric.name}.
       {:else}
-        Модератору нужно выбрать тег продукта в настройках сообщества, чтобы сюда начали попадать посты.
+        У сообщества пока не настроен источник публикаций.
       {/if}
     </div>
   {/if}

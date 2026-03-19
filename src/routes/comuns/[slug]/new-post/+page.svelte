@@ -39,7 +39,6 @@
   let createError = ''
   let comunCategories: NonNullable<BackendComun['categories']> = []
   let canCreateInComun = false
-  let productTagName = ''
   let createCategoryAutofilledFromQuery = false
   const SITE_AUTHOR_CHOICE = '__site__'
 
@@ -139,7 +138,6 @@
   $: minimumAuthorRatingToPost = Math.max(Number(comun?.minimum_author_rating_to_post ?? 0) || 0, 0)
   $: onlyModeratorsCanPost = Boolean(comun?.only_moderators_can_post)
   $: canCreateInComun = Boolean($siteToken && comun?.can_post)
-  $: productTagName = comun?.product_tag?.name?.trim() ?? ''
   $: comunAllowedTemplateTypes = normalizeAllowedPostTemplateTypes(
     comun?.allowed_template_types ?? comun?.allowed_post_templates
   )
@@ -207,10 +205,6 @@
           : minimumAuthorRatingToPost > 0
           ? `Публикация в этом сообществе доступна авторам с рейтингом от ${formatRatingValue(minimumAuthorRatingToPost)}.`
           : 'Сейчас вы не можете публиковать записи в это сообщество.'
-      return
-    }
-    if (!productTagName) {
-      createError = 'Сначала выберите тег продукта в настройках сообщества.'
       return
     }
     if (!createTitle.trim()) {
@@ -315,10 +309,12 @@
         {/if}
 
         <div class="rounded-lg border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-800/40 px-3 py-2 text-sm text-slate-700 dark:text-zinc-300">
-          {#if productTagName}
-            Тег продукта <span class="font-semibold">#{productTagName}</span> будет добавлен автоматически.
+          {#if comun?.source_rubric}
+            Пост будет опубликован в рубрике <span class="font-semibold">{comun.source_rubric.name}</span>.
+          {:else if comun?.product_tag?.name}
+            Тег продукта <span class="font-semibold">#{comun.product_tag.name}</span> будет добавлен автоматически.
           {:else}
-            У этого сообщества пока не выбран тег продукта. Укажите его в настройках сообщества перед публикацией.
+            Запись будет автоматически привязана к этому сообществу.
           {/if}
         </div>
 
@@ -388,7 +384,7 @@
             color="primary"
             on:click={createPost}
             loading={creating}
-            disabled={creating || !productTagName}
+            disabled={creating}
           >
             Опубликовать в сообщество
           </Button>

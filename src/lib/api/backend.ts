@@ -435,6 +435,7 @@ export type BackendComun = {
   categories_count?: number
   category_ids?: number[]
   product_tag?: { id: number; name: string; lemma?: string | null } | null
+  source_rubric?: { id: number; name: string; slug: string } | null
   product_tag_id?: number | null
   welcome_post_id?: number | null
   welcome_post_ref?: string

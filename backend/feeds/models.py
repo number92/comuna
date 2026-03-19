@@ -639,6 +639,15 @@ class Comun(models.Model):
         related_name="created_comuns",
         verbose_name="Создатель",
     )
+    source_rubric = models.OneToOneField(
+        Rubric,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="source_comun",
+        verbose_name="Исходная рубрика",
+        help_text="Если указана, посты этой рубрики отображаются в сообществе.",
+    )
     moderators = models.ManyToManyField(
         User,
         blank=True,

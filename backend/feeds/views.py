@@ -849,6 +849,7 @@ def _serialize_comun_profile_card(
     role: str = "moderator",
 ) -> dict:
     product_tag = comun.product_tag
+    source_rubric = getattr(comun, "source_rubric", None)
     tags = list(comun.tags.filter(is_active=True).order_by("name"))
     return {
         "id": comun.id,
@@ -867,6 +868,15 @@ def _serialize_comun_profile_card(
                 "lemma": product_tag.lemma or _lemmatize_tag(product_tag.name) or product_tag.name,
             }
             if product_tag
+            else None
+        ),
+        "source_rubric": (
+            {
+                "id": source_rubric.id,
+                "name": source_rubric.name,
+                "slug": source_rubric.slug,
+            }
+            if source_rubric
             else None
         ),
         "tags": [
@@ -5034,7 +5044,7 @@ def public_user_profile(request: HttpRequest, user_id: int) -> HttpResponse:
 
     comuns = list(
         Comun.objects.filter(Q(creator_id=profile_user.id) | Q(moderators__id=profile_user.id), is_active=True)
-        .select_related("creator", "product_tag")
+        .select_related("creator", "product_tag", "source_rubric")
         .prefetch_related("moderators", "categories")
         .distinct()
         .order_by("sort_order", "name")
@@ -7638,11 +7648,19 @@ def my_feed(request: HttpRequest) -> HttpResponse:
     if comun_slugs:
         comuns = list(
             Comun.objects.filter(is_active=True, slug__in=comun_slugs)
-            .select_related("product_tag")
-            .only("id", "slug", "product_tag_id", "product_tag__id", "product_tag__name", "product_tag__lemma")
+            .select_related("product_tag", "source_rubric")
+            .only(
+                "id",
+                "slug",
+                "product_tag_id",
+                "product_tag__id",
+                "product_tag__name",
+                "product_tag__lemma",
+                "source_rubric_id",
+            )
         )
         for comun in comuns:
-            comun_filter = _comun_product_tag_filter(comun.product_tag)
+            comun_filter = _comun_source_filter(comun)
             if comun_filter is None:
                 continue
             comun_tag_selection_q |= comun_filter
@@ -8021,6 +8039,7 @@ def _serialize_comun(
     categories = _comun_categories_list(comun)
     moderators = list(comun.moderators.select_related("site_profile").order_by("username"))
     product_tag = comun.product_tag
+    source_rubric = getattr(comun, "source_rubric", None)
     tags = list(comun.tags.filter(is_active=True).order_by("name"))
     welcome_post_payload = None
     if comun.welcome_post_id:
@@ -8086,6 +8105,15 @@ def _serialize_comun(
                 "lemma": product_tag.lemma or _lemmatize_tag(product_tag.name) or product_tag.name,
             }
             if product_tag
+            else None
+        ),
+        "source_rubric": (
+            {
+                "id": source_rubric.id,
+                "name": source_rubric.name,
+                "slug": source_rubric.slug,
+            }
+            if source_rubric
             else None
         ),
         "tags": [
@@ -8160,6 +8188,23 @@ def _comun_product_tag_filter(product_tag: Tag | None) -> Q | None:
     return filters
 
 
+def _comun_source_filter(comun: Comun) -> Q | None:
+    combined_filter = Q()
+    has_source = False
+
+    tag_filter = _comun_product_tag_filter(comun.product_tag)
+    if tag_filter is not None:
+        combined_filter |= tag_filter
+        has_source = True
+
+    source_rubric_id = getattr(comun, "source_rubric_id", None)
+    if source_rubric_id:
+        combined_filter |= Q(rubric_id=source_rubric_id)
+        has_source = True
+
+    return combined_filter if has_source else None
+
+
 def _site_user_avatar_url(
     request: HttpRequest | None,
     user: User,
@@ -8191,12 +8236,12 @@ def _site_user_avatar_url(
 
 def _comun_posts_base_queryset(comun: Comun, now=None):
     now = now or timezone.now()
-    tag_filter = _comun_product_tag_filter(comun.product_tag)
-    if not tag_filter:
+    source_filter = _comun_source_filter(comun)
+    if not source_filter:
         return Post.objects.none()
     return (
         Post.objects.filter(
-            tag_filter,
+            source_filter,
             is_blocked=False,
             is_pending=False,
             author__is_blocked=False,
@@ -8395,7 +8440,7 @@ def comuns_list_create(request: HttpRequest) -> HttpResponse:
     if request.method == "GET":
         comuns = list(
             Comun.objects.filter(is_active=True)
-            .select_related("creator", "product_tag")
+            .select_related("creator", "product_tag", "source_rubric")
             .prefetch_related("moderators", "categories", "tags")
             .order_by("sort_order", "name")
         )
@@ -8498,7 +8543,7 @@ def comuns_list_create(request: HttpRequest) -> HttpResponse:
 
     comun = (
         Comun.objects.filter(id=comun.id)
-        .select_related("creator", "product_tag", "welcome_post")
+        .select_related("creator", "product_tag", "source_rubric", "welcome_post")
         .prefetch_related("moderators", "categories", "tags")
         .get()
     )
@@ -8511,7 +8556,7 @@ def comun_detail_manage(request: HttpRequest, slug: str) -> HttpResponse:
     try:
         comun = (
             Comun.objects.filter(slug=slug)
-            .select_related("creator", "product_tag", "welcome_post")
+            .select_related("creator", "product_tag", "source_rubric", "welcome_post")
             .prefetch_related("moderators", "categories", "tags")
             .get()
         )
@@ -8663,7 +8708,7 @@ def comun_detail_manage(request: HttpRequest, slug: str) -> HttpResponse:
 
     comun = (
         Comun.objects.filter(id=comun.id)
-        .select_related("creator", "product_tag", "welcome_post")
+        .select_related("creator", "product_tag", "source_rubric", "welcome_post")
         .prefetch_related("moderators", "categories", "tags")
         .get()
     )
@@ -8757,7 +8802,7 @@ def comun_posts(request: HttpRequest, slug: str) -> HttpResponse:
     try:
         comun = (
             Comun.objects.filter(slug=slug)
-            .select_related("creator", "product_tag", "welcome_post")
+            .select_related("creator", "product_tag", "source_rubric", "welcome_post")
             .prefetch_related("moderators", "categories")
             .get()
         )
@@ -8770,11 +8815,11 @@ def comun_posts(request: HttpRequest, slug: str) -> HttpResponse:
     if request.method == "POST":
         if not current_user:
             return JsonResponse({"ok": False, "error": "unauthorized"}, status=401)
-        if not comun.product_tag_id:
+        if _comun_source_filter(comun) is None:
             return JsonResponse(
                 {
                     "ok": False,
-                    "error": "product tag not set",
+                    "error": "comun source not set",
                 },
                 status=400,
             )
@@ -8901,7 +8946,7 @@ def comun_posts(request: HttpRequest, slug: str) -> HttpResponse:
             message_id=message_id,
             title=title,
             content=content,
-            rubric=author.rubric if author and author.rubric_id else None,
+            rubric=comun.source_rubric if comun.source_rubric_id else (author.rubric if author and author.rubric_id else None),
             channel_url=(author.invite_url or author.channel_url or ""),
             source_url=(author.invite_url or author.channel_url or ""),
             raw_data=raw_data,
@@ -8957,7 +9002,7 @@ def comun_posts(request: HttpRequest, slug: str) -> HttpResponse:
     now = timezone.now()
     visible_categories = _comun_categories_list(comun)
     all_posts_query = _comun_posts_base_queryset(comun, now)
-    if not comun.product_tag_id:
+    if _comun_source_filter(comun) is None:
         return JsonResponse(
             {
                 "ok": True,
@@ -9075,7 +9120,7 @@ def comun_post_category_update(request: HttpRequest, slug: str, post_id: int) ->
     try:
         comun = (
             Comun.objects.filter(slug=slug)
-            .select_related("creator", "product_tag")
+            .select_related("creator", "product_tag", "source_rubric")
             .prefetch_related("moderators", "categories")
             .get()
         )
@@ -9096,14 +9141,14 @@ def comun_post_category_update(request: HttpRequest, slug: str, post_id: int) ->
         if not category:
             return JsonResponse({"ok": False, "error": "category not found"}, status=400)
 
-    tag_filter = _comun_product_tag_filter(comun.product_tag)
-    if not tag_filter:
-        return JsonResponse({"ok": False, "error": "product tag not set"}, status=400)
+    source_filter = _comun_source_filter(comun)
+    if not source_filter:
+        return JsonResponse({"ok": False, "error": "comun source not set"}, status=400)
 
     post = (
         Post.objects.filter(id=post_id, is_blocked=False, is_pending=False, author__is_blocked=False)
         .filter(_publish_ready_filter(timezone.now()))
-        .filter(tag_filter)
+        .filter(source_filter)
         .distinct()
         .first()
     )

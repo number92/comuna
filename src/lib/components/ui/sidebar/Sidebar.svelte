@@ -67,6 +67,8 @@
 
   let loginModalOpen = false;
   let comuns: BackendComun[] = [];
+  let visibleComuns: BackendComun[] = [];
+  let sidebarComuns: BackendComun[] = [];
   let thematicFeeds: Array<{
     name: string
     slug: string
@@ -190,6 +192,8 @@
   $: searchParams = new URLSearchParams($page.url.search);
   $: currentFeed = searchParams.get('feed') ?? ($userSettings.homeFeed ?? 'hot');
   $: currentThematicSlug = searchParams.get('theme') ?? '';
+  $: visibleComuns = comuns.filter((comun) => comun.slug !== 'faq');
+  $: sidebarComuns = visibleComuns.slice(0, 10);
   $: if (currentFeed === 'thematic') {
     thematicFeedsOpen = true;
   }
@@ -327,7 +331,7 @@
       <SidebarButton href="/comuns?create=1" icon={Plus}>
         <span slot="label">Создать сообщество</span>
       </SidebarButton>
-      {#each comuns as comun}
+      {#each sidebarComuns as comun}
         <SidebarButton href={`/comuns/${comun.slug}`}>
           <div slot="icon" class="w-7 h-7 rounded-full overflow-hidden bg-slate-100 dark:bg-zinc-800 flex items-center justify-center">
             {#if comun.logo_url}
@@ -339,6 +343,11 @@
           <span slot="label">{comun.name}</span>
         </SidebarButton>
       {/each}
+      {#if visibleComuns.length > 10}
+        <SidebarButton href="/comuns" icon={ChevronDown}>
+          <span slot="label">Все сообщества</span>
+        </SidebarButton>
+      {/if}
   </div>
 
   {#if HAS_LEMMY_INSTANCE}

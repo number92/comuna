@@ -19,6 +19,9 @@
   const COMMUNITIES_LANDING_HREF = '/lp/communities'
 
   let comuns: BackendComun[] = data.comuns ?? []
+  let visibleComuns: BackendComun[] = []
+  let filteredComuns: BackendComun[] = []
+  let searchQuery = ''
   let createOpen = false
   let insufficientOpen = false
   let creating = false
@@ -58,6 +61,18 @@
     const numeric = Math.max(Number(value ?? 0) || 0, 0)
     return Number.isInteger(numeric) ? String(numeric) : numeric.toFixed(2).replace(/\.?0+$/, '')
   }
+
+  $: visibleComuns = comuns.filter((comun) => comun.slug !== 'faq')
+  $: filteredComuns = (() => {
+    const query = searchQuery.trim().toLowerCase()
+    if (!query) return visibleComuns
+    return visibleComuns.filter((comun) => {
+      const name = (comun.name || '').toLowerCase()
+      const description = (comun.product_description || '').toLowerCase()
+      const tags = (comun.tags ?? []).map((tag) => (tag.name || '').toLowerCase()).join(' ')
+      return name.includes(query) || description.includes(query) || tags.includes(query)
+    })
+  })()
 
   const currentUserMaxAuthorRating = (user = $siteUser) => {
     const authorRatings = (user?.authors ?? []).map((author) => Math.max(Number(author.author_rating ?? 0) || 0, 0))
@@ -259,9 +274,21 @@
     </div>
   </section>
 
-  {#if comuns.length}
+  <section class="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white/95 dark:bg-zinc-900/85 p-4 sm:p-5">
+    <label class="flex flex-col gap-2">
+      <span class="text-sm font-medium text-slate-700 dark:text-zinc-300">Поиск сообществ</span>
+      <input
+        bind:value={searchQuery}
+        type="text"
+        placeholder="Название, описание или тег"
+        class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-500"
+      />
+    </label>
+  </section>
+
+  {#if filteredComuns.length}
     <div class="grid gap-4 sm:grid-cols-2">
-      {#each comuns as comun}
+      {#each filteredComuns as comun}
         <a
           href={`/comuns/${comun.slug}`}
           class="group rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white/95 dark:bg-zinc-900/85 p-4 sm:p-5 hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-sm transition-all min-w-0"
@@ -320,7 +347,11 @@
     </div>
   {:else}
     <div class="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white/95 dark:bg-zinc-900/85 p-6 text-slate-600 dark:text-zinc-400">
-      Пока нет созданных сообществ.
+      {#if visibleComuns.length}
+        Ничего не найдено по вашему запросу.
+      {:else}
+        Пока нет созданных сообществ.
+      {/if}
     </div>
   {/if}
 </div>

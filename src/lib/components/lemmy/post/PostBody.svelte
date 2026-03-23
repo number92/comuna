@@ -1070,16 +1070,23 @@
           const count = Math.max(Number(optionPayload?.voter_count || 0), 0)
           const percent = totalVoters > 0 ? Math.round((count / totalVoters) * 100) : 0
           const isSelected = selectedSet.has(index)
-          const optionStateClass = hasUserVote
-            ? ` post-inline-poll__option--locked${isSelected ? ' post-inline-poll__option--selected-vote' : ''}`
-            : ''
-          const leadingControl = hasUserVote
-            ? isSelected
-              ? `<div class="post-inline-poll__checkmark" aria-hidden="true">✓</div>`
-              : ''
-            : `<div class="post-inline-poll__control" aria-hidden="true">
+          if (!hasUserVote) {
+            return `<div class="post-poll-option post-inline-poll__option post-inline-poll__option--choice" data-option-index="${index}">
+              <div class="post-inline-poll__control" aria-hidden="true">
                 <span class="post-inline-poll__marker"></span>
-              </div>`
+              </div>
+              <div class="post-inline-poll__option-main">
+                <div class="post-inline-poll__option-row">
+                  <span class="post-inline-poll__option-text">${escapeHtml(option)}</span>
+                </div>
+              </div>
+            </div>`
+          }
+
+          const optionStateClass = ` post-inline-poll__option--locked post-inline-poll__option--result${isSelected ? ' post-inline-poll__option--selected-vote' : ''}`
+          const leadingControl = isSelected
+            ? `<div class="post-inline-poll__checkmark" aria-hidden="true">✓</div>`
+            : `<div class="post-inline-poll__checkmark post-inline-poll__checkmark--empty" aria-hidden="true"></div>`
           return `<div class="post-poll-option post-inline-poll__option${isSelected ? ' is-selected' : ''}${optionStateClass}" data-option-index="${index}">
             ${leadingControl}
             <div class="post-inline-poll__option-main">
@@ -1118,9 +1125,9 @@
           <div class="post-inline-poll__mode">${escapeHtml(modeLabel)}</div>
         </div>
         <div class="post-inline-poll__options">${optionItems}</div>
-        <div class="post-inline-poll__footer">
+        <div class="post-inline-poll__footer${hasUserVote ? '' : ' post-inline-poll__footer--compact'}">
           <span>${escapeHtml(statusLabel)}</span>
-          <span>${formatPollVoteLabel(totalVoters)}</span>
+          ${hasUserVote ? `<span>${formatPollVoteLabel(totalVoters)}</span>` : ''}
         </div>
       </div>`
     }
@@ -2518,6 +2525,14 @@
     background: rgba(15, 23, 42, 0.38);
   }
 
+  :global(.post-content .post-inline-poll__option--choice) {
+    min-height: 3.25rem;
+  }
+
+  :global(.post-content .post-inline-poll__option--result) {
+    cursor: default;
+  }
+
   :global(.post-content .post-inline-poll__control) {
     position: relative;
     width: 1.15rem;
@@ -2577,6 +2592,12 @@
     font-weight: 800;
     line-height: 1;
     box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.28);
+  }
+
+  :global(.post-content .post-inline-poll__checkmark--empty) {
+    background: transparent;
+    box-shadow: none;
+    color: transparent;
   }
 
   :global(.post-content .post-inline-poll__option-main) {
@@ -2669,6 +2690,10 @@
     color: rgba(226, 232, 240, 0.72);
     font-size: 0.8rem;
     line-height: 1.4;
+  }
+
+  :global(.post-content .post-inline-poll__footer--compact) {
+    justify-content: flex-start;
   }
 
   :global(.dark .post-content .post-inline-poll) {

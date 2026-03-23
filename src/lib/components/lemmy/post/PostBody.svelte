@@ -12,7 +12,12 @@
     buildOpenStreetMapEmbedUrl,
     normalizeOpenStreetMapZoom,
   } from '$lib/util'
-  import { buildPostPollVoteUrl, type BackendPoll, type BackendPollOption } from '$lib/api/backend'
+  import {
+    buildPostDetailUrl,
+    buildPostPollVoteUrl,
+    type BackendPoll,
+    type BackendPollOption,
+  } from '$lib/api/backend'
   import { siteToken } from '$lib/siteAuth'
   import {
     formatMovieReviewReleaseDate,
@@ -113,6 +118,8 @@
   let lastPollRef: BackendPoll | null = null
   let pollVoting = false
   let pollRenderState = ''
+  let pollRestoreInFlight = false
+  let restoredPollToken: string | null = null
   const maxPreviewLength = 250;
   const hydratedPostLinkSnapshots = new Map<number, PostLinkSnapshot>()
 
@@ -139,6 +146,75 @@
       cloned.user_selection = normalizedFallback
     }
     return cloned
+  }
+
+  const storageKeyForPoll = (value: number | null | undefined): string => {
+    const normalizedPostId = Number(value)
+    if (!Number.isInteger(normalizedPostId) || normalizedPostId <= 0) return ''
+    return `comuna:inline-poll:${normalizedPostId}`
+  }
+
+  const getPollIdentity = (value: BackendPoll | null | undefined): string => {
+    const pollId = String(value?.id || '').trim()
+    if (pollId) return pollId
+    const questionValue = String(value?.question || '').trim()
+    const optionsValue = Array.isArray(value?.options)
+      ? value.options.map((option) => String(option?.text || '').trim()).join('|')
+      : ''
+    return `${questionValue}::${optionsValue}`
+  }
+
+  const persistLocalPoll = (value: BackendPoll | null | undefined) => {
+    if (!browser) return
+    const storageKey = storageKeyForPoll(postId)
+    if (!storageKey) return
+    if (!value) {
+      localStorage.removeItem(storageKey)
+      return
+    }
+    try {
+      localStorage.setItem(
+        storageKey,
+        JSON.stringify({ poll: clonePoll(value), identity: getPollIdentity(value) })
+      )
+    } catch (error) {
+      console.error('Failed to persist inline poll state:', error)
+    }
+  }
+
+  const readStoredPoll = (): BackendPoll | null => {
+    if (!browser) return null
+    const storageKey = storageKeyForPoll(postId)
+    if (!storageKey) return null
+    try {
+      const raw = localStorage.getItem(storageKey)
+      if (!raw) return null
+      const parsed = JSON.parse(raw)
+      if (!parsed || typeof parsed !== 'object' || !parsed.poll || typeof parsed.poll !== 'object') {
+        return null
+      }
+      const parsedPoll = clonePoll(parsed.poll as BackendPoll)
+      if (!parsedPoll) return null
+      const currentIdentity = getPollIdentity(poll)
+      const storedIdentity =
+        typeof parsed.identity === 'string' && parsed.identity.trim()
+          ? parsed.identity.trim()
+          : getPollIdentity(parsedPoll)
+      if (currentIdentity && storedIdentity && currentIdentity !== storedIdentity) {
+        localStorage.removeItem(storageKey)
+        return null
+      }
+      return parsedPoll
+    } catch (error) {
+      console.error('Failed to read inline poll state:', error)
+      return null
+    }
+  }
+
+  const applyLocalPollState = (value: BackendPoll | null | undefined) => {
+    localPoll = clonePoll(value)
+    persistLocalPoll(localPoll)
+    processedBody = extractPreviewContent(body)
   }
 
   const normalizePollSelection = (selection: number[]): number[] =>
@@ -215,7 +291,8 @@
 
   $: if (poll !== lastPollRef) {
     lastPollRef = poll
-    localPoll = clonePoll(poll)
+    restoredPollToken = null
+    applyLocalPollState(readStoredPoll() ?? poll)
   }
 
   $: pollRenderState =
@@ -226,6 +303,42 @@
           options: localPoll.options.map((option) => option.voter_count),
         })
       : ''
+
+  const refreshPollFromServer = async (tokenOverride?: string | null) => {
+    if (!browser || !allowPollVoting || !postId || pollRestoreInFlight) return
+    const token = tokenOverride ?? $siteToken
+    if (!token) return
+
+    pollRestoreInFlight = true
+    try {
+      const response = await fetch(buildPostDetailUrl(postId), {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      const payload = await response.json().catch(() => null)
+      if (response.ok && payload?.post?.poll && typeof payload.post.poll === 'object') {
+        applyLocalPollState(payload.post.poll as BackendPoll)
+      }
+    } catch (error) {
+      console.error('Failed to restore inline poll state:', error)
+    } finally {
+      pollRestoreInFlight = false
+    }
+  }
+
+  const restoreInlinePollState = async () => {
+    if (!browser || !allowPollVoting || !postId) return
+    const storedPoll = readStoredPoll()
+    if (storedPoll) {
+      applyLocalPollState(storedPoll)
+    }
+
+    const token = $siteToken
+    if (!token || restoredPollToken === token) return
+    restoredPollToken = token
+    await refreshPollFromServer(token)
+  }
 
   const stripLeadingTitleFromHtml = (html: string): string => {
     const rawTitle = (title || '').trim()
@@ -513,7 +626,7 @@
     const previousPollState = clonePoll(localPoll ?? poll)
     const optimisticPoll = applyOptimisticPollSelection(previousPollState, nextSelection)
     if (optimisticPoll) {
-      localPoll = optimisticPoll
+      applyLocalPollState(optimisticPoll)
     }
     pollVoting = true
     try {
@@ -528,16 +641,17 @@
       const data = await response.json().catch(() => ({}))
       if (!response.ok || !data?.ok) {
         if (data?.poll && typeof data.poll === 'object') {
-          localPoll = mergeServerPollWithSelection(data.poll as BackendPoll, nextSelection)
+          applyLocalPollState(mergeServerPollWithSelection(data.poll as BackendPoll, nextSelection))
         }
         throw new Error(data?.error || 'Не удалось проголосовать')
       }
       if (data?.poll && typeof data.poll === 'object') {
-        localPoll = mergeServerPollWithSelection(data.poll as BackendPoll, nextSelection)
+        applyLocalPollState(mergeServerPollWithSelection(data.poll as BackendPoll, nextSelection))
       }
+      await refreshPollFromServer(token)
     } catch (error) {
       if ((error as Error)?.message !== 'Вы уже проголосовали в этом опросе') {
-        localPoll = previousPollState
+        applyLocalPollState(previousPollState)
       }
       toast({
         content: (error as Error)?.message ?? 'Не удалось проголосовать',
@@ -2189,6 +2303,10 @@
     void pollRenderState
   }
 
+  $: if (browser && allowPollVoting && postId && $siteToken) {
+    void restoreInlinePollState()
+  }
+
   // Сбрасываем состояние превью только при смене исходного контента/режима отображения
   $: {
     void body
@@ -2207,6 +2325,7 @@
 
   onMount(() => {
     if (!browser) return
+    void restoreInlinePollState()
     const clickHandler = (event: Event) => {
       const target = event.target as HTMLElement | null
       const spoilerTrigger = target?.closest('.post-spoiler__trigger') as HTMLElement | null

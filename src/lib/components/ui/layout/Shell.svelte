@@ -91,7 +91,7 @@
 <div
   {...$$restProps}
   class="shell bg-slate-50 dark:bg-zinc-950 {$$props.class}"
-  style={$themeVars}
+  style={themeVars}
 >
   <slot />
   <div

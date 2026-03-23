@@ -1,25 +1,9 @@
-import {
-  derived,
-  get,
-  writable,
-  type Stores,
-  type Updater,
-  type Unsubscriber,
-  type Writable,
-  type Readable,
-} from 'svelte/store'
+import { get, writable } from 'svelte/store'
 import { env } from '$env/dynamic/public'
-import { getDefaultTheme, presets } from './presets'
+import { getDefaultTheme } from './presets'
 import { browser } from '$app/environment'
-import { t } from '$lib/translations'
 
 type ColorScheme = 'system' | 'light' | 'dark'
-
-export interface ThemeData {
-  scheme: ColorScheme
-  themes: Theme[]
-  currentTheme: number
-}
 
 export interface Theme {
   id: number
@@ -79,57 +63,9 @@ export function rgbToHex(rgbString: string): string {
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`
 }
 
-function themeStore(
-  data: Writable<ThemeData>,
-  fn: (
-    values: ThemeData,
-    set: (value: Theme) => void,
-    update: (fn: Updater<Theme>) => void
-  ) => any
-) {
-  const derive: Readable<Theme> = derived(data, fn)
-  const { subscribe } = derive
+const defaultTheme = getDefaultTheme()
 
-  return {
-    subscribe,
-    set: (value: Theme) => {
-      data.update((data) => {
-        let index = data.themes.findIndex((t) => t.id == value.id)
-        data.themes[index] = value
-        return data
-      })
-    },
-  }
-}
-
-export let themeData = writable<ThemeData>(
-  loadTheme() ?? {
-    scheme: 'system',
-    themes: presets,
-    currentTheme: 0,
-  }
-)
-
-themeData.subscribe((themeData) => {
-  if (browser) {
-    const filteredThemes = themeData.themes.filter((t) => t.id > 0)
-    localStorage.setItem(
-      'themeData',
-      JSON.stringify({
-        ...themeData,
-        themes: filteredThemes,
-      })
-    )
-  }
-})
-
-export let theme = themeStore(
-  themeData,
-  (data) =>
-    data.themes.find((t) => t.id == data.currentTheme) ?? getDefaultTheme()
-)
-
-export function calculateVars(theme: Theme) {
+function calculateVars(theme: Theme) {
   let cssVariables = ''
 
   for (const [scheme, colors] of Object.entries(theme.colors)) {
@@ -141,7 +77,7 @@ export function calculateVars(theme: Theme) {
   return cssVariables.trim()
 }
 
-export const themeVars = derived(theme, (t) => calculateVars(t as Theme))
+export const themeVars = calculateVars(defaultTheme)
 
 const configuredColorScheme = env.PUBLIC_COLORSCHEME ?? 'system'
 export const colorScheme = writable<ColorScheme>(
@@ -191,40 +127,12 @@ function loadColorScheme() {
   })
 }
 
-function loadTheme() {
-  if (!browser) return
-  const localTheme = localStorage.getItem('themeData')
-
-  if (localTheme) {
-    const data = JSON.parse(localTheme)
-    if (!data) return
-    data.themes = [...presets, ...data.themes]
-    return data
-  }
-
-  return
-}
-
 if (browser) {
   try {
     loadColorScheme()
   } catch (e) {}
   try {
-    const oldColors = localStorage.getItem('colors')
-    if (oldColors) {
-      themeData.update((td) => ({
-        ...td,
-        currentTheme: Math.max(...td.themes.map((t) => t.id)) + 1,
-        themes: [
-          ...td.themes,
-          {
-            id: Math.max(...td.themes.map((t) => t.id)) + 1,
-            colors: JSON.parse(oldColors),
-            name: t.get('routes.theme.preset.imported') || 'Your Theme',
-          },
-        ],
-      }))
-      localStorage.removeItem('colors')
-    }
+    localStorage.removeItem('themeData')
+    localStorage.removeItem('colors')
   } catch (e) {}
 }

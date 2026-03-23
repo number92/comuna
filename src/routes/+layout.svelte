@@ -10,7 +10,6 @@
     colorScheme,
     inDarkColorScheme,
     rgbToHex,
-    theme,
     themeVars,
   } from '$lib/ui/colors.js'
   import { userSettings } from '$lib/settings.js'
@@ -150,9 +149,7 @@ import KeyboardShortcutsHint from '$lib/components/ui/sidebar/KeyboardShortcutsH
         )
       }
       document.body.querySelector('.loader')?.classList.add('hidden')
-      themeVars.subscribe((vars) => {
-        document.body.setAttribute('style', vars)
-      })
+      document.body.setAttribute('style', themeVars)
       userSettings.subscribe((settings) => {
         console.log('Current font settings:', settings.font);
         console.log('Adding font class:', settings.font === 'roboto' ? 'font-roboto' : 'font-sans');
@@ -170,9 +167,9 @@ import KeyboardShortcutsHint from '$lib/components/ui/sidebar/KeyboardShortcutsH
     <meta
       name="theme-color"
       content={rgbToHex(
-        $colorScheme && inDarkColorScheme()
-          ? $theme.colors.zinc?.[925] ?? getDefaultColors().zinc[925]
-          : $theme.colors.slate?.[25] ?? getDefaultColors().slate[25]
+        inDarkColorScheme()
+          ? getDefaultColors().zinc[925]
+          : getDefaultColors().slate[25]
       )}
     />
     <!-- Telegram uses a short HTML prefix for link previews; avoid generic description on post pages. -->

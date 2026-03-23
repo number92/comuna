@@ -9,7 +9,6 @@
   import { afterNavigate, goto } from '$app/navigation'
   import { profile, profileData } from '$lib/auth'
   import { getGroups, type Action, type Group } from './actions'
-  import { themeData } from '$lib/ui/colors'
   import { page } from '$app/stores'
 
   export let open = false
@@ -21,7 +20,6 @@
     $resumables,
     $profile,
     $profileData.profiles,
-    $themeData,
     $page.data.contextual?.actions
   )
 

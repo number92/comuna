@@ -7,7 +7,7 @@ import {
 } from '$lib/components/lemmy/moderation/moderation'
 import { resumables, type ResumableItem } from '$lib/lemmy/item'
 import { t } from '$lib/translations'
-import { colorScheme, theme, themeData, type ThemeData } from '$lib/ui/colors'
+import { colorScheme } from '$lib/ui/colors'
 import { fullCommunityName } from '$lib/util'
 import {
   ArrowRightOnRectangle,
@@ -40,7 +40,6 @@ import {
   ArrowTrendingDown,
   ChatBubbleOvalLeftEllipsis,
   ChatBubbleLeftRight,
-  Swatch,
   Plus,
 } from 'svelte-hero-icons'
 import { get } from 'svelte/store'
@@ -65,7 +64,6 @@ export function getGroups(
   resumables: ResumableItem[],
   profile: Profile,
   profiles: Profile[],
-  td: ThemeData,
   contextual?: Action[]
 ) {
   return [
@@ -343,19 +341,6 @@ export function getGroups(
               icon: Moon,
             },
           ],
-        },
-        {
-          name: t.get('nav.commands.setTheme'),
-          icon: Swatch,
-          subActions: td.themes.map((th) => ({
-            name: t.get('nav.commands.setThemeTo', { default: th.name }),
-            icon: Swatch,
-            handle: () =>
-              themeData.update((td) => ({
-                ...td,
-                currentTheme: th.id,
-              })),
-          })),
         },
       ],
     },

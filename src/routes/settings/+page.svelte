@@ -407,8 +407,8 @@
         toast({ content: err, type: 'error' })
       }
     }}
-    title={$t('routes.theme.import')}
-    action={$t('routes.theme.import')}
+    title={$t('settings.import')}
+    action={$t('settings.import')}
   >
     <TextArea bind:value={importText} style="font-family: monospace;" />
   </Modal>
@@ -742,14 +742,6 @@
       title={$t('settings.app.postsInNewTab.title')}
       description={$t('settings.app.postsInNewTab.description')}
     />
-    <Setting>
-      <span slot="title">{$t('settings.app.theming.title')}</span>
-      <span slot="description">{$t('settings.app.theming.description')}</span>
-      <Button href="/theme">
-        {$t('settings.app.theming.link')}
-        <Icon src={ArrowRight} size="16" mini slot="suffix" />
-      </Button>
-    </Setting>
     <Setting>
       <span slot="title">Темная/светлая тема</span>
       <span slot="description">Выберите светлую или темную тему.</span>

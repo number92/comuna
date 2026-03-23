@@ -10,7 +10,6 @@
   import {
     backendPostToPostView,
     buildBackendPostPath,
-    buildComunPostCategoryUrl,
     buildComunPostsUrl,
     buildComunUrl,
     buildTagsEnsureUrl,
@@ -37,8 +36,6 @@
   let lastComunRef = data.comun
   const scrollThreshold = 400
   let scrollRaf: number | null = null
-  let categorySavingPostIds = new Set<number>()
-
   let settingsOpen = false
   let settingsLoading = false
   let settingsSaving = false
@@ -60,7 +57,6 @@
   let settingsTagOptions: ComunTagOption[] = []
   let settingsUserOptions: ComunUserOption[] = []
   const COMUN_SUGGESTIONS_CATEGORY_SLUGS = new Set(['feature-ideas', 'suggestions'])
-  const COMUN_BACKLOG_CATEGORY_SLUG = 'backlog'
   const ROADMAP_PREVIEW_LIMIT = 4
   const ROADMAP_PREVIEW_FETCH_LIMIT = 8
 
@@ -222,8 +218,6 @@
   $: minimumAuthorRatingToPost = Math.max(Number(comun?.minimum_author_rating_to_post ?? 0) || 0, 0)
   $: comunCategories = comun?.categories ?? []
   $: hasComunCategories = comunCategories.length > 0
-  $: comunBacklogCategory =
-    comunCategories.find((category) => category.slug === COMUN_BACKLOG_CATEGORY_SLUG) ?? null
   $: myFeedComunSlugs = ($userSettings.myFeedComuns ?? []).map((slug) => slug.trim()).filter(Boolean)
   $: currentComunSlug = (comun?.slug ?? '').trim()
   $: isSubscribedToComun = !!currentComunSlug && myFeedComunSlugs.includes(currentComunSlug)
@@ -346,14 +340,6 @@
 
   const isSuggestionsComunCategory = (category?: BackendComunCategory | null) =>
     Boolean(category?.slug && COMUN_SUGGESTIONS_CATEGORY_SLUGS.has(category.slug))
-
-  const canMovePostToBacklog = (post: BackendPost) =>
-    Boolean(
-      isModerator() &&
-        comunBacklogCategory?.id &&
-        isSuggestionsComunCategory(post.comun_category) &&
-        post.comun_category_id !== comunBacklogCategory.id
-    )
 
   const normalizeRoadmapToken = (value?: string | null) =>
     (value ?? '')
@@ -1064,100 +1050,6 @@
     }
   }
 
-  const setWelcomePost = async (postId: number) => {
-    if (!comun?.slug || !isModerator()) return
-    try {
-      const response = await fetch(buildComunUrl(comun.slug), {
-        method: 'PATCH',
-        headers: authHeaders(),
-        body: JSON.stringify({ welcome_post_id: postId }),
-      })
-      const payload = await response.json().catch(() => ({}))
-      if (!response.ok) throw new Error(payload?.error || 'Не удалось выбрать приветственный пост')
-      comun = payload.comun ?? comun
-      toast({ content: 'Приветственный пост обновлен', type: 'success' })
-      await loadPosts(true)
-    } catch (error) {
-      toast({ content: error instanceof Error ? error.message : 'Ошибка обновления', type: 'error' })
-    }
-  }
-
-  const updatePostCategory = async (postId: number, categoryId: number | null) => {
-    if (!comun?.slug || !isModerator()) return false
-    const previousPost = posts.find((post) => post.id === postId) ?? null
-    const previousCategoryId =
-      previousPost && Number(previousPost.comun_category_id ?? 0) > 0
-        ? Number(previousPost.comun_category_id)
-        : null
-    categorySavingPostIds = new Set([...categorySavingPostIds, postId])
-    try {
-      const response = await fetch(buildComunPostCategoryUrl(comun.slug, postId), {
-        method: 'PATCH',
-        headers: authHeaders(),
-        body: JSON.stringify({ category_id: categoryId }),
-      })
-      const payload = await response.json().catch(() => ({}))
-      if (!response.ok) {
-        throw new Error(payload?.error || 'Не удалось обновить категорию')
-      }
-      const assignment = payload?.assignment
-      const nextCategoryId =
-        assignment && Number(assignment?.category_id ?? 0) > 0 ? Number(assignment.category_id) : null
-      posts = posts.map((post) => {
-        if (post.id !== postId) return post
-        return {
-          ...post,
-          comun_category_id: nextCategoryId,
-          comun_category: assignment?.category ?? null,
-        }
-      })
-      if (previousCategoryId !== nextCategoryId && (categoryCounts ?? []).length) {
-        categoryCounts = (categoryCounts ?? []).map((row) => {
-          const rowCategoryId = Number(row?.category_id ?? 0)
-          let nextCount = Math.max(0, Number(row?.count ?? 0) || 0)
-          if (previousCategoryId && rowCategoryId === previousCategoryId) {
-            nextCount = Math.max(nextCount - 1, 0)
-          }
-          if (nextCategoryId && rowCategoryId === nextCategoryId) {
-            nextCount += 1
-          }
-          return { ...row, count: nextCount }
-        })
-        if (!previousCategoryId && nextCategoryId) {
-          uncategorizedPostsCount = Math.max(uncategorizedPostsCount - 1, 0)
-        } else if (previousCategoryId && !nextCategoryId) {
-          uncategorizedPostsCount += 1
-        }
-      }
-      if (roadmapCanOpenModal) {
-        void loadRoadmapPreviews()
-      }
-      return true
-    } catch (error) {
-      toast({ content: error instanceof Error ? error.message : 'Ошибка обновления категории', type: 'error' })
-      return false
-    } finally {
-      const next = new Set(categorySavingPostIds)
-      next.delete(postId)
-      categorySavingPostIds = next
-    }
-  }
-
-  const onPostCategoryChange = (event: Event, postId: number) => {
-    const target = event.currentTarget as HTMLSelectElement | null
-    if (!target) return
-    const value = target.value ? Number(target.value) : null
-    void updatePostCategory(postId, value)
-  }
-
-  const movePostToBacklog = async (postId: number) => {
-    if (!comunBacklogCategory?.id) return
-    const updated = await updatePostCategory(postId, comunBacklogCategory.id)
-    if (updated) {
-      toast({ content: 'Пост добавлен в Беклог', type: 'success' })
-    }
-  }
-
   $: wantsSettingsOpenFromUrl = $page.url.searchParams.get('settings') === '1'
 
   $: if (browser && comun?.slug && $siteToken && $siteToken !== lastAuthRefreshToken) {
@@ -1564,52 +1456,6 @@
             subscribeUrl={backendPost.channel_url ?? backendPost.author?.channel_url}
             subscribeLabel="Подписаться"
           />
-
-          {#if isModerator()}
-            <div class="rounded-xl border border-slate-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-900/60 p-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div class="flex flex-col gap-1 min-w-0">
-                <div class="text-xs uppercase tracking-wide text-slate-500 dark:text-zinc-400">Категория внутри сообщества</div>
-                <div class="flex flex-wrap items-center gap-2">
-                  <select
-                    class="rounded-lg border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 py-1 text-sm"
-                    value={backendPost.comun_category_id ?? ''}
-                    on:change={(event) => onPostCategoryChange(event, backendPost.id)}
-                    disabled={categorySavingPostIds.has(backendPost.id)}
-                  >
-                    <option value="">Без категории</option>
-                    {#each comun?.categories ?? [] as category}
-                      <option value={category.id}>{category.name}</option>
-                    {/each}
-                  </select>
-                  {#if backendPost.comun_category}
-                    <span class="text-xs rounded-full bg-slate-100 dark:bg-zinc-800 px-2 py-1">
-                      {backendPost.comun_category.name}
-                    </span>
-                  {/if}
-                </div>
-              </div>
-              <div class="flex flex-wrap gap-2">
-                {#if canMovePostToBacklog(backendPost)}
-                  <Button
-                    color="ghost"
-                    size="sm"
-                    on:click={() => movePostToBacklog(backendPost.id)}
-                    disabled={categorySavingPostIds.has(backendPost.id)}
-                    title="Перевести пост из Предложений в Беклог"
-                  >
-                    В Беклог
-                  </Button>
-                {/if}
-                <Button
-                  color="ghost"
-                  size="sm"
-                  on:click={() => setWelcomePost(backendPost.id)}
-                >
-                  Сделать приветственным
-                </Button>
-              </div>
-            </div>
-          {/if}
         </div>
       {/each}
     </div>

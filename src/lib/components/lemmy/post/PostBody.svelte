@@ -2665,6 +2665,18 @@
     cursor: default;
   }
 
+  :global(.post .post-content .post-inline-poll__option.is-selected),
+  :global(.post .post-content .post-inline-poll__option--selected-vote) {
+    border-color: rgba(96, 165, 250, 0.38);
+    background: rgba(30, 41, 59, 0.52);
+  }
+
+  :global(.post .post-content .post-inline-poll__option.is-selected:hover),
+  :global(.post .post-content .post-inline-poll__option--selected-vote:hover) {
+    border-color: rgba(96, 165, 250, 0.38);
+    background: rgba(30, 41, 59, 0.52);
+  }
+
   :global(.post-content .post-inline-poll__control) {
     position: relative;
     width: 1.15rem;

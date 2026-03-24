@@ -1020,23 +1020,25 @@
             </span>
           </label>
 
-          <label class="flex items-start gap-2 cursor-pointer rounded-xl border border-slate-200 dark:border-zinc-800 px-3 py-3">
-            <input
-              type="checkbox"
-              class="mt-0.5"
-              checked={Boolean(settingsDraft.only_moderators_can_post)}
-              on:change={() =>
-                (settingsDraft = {
-                  ...settingsDraft,
-                  only_moderators_can_post: !Boolean(settingsDraft.only_moderators_can_post),
-                })}
-            />
-            <span class="min-w-0">
-              <span class="block text-sm text-slate-900 dark:text-zinc-100">
-                Писать в сообщество могут только администраторы и модераторы
+          {#if !(settingsDraft.categories ?? []).length}
+            <label class="flex items-start gap-2 cursor-pointer rounded-xl border border-slate-200 dark:border-zinc-800 px-3 py-3">
+              <input
+                type="checkbox"
+                class="mt-0.5"
+                checked={Boolean(settingsDraft.only_moderators_can_post)}
+                on:change={() =>
+                  (settingsDraft = {
+                    ...settingsDraft,
+                    only_moderators_can_post: !Boolean(settingsDraft.only_moderators_can_post),
+                  })}
+              />
+              <span class="min-w-0">
+                <span class="block text-sm text-slate-900 dark:text-zinc-100">
+                  Писать в сообщество могут только администраторы и модераторы
+                </span>
               </span>
-            </span>
-          </label>
+            </label>
+          {/if}
 
           {#if (settingsDraft.categories ?? []).length}
             <div class="flex flex-col gap-2 rounded-xl border border-slate-200 dark:border-zinc-800 px-3 py-3">

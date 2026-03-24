@@ -941,9 +941,6 @@
               <span class="block text-sm text-slate-900 dark:text-zinc-100">
                 Писать в сообщество могут только администраторы и модераторы
               </span>
-              <span class="block text-xs text-slate-500 dark:text-zinc-400">
-                Если включить, новые записи смогут создавать только создатель сообщества, его модераторы и администраторы сайта.
-              </span>
             </span>
           </label>
 
@@ -961,9 +958,6 @@
                 />
                 <span class="min-w-0">
                   <span class="block text-sm text-slate-900 dark:text-zinc-100">Показывать в Горячем</span>
-                  <span class="block text-xs text-slate-500 dark:text-zinc-400">
-                    Если выключить, посты, созданные в этом сообществе, не попадут на главную.
-                  </span>
                 </span>
               </label>
               <label class="flex items-start gap-2 cursor-pointer">
@@ -975,9 +969,6 @@
                 />
                 <span class="min-w-0">
                   <span class="block text-sm text-slate-900 dark:text-zinc-100">Показывать в Свежее</span>
-                  <span class="block text-xs text-slate-500 dark:text-zinc-400">
-                    Если выключить, посты, созданные в этом сообществе, останутся в ленте сообщества и персональных лентах.
-                  </span>
                 </span>
               </label>
             </div>
@@ -1074,9 +1065,6 @@
           {#if canManageComunModerators()}
             <div class="flex flex-col gap-2">
               <div class="text-sm text-slate-700 dark:text-zinc-300">Модераторы сообщества</div>
-              <div class="text-xs text-slate-500 dark:text-zinc-400">
-                Только создатель сообщества может назначать и снимать модераторов. Создатель всегда остается модератором.
-              </div>
               <input
                 bind:value={settingsUserSearch}
                 placeholder="Поиск пользователя по имени или логину..."
@@ -1134,9 +1122,6 @@
 
           <div class="flex flex-col gap-2">
             <div class="text-sm text-slate-700 dark:text-zinc-300">Черный список авторов</div>
-            <div class="text-xs text-slate-500 dark:text-zinc-400">
-              Посты этих авторов будут исключаться из сообщества, даже если подходят по тегу или исходной рубрике.
-            </div>
             <input
               bind:value={settingsAuthorSearch}
               placeholder="Поиск автора по логину или названию..."
@@ -1245,7 +1230,6 @@
               options={settingsTemplateTypeOptions}
               selectedValues={comunAllowedTemplateTypes(settingsDraft)}
               disabled={settingsSaving}
-              helperText="Можно искать по названию и выбрать несколько шаблонов. Хотя бы один шаблон должен остаться доступным."
               on:change={(event) => setDraftAllowedTemplateTypes(event.detail)}
             />
           </div>

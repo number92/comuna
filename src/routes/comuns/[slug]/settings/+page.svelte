@@ -603,7 +603,7 @@
     : `Настройки сообщества — ${siteTitle}`
 </script>
 
-<div class="mx-auto flex max-w-3xl flex-col gap-6">
+<div class="flex w-full max-w-none flex-col gap-6">
   <div class="flex flex-wrap items-center justify-between gap-3">
     <div class="min-w-0">
       <div class="text-xs uppercase tracking-wide text-slate-500 dark:text-zinc-400">

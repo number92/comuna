@@ -37,6 +37,7 @@ import GoogleAnalytics from '$lib/components/GoogleAnalytics.svelte'
 import PopularPosts from '$lib/components/ui/sidebar/PopularPosts.svelte'
 import RecentComments from '$lib/components/ui/sidebar/RecentComments.svelte'
 import KeyboardShortcutsHint from '$lib/components/ui/sidebar/KeyboardShortcutsHint.svelte'
+import ComunSidebarInfo from '$lib/components/ui/sidebar/ComunSidebarInfo.svelte'
 
   nProgress.configure({
     minimum: 0.4,
@@ -73,6 +74,8 @@ import KeyboardShortcutsHint from '$lib/components/ui/sidebar/KeyboardShortcutsH
   $: isPostFormRoute = $page.url.pathname.includes('/create/post') || $page.url.pathname.includes('/edit/post')
   $: isLandingRoute =
     $page.url.pathname === '/lp' || $page.url.pathname.startsWith('/lp/')
+  $: isComunRoute = $page.route.id === '/comuns/[slug]'
+  $: sidebarComun = isComunRoute ? ($page.data.comun ?? null) : null
 
   // Получаем текущий URL для канонической ссылки
   $: siteBaseUrl = (env.PUBLIC_SITE_URL || $page.url.origin).replace(/\/+$/, '')
@@ -257,13 +260,16 @@ import KeyboardShortcutsHint from '$lib/components/ui/sidebar/KeyboardShortcutsH
               </div>
             {/if}
             
-            <!-- PopularPosts -->
-            <div class="flex flex-col gap-4">
-              <KeyboardShortcutsHint enabled={keyboardShortcutsHintEnabled} />
-              <PopularPosts />
-              <div class="h-px bg-slate-200 dark:bg-zinc-800"></div>
-              <RecentComments />
-            </div>
+            {#if isComunRoute && sidebarComun}
+              <ComunSidebarInfo comun={sidebarComun} />
+            {:else}
+              <div class="flex flex-col gap-4">
+                <KeyboardShortcutsHint enabled={keyboardShortcutsHintEnabled} />
+                <PopularPosts />
+                <div class="h-px bg-slate-200 dark:bg-zinc-800"></div>
+                <RecentComments />
+              </div>
+            {/if}
           </div>
         </div>
       </div>

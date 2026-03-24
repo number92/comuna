@@ -1227,17 +1227,6 @@
         </div>
       {/if}
 
-      {#if comun?.rules_text}
-        <div class="rounded-2xl border border-slate-200 bg-slate-50/80 px-4 py-4 dark:border-zinc-800 dark:bg-zinc-900/50">
-          <div class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-zinc-500">
-            Правила сообщества
-          </div>
-          <div class="mt-2 whitespace-pre-line text-sm leading-relaxed text-slate-700 dark:text-zinc-300">
-            {comun.rules_text}
-          </div>
-        </div>
-      {/if}
-
       {#if comun?.target_audience}
         <div class="text-sm text-slate-600 dark:text-zinc-400">
           <span class="font-medium text-slate-800 dark:text-zinc-200">Целевая аудитория:</span>

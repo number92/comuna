@@ -1053,21 +1053,79 @@ def _comment_persona_by_username(username: str | None) -> dict | None:
     return _COMMENT_PERSONAS_BY_USERNAME.get(key)
 
 
-def _comment_persona_profile_path(username: str | None) -> str | None:
-    persona = _comment_persona_by_username(username)
+def _split_persona_display_name(display_name: str) -> tuple[str, str]:
+    normalized = re.sub(r"\s+", " ", str(display_name or "").strip())
+    if not normalized:
+        return "", ""
+    parts = normalized.split(" ", 1)
+    if len(parts) == 1:
+        return parts[0], ""
+    return parts[0], parts[1]
+
+
+def _ensure_comment_persona_user(persona: dict | None) -> User | None:
     if not persona:
         return None
-    return f"/people/{urllib.parse.quote(persona['username'])}"
+
+    username = str(persona.get("username") or "").strip()
+    if not username:
+        return None
+
+    display_name = str(persona.get("display_name") or username).strip() or username
+    first_name, last_name = _split_persona_display_name(display_name)
+    email = f"{username}.mask@comuna.local"
+
+    user, created = User.objects.get_or_create(
+        username=username,
+        defaults={
+            "email": email,
+            "first_name": first_name,
+            "last_name": last_name,
+            "is_active": True,
+        },
+    )
+    updates: list[str] = []
+    if created:
+        user.set_unusable_password()
+        updates.append("password")
+    if email and (user.email or "").strip() != email:
+        user.email = email
+        updates.append("email")
+    if first_name and (user.first_name or "").strip() != first_name:
+        user.first_name = first_name
+        updates.append("first_name")
+    if (user.last_name or "").strip() != last_name:
+        user.last_name = last_name
+        updates.append("last_name")
+    if not user.is_active:
+        user.is_active = True
+        updates.append("is_active")
+    if updates:
+        user.save(update_fields=updates)
+
+    profile, _ = SiteUserProfile.objects.get_or_create(user=user)
+    profile_updates: list[str] = []
+    if (profile.display_name or "").strip() != display_name:
+        profile.display_name = display_name
+        profile_updates.append("display_name")
+    if profile_updates:
+        profile.save(update_fields=profile_updates + ["updated_at"])
+
+    return user
 
 
 def _serialize_comment_user(comment: PostComment) -> dict:
     persona = _comment_persona_by_username(getattr(comment, "persona_username", ""))
     if persona:
+        persona_user = _ensure_comment_persona_user(persona)
+        persona_user_id = getattr(persona_user, "id", None)
         return {
-            "id": None,
-            "username": persona["username"],
-            "display_name": persona.get("display_name") or persona["username"],
-            "profile_url": _comment_persona_profile_path(persona["username"]),
+            "id": persona_user_id,
+            "username": (getattr(persona_user, "username", "") or persona["username"]).strip(),
+            "display_name": (
+                getattr(getattr(persona_user, "site_profile", None), "display_name", "") or persona.get("display_name") or persona["username"]
+            ),
+            "profile_url": f"/id{persona_user_id}" if persona_user_id else None,
             "is_mask": True,
         }
 
@@ -1104,7 +1162,24 @@ def _serialize_site_comment(comment: PostComment, *, liked_by_me: bool = False, 
 def _comment_personas_for_user(user: User | None) -> list[dict]:
     if not user or not user.is_staff:
         return []
-    return [{"key": item["key"], "username": item["username"]} for item in _COMMENT_PERSONAS]
+    personas: list[dict] = []
+    for item in _COMMENT_PERSONAS:
+        persona_user = _ensure_comment_persona_user(item)
+        personas.append(
+            {
+                "key": item["key"],
+                "username": (getattr(persona_user, "username", "") or item["username"]).strip(),
+            }
+        )
+    return personas
+
+
+def _can_edit_site_comment(user: User | None, comment: PostComment) -> bool:
+    if not user or comment.is_deleted:
+        return False
+    if comment.user_id == user.id:
+        return True
+    return bool(user.is_staff and getattr(comment, "persona_key", ""))
 
 
 def _maybe_notify_author_comment(post: Post, comment: PostComment) -> None:
@@ -5198,75 +5273,6 @@ def public_user_profile(request: HttpRequest, user_id: int) -> HttpResponse:
     )
 
 
-def comment_persona_profile(request: HttpRequest, username: str) -> HttpResponse:
-    if request.method != "GET":
-        return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)
-
-    persona = _comment_persona_by_username(username)
-    if not persona:
-        return JsonResponse({"ok": False, "error": "persona not found"}, status=404)
-
-    limit_raw = request.GET.get("limit", "20")
-    offset_raw = request.GET.get("offset", "0")
-    try:
-        limit = min(max(int(limit_raw), 1), 100)
-    except ValueError:
-        limit = 20
-    try:
-        offset = max(int(offset_raw), 0)
-    except ValueError:
-        offset = 0
-
-    now = timezone.now()
-    comments_qs = (
-        PostComment.objects.filter(
-            persona_username__iexact=persona["username"],
-            is_deleted=False,
-            post__is_blocked=False,
-            post__is_pending=False,
-            post__author__is_blocked=False,
-        )
-        .filter(_publish_ready_filter(now))
-        .select_related("post", "post__author", "user")
-        .annotate(likes_count=Count("likes", distinct=True))
-        .order_by("-created_at")
-    )
-    total_comments = comments_qs.count()
-    comments = list(comments_qs[offset : offset + limit])
-    unique_posts_count = comments_qs.values("post_id").distinct().count() if total_comments else 0
-
-    payload_comments = [
-        {
-            "id": comment.id,
-            "body": comment.body,
-            "created_at": comment.created_at.isoformat(),
-            "likes_count": comment.likes_count,
-            "post": {
-                "id": comment.post_id,
-                "title": _post_display_title(comment.post),
-                "path": _post_public_path(comment.post),
-            },
-        }
-        for comment in comments
-    ]
-
-    return JsonResponse(
-        {
-            "ok": True,
-            "persona": {
-                "username": persona["username"],
-                "display_name": persona.get("display_name") or persona["username"],
-                "bio": persona.get("bio") or "",
-                "profile_url": _comment_persona_profile_path(persona["username"]),
-                "comments_count": total_comments,
-                "posts_count": unique_posts_count,
-            },
-            "comments": payload_comments,
-            "total_comments": total_comments,
-        }
-    )
-
-
 @csrf_exempt
 def author_verification_code(request: HttpRequest) -> HttpResponse:
     user = _get_user_from_request(request)
@@ -6030,7 +6036,7 @@ def post_comments(request: HttpRequest, post_id: int) -> HttpResponse:
                 comment,
                 liked_by_me=comment.id in liked_ids,
                 likes_count=comment.likes_count,
-                can_edit=bool(user and comment.user_id == user.id and not comment.is_deleted),
+                can_edit=_can_edit_site_comment(user, comment),
             )
             for comment in comments
         ]
@@ -6070,16 +6076,21 @@ def post_comments(request: HttpRequest, post_id: int) -> HttpResponse:
             return JsonResponse({"ok": False, "error": "parent comment not found"}, status=404)
 
     persona = None
+    comment_user = user
     if mask_key:
         if not user.is_staff:
             return JsonResponse({"ok": False, "error": "forbidden"}, status=403)
         persona = _COMMENT_PERSONAS_BY_KEY.get(mask_key)
         if not persona:
             return JsonResponse({"ok": False, "error": "invalid comment mask"}, status=400)
+        persona_user = _ensure_comment_persona_user(persona)
+        if not persona_user:
+            return JsonResponse({"ok": False, "error": "comment mask unavailable"}, status=500)
+        comment_user = persona_user
 
     comment = PostComment.objects.create(
         post=post,
-        user=user,
+        user=comment_user,
         body=body,
         parent=parent,
         persona_key=(persona or {}).get("key", ""),
@@ -6120,7 +6131,7 @@ def comment_detail(request: HttpRequest, comment_id: int) -> HttpResponse:
     if comment.is_deleted:
         return JsonResponse({"ok": False, "error": "comment not found"}, status=404)
 
-    if comment.user_id != user.id:
+    if not _can_edit_site_comment(user, comment):
         return JsonResponse({"ok": False, "error": "forbidden"}, status=403)
 
     if request.method == "PATCH":

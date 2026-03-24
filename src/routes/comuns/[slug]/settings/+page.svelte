@@ -968,7 +968,7 @@
           </label>
 
           <label class="flex flex-col gap-1">
-            <span class="text-sm text-slate-700 dark:text-zinc-300">Целевая аудитория</span>
+            <span class="text-sm text-slate-700 dark:text-zinc-300">Для кого</span>
             <textarea
               bind:value={settingsDraft.target_audience}
               rows="2"

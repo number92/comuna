@@ -1148,38 +1148,6 @@
             <h1 class="text-2xl font-semibold tracking-tight text-slate-900 dark:text-zinc-100">
               {comun?.name ?? 'Сообщество'}
             </h1>
-            {#if comun?.source_tags?.length}
-              <div
-                class="mt-1 text-sm text-slate-600 dark:text-zinc-400"
-                title="Записи опубликованные с этими тегами на всем сайте будут отображаться в этом сообществе"
-              >
-                Теги сообщества:
-                <span class="font-medium">{comun.source_tags.map((tag) => `#${tag.name}`).join(', ')}</span>
-              </div>
-            {:else if comun?.product_tag}
-              <div
-                class="mt-1 text-sm text-slate-600 dark:text-zinc-400"
-                title="Записи опубликованные с этим тегом на всем сайте будут отображаться в этом сообществе"
-              >
-                Теги сообщества: <span class="font-medium">#{comun.product_tag.name}</span>
-              </div>
-            {/if}
-            {#if comun?.creator?.username}
-              <div class="mt-1 text-xs text-slate-500 dark:text-zinc-400">
-                Создатель:
-                {#if comun?.creator?.id}
-                  <a
-                    href={`/id${comun.creator.id}`}
-                    class="ml-1 text-slate-700 dark:text-zinc-300 hover:underline"
-                    title={comun.creator.username ? `Профиль @${comun.creator.username}` : 'Профиль пользователя'}
-                  >
-                    {userDisplayName(comun.creator)}
-                  </a>
-                {:else}
-                  <span class="ml-1 text-slate-700 dark:text-zinc-300">{userDisplayName(comun.creator)}</span>
-                {/if}
-              </div>
-            {/if}
           </div>
         </div>
         <div class="flex flex-wrap items-center gap-2">
@@ -1235,7 +1203,7 @@
 
       {#if comun?.target_audience}
         <div class="text-sm text-slate-600 dark:text-zinc-400">
-          <span class="font-medium text-slate-800 dark:text-zinc-200">Целевая аудитория:</span>
+          <span class="font-medium text-slate-800 dark:text-zinc-200">Для кого:</span>
           {comun.target_audience}
         </div>
       {/if}
@@ -1588,7 +1556,7 @@
         </label>
 
         <label class="flex flex-col gap-1">
-          <span class="text-sm text-slate-700 dark:text-zinc-300">Целевая аудитория</span>
+          <span class="text-sm text-slate-700 dark:text-zinc-300">Для кого</span>
           <textarea bind:value={settingsDraft.target_audience} rows="2" class="rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"></textarea>
         </label>
 

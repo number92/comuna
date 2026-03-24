@@ -8071,9 +8071,11 @@ def _serialize_comun(
 ) -> dict:
     categories = _comun_categories_list(comun)
     moderators = list(comun.moderators.select_related("site_profile").order_by("username"))
+    excluded_authors = list(comun.excluded_authors.filter(is_blocked=False).order_by("username"))
     product_tag = comun.product_tag
     source_rubric = getattr(comun, "source_rubric", None)
     tags = list(comun.tags.filter(is_active=True).order_by("name"))
+    blocked_tags = list(comun.blocked_tags.filter(is_active=True).order_by("name"))
     welcome_post_payload = None
     if comun.welcome_post_id:
         welcome_post = (
@@ -8129,6 +8131,7 @@ def _serialize_comun(
             for moderator in moderators
         ],
         "moderators_count": len(moderators),
+        "excluded_authors_count": len(excluded_authors),
         "categories": [_serialize_comun_category(category) for category in categories],
         "categories_count": len(categories),
         "product_tag": (
@@ -8157,6 +8160,31 @@ def _serialize_comun(
             }
             for tag in tags
         ],
+        "blocked_tags": [
+            {
+                "id": tag.id,
+                "name": tag.name,
+                "lemma": tag.lemma or _lemmatize_tag(tag.name) or tag.name,
+            }
+            for tag in blocked_tags
+        ],
+        "excluded_tags": [
+            {
+                "id": tag.id,
+                "name": tag.name,
+                "lemma": tag.lemma or _lemmatize_tag(tag.name) or tag.name,
+            }
+            for tag in blocked_tags
+        ],
+        "excluded_authors": [
+            {
+                "id": author.id,
+                "username": author.username,
+                "title": author.title,
+                "avatar_url": _author_avatar_url(request, author),
+            }
+            for author in excluded_authors
+        ],
         "welcome_post_id": comun.welcome_post_id,
         "welcome_post": welcome_post_payload,
         "can_moderate": _comun_is_moderator(current_user, comun),
@@ -8169,6 +8197,9 @@ def _serialize_comun(
         payload["category_ids"] = [category.id for category in categories]
         payload["moderator_ids"] = [moderator.id for moderator in moderators]
         payload["tag_ids"] = [tag.id for tag in tags]
+        payload["excluded_author_ids"] = [author.id for author in excluded_authors]
+        payload["blocked_tag_ids"] = [tag.id for tag in blocked_tags]
+        payload["excluded_tag_ids"] = [tag.id for tag in blocked_tags]
         payload["product_tag_id"] = comun.product_tag_id
         payload["welcome_post_ref"] = str(comun.welcome_post_id or "")
     if include_options:
@@ -8184,6 +8215,15 @@ def _serialize_comun(
                     "lemma": tag.lemma or _lemmatize_tag(tag.name) or tag.name,
                 }
                 for tag in Tag.objects.filter(is_active=True).order_by("name")
+            ],
+            "authors": [
+                {
+                    "id": author.id,
+                    "username": author.username,
+                    "title": author.title,
+                    "avatar_url": _author_avatar_url(request, author),
+                }
+                for author in Author.objects.filter(is_blocked=False).order_by("username")
             ],
             "template_types": _serialize_post_template_type_options(),
             "template_editor_block_options_by_template": (
@@ -8272,7 +8312,7 @@ def _comun_posts_base_queryset(comun: Comun, now=None):
     source_filter = _comun_source_filter(comun)
     if not source_filter:
         return Post.objects.none()
-    return (
+    base_query = (
         Post.objects.filter(
             source_filter,
             is_blocked=False,
@@ -8284,6 +8324,27 @@ def _comun_posts_base_queryset(comun: Comun, now=None):
         .filter(Q(rubric__isnull=True) | Q(rubric__is_hidden=False))
         .distinct()
     )
+    excluded_author_ids = list(
+        comun.excluded_authors.filter(is_blocked=False).values_list("id", flat=True)
+    )
+    if excluded_author_ids:
+        base_query = base_query.exclude(author_id__in=excluded_author_ids)
+
+    blocked_tags = list(comun.blocked_tags.filter(is_active=True))
+    blocked_tag_ids = [tag.id for tag in blocked_tags]
+    blocked_tag_lemmas = [
+        (tag.lemma or _lemmatize_tag(tag.name) or "").strip().lower()
+        for tag in blocked_tags
+        if (tag.lemma or _lemmatize_tag(tag.name) or "").strip()
+    ]
+    if blocked_tag_ids or blocked_tag_lemmas:
+        blocked_tags_filter = Q()
+        if blocked_tag_ids:
+            blocked_tags_filter |= Q(tags__id__in=blocked_tag_ids)
+        if blocked_tag_lemmas:
+            blocked_tags_filter |= Q(tags__lemma__in=blocked_tag_lemmas)
+        base_query = base_query.exclude(blocked_tags_filter).distinct()
+    return base_query
 
 
 def _serialize_comun_activity(
@@ -8474,7 +8535,7 @@ def comuns_list_create(request: HttpRequest) -> HttpResponse:
         comuns = list(
             Comun.objects.filter(is_active=True)
             .select_related("creator", "product_tag", "source_rubric")
-            .prefetch_related("moderators", "categories", "tags")
+            .prefetch_related("moderators", "excluded_authors", "categories", "tags", "blocked_tags")
             .order_by("sort_order", "name")
         )
         payload = [
@@ -8577,7 +8638,7 @@ def comuns_list_create(request: HttpRequest) -> HttpResponse:
     comun = (
         Comun.objects.filter(id=comun.id)
         .select_related("creator", "product_tag", "source_rubric", "welcome_post")
-        .prefetch_related("moderators", "categories", "tags")
+        .prefetch_related("moderators", "excluded_authors", "categories", "tags", "blocked_tags")
         .get()
     )
     return JsonResponse({"ok": True, "comun": _serialize_comun(request, comun, current_user=current_user, include_manage_fields=True)})
@@ -8590,7 +8651,7 @@ def comun_detail_manage(request: HttpRequest, slug: str) -> HttpResponse:
         comun = (
             Comun.objects.filter(slug=slug)
             .select_related("creator", "product_tag", "source_rubric", "welcome_post")
-            .prefetch_related("moderators", "categories", "tags")
+            .prefetch_related("moderators", "excluded_authors", "categories", "tags", "blocked_tags")
             .get()
         )
     except Comun.DoesNotExist:
@@ -8690,6 +8751,14 @@ def comun_detail_manage(request: HttpRequest, slug: str) -> HttpResponse:
         moderator_ids = {int(user_id) for user_id in moderator_ids if int(user_id) > 0}
         comun.moderators.set(User.objects.filter(id__in=moderator_ids, is_active=True))
 
+    if "excluded_author_ids" in body:
+        comun.excluded_authors.set(
+            Author.objects.filter(
+                id__in=_parse_int_list(body.get("excluded_author_ids")),
+                is_blocked=False,
+            )
+        )
+
     if "product_tag_id" in body or "product_tag_name" in body:
         product_tag_id = _parse_post_reference_to_id(body.get("product_tag_id"))
         product_tag_name = str(body.get("product_tag_name") or "").strip()
@@ -8741,10 +8810,18 @@ def comun_detail_manage(request: HttpRequest, slug: str) -> HttpResponse:
             selected_categories[category.id] = category
         comun.categories.set(selected_categories.keys())
 
+    if "blocked_tag_ids" in body or "excluded_tag_ids" in body:
+        blocked_tag_ids = _parse_int_list(
+            body.get("blocked_tag_ids")
+            if "blocked_tag_ids" in body
+            else body.get("excluded_tag_ids")
+        )
+        comun.blocked_tags.set(Tag.objects.filter(id__in=blocked_tag_ids, is_active=True))
+
     comun = (
         Comun.objects.filter(id=comun.id)
         .select_related("creator", "product_tag", "source_rubric", "welcome_post")
-        .prefetch_related("moderators", "categories", "tags")
+        .prefetch_related("moderators", "excluded_authors", "categories", "tags", "blocked_tags")
         .get()
     )
     return JsonResponse(
@@ -8838,7 +8915,7 @@ def comun_posts(request: HttpRequest, slug: str) -> HttpResponse:
         comun = (
             Comun.objects.filter(slug=slug)
             .select_related("creator", "product_tag", "source_rubric", "welcome_post")
-            .prefetch_related("moderators", "categories")
+            .prefetch_related("moderators", "excluded_authors", "categories", "blocked_tags")
             .get()
         )
     except Comun.DoesNotExist:

@@ -431,10 +431,16 @@ export type BackendComun = {
   moderators?: Array<{ id: number; username: string; display_name?: string | null }>
   moderators_count?: number
   moderator_ids?: number[]
+  excluded_authors?: Array<{ id: number; username: string; title?: string | null; avatar_url?: string | null }>
+  excluded_author_ids?: number[]
   categories?: BackendComunCategory[]
   categories_count?: number
   category_ids?: number[]
   product_tag?: { id: number; name: string; lemma?: string | null } | null
+  blocked_tags?: BackendTag[]
+  excluded_tags?: BackendTag[]
+  blocked_tag_ids?: number[]
+  excluded_tag_ids?: number[]
   source_rubric?: { id: number; name: string; slug: string } | null
   product_tag_id?: number | null
   welcome_post_id?: number | null
@@ -445,6 +451,7 @@ export type BackendComun = {
     categories?: BackendComunCategory[]
     tags?: BackendTag[]
     users?: Array<{ id: number; username: string; display_name?: string | null }>
+    authors?: Array<{ id: number; username: string; title?: string | null; avatar_url?: string | null }>
     template_types?: Array<{ value: string; label: string }>
     template_editor_block_options_by_template?: Record<string, Array<{ value: string; label: string }>>
     template_editor_blocks_by_template?: Record<string, string[]>

@@ -655,6 +655,13 @@ class Comun(models.Model):
         verbose_name="Модераторы",
         help_text="Пользователи, которые могут редактировать карточку комуны и категоризировать посты.",
     )
+    excluded_authors = models.ManyToManyField(
+        "Author",
+        blank=True,
+        related_name="excluded_from_comuns",
+        verbose_name="Исключенные авторы",
+        help_text="Авторы, чьи посты не будут попадать в это сообщество.",
+    )
     product_tag = models.ForeignKey(
         Tag,
         null=True,
@@ -684,6 +691,13 @@ class Comun(models.Model):
         related_name="comuns_tagged",
         verbose_name="Теги",
         help_text="Теги сообщества для поиска и сортировки.",
+    )
+    blocked_tags = models.ManyToManyField(
+        Tag,
+        blank=True,
+        related_name="comuns_blocked",
+        verbose_name="Исключенные теги",
+        help_text="Посты с этими тегами не будут попадать в сообщество.",
     )
     website_url = models.URLField(max_length=500, blank=True, verbose_name="Веб-сайт")
     logo_url = models.URLField(max_length=500, blank=True, verbose_name="Логотип (URL)")

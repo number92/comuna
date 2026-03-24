@@ -37,13 +37,21 @@
   let lastAuthRefreshToken: string | null = null
 
   let settingsTagSearch = ''
+  let settingsBlockedTagSearch = ''
   let settingsCategorySearch = ''
   let settingsUserSearch = ''
+  let settingsAuthorSearch = ''
   let settingsCategoryOptions: BackendComunCategory[] = []
   type ComunTagOption = BackendTag & { id: number }
   type ComunUserOption = { id: number; username: string; display_name?: string | null }
+  type ComunAuthorOption = {
+    id: number
+    username: string
+    title?: string | null
+    avatar_url?: string | null
+  }
   type TemplateTypeOption = { value: PostTemplateCode; label: string }
-  type ComunSettingsTabKey = 'description' | 'availability' | 'categories'
+  type ComunSettingsTabKey = 'description' | 'availability' | 'moderation' | 'categories'
   const fallbackTemplateTypeOptions: TemplateTypeOption[] = [
     { value: 'basic', label: 'Пост' },
     { value: 'movie_review', label: 'Кинообзор' },
@@ -53,6 +61,7 @@
   const comunSettingsTabs: Array<{ value: ComunSettingsTabKey; label: string }> = [
     { value: 'description', label: 'Описание' },
     { value: 'availability', label: 'Доступность' },
+    { value: 'moderation', label: 'Модерирование' },
     { value: 'categories', label: 'Категории и шаблоны' },
   ]
   const allowedTemplateCodes = new Set<PostTemplateCode>([
@@ -63,6 +72,7 @@
   ])
   let settingsTagOptions: ComunTagOption[] = []
   let settingsUserOptions: ComunUserOption[] = []
+  let settingsAuthorOptions: ComunAuthorOption[] = []
   let settingsTemplateTypeOptions: TemplateTypeOption[] = fallbackTemplateTypeOptions
   let settingsLogoInput: HTMLInputElement | null = null
   let settingsTab: ComunSettingsTabKey = 'description'
@@ -96,6 +106,19 @@
     normalizeIds(
       ((value?.category_ids as number[] | undefined) ??
         (value?.categories ?? []).map((category) => category.id ?? 0)) as number[]
+    )
+
+  const comunExcludedAuthorIds = (value: BackendComun | null) =>
+    normalizeIds(
+      ((value?.excluded_author_ids as number[] | undefined) ??
+        (value?.excluded_authors ?? []).map((author) => author.id ?? 0)) as number[]
+    )
+
+  const comunBlockedTagIds = (value: BackendComun | null) =>
+    normalizeIds(
+      ((value?.blocked_tag_ids as number[] | undefined) ??
+        (value?.excluded_tag_ids as number[] | undefined) ??
+        (value?.blocked_tags ?? value?.excluded_tags ?? []).map((tag) => tag.id ?? 0)) as number[]
     )
 
   const comunAllowedTemplateTypes = (value: BackendComun | null) =>
@@ -140,6 +163,8 @@
       allowed_template_types: comunAllowedTemplateTypes(value),
       category_ids: comunCategoryIds(value),
       moderator_ids: comunModeratorIds(value),
+      excluded_author_ids: comunExcludedAuthorIds(value),
+      blocked_tag_ids: comunBlockedTagIds(value),
       welcome_post_ref: String(value?.welcome_post_ref ?? value?.welcome_post_id ?? '').trim(),
     })
 
@@ -196,6 +221,7 @@
       settingsCategoryOptions = payload.comun?.options?.categories ?? []
       settingsTagOptions = payload.comun?.options?.tags ?? []
       settingsUserOptions = payload.comun?.options?.users ?? []
+      settingsAuthorOptions = payload.comun?.options?.authors ?? []
       settingsTemplateTypeOptions = normalizeTemplateTypeOptions(payload.comun?.options?.template_types)
       if (!payload.comun?.can_moderate) {
         settingsError = 'Настройки доступны только модераторам сообщества'
@@ -256,6 +282,70 @@
   const removeDraftModerator = (userId: number) => {
     if (!settingsDraft || !canManageComunModerators()) return
     setDraftModeratorIds(comunModeratorIds(settingsDraft).filter((id) => id !== userId))
+  }
+
+  const setDraftExcludedAuthorIds = (ids: number[]) => {
+    if (!settingsDraft) return
+    const normalizedIds = normalizeIds(ids)
+    const byId = new Map<number, ComunAuthorOption>()
+    for (const author of settingsAuthorOptions) byId.set(author.id, author)
+    for (const author of settingsDraft.excluded_authors ?? []) {
+      byId.set(author.id, author)
+    }
+    settingsDraft = {
+      ...settingsDraft,
+      excluded_author_ids: normalizedIds,
+      excluded_authors: normalizedIds.map((id) => {
+        const author = byId.get(id)
+        return {
+          id,
+          username: author?.username ?? String(id),
+          title: author?.title ?? null,
+          avatar_url: author?.avatar_url ?? null,
+        }
+      }),
+    }
+  }
+
+  const addDraftExcludedAuthor = (authorId: number) => {
+    if (!settingsDraft) return
+    setDraftExcludedAuthorIds([...comunExcludedAuthorIds(settingsDraft), authorId])
+  }
+
+  const removeDraftExcludedAuthor = (authorId: number) => {
+    if (!settingsDraft) return
+    setDraftExcludedAuthorIds(comunExcludedAuthorIds(settingsDraft).filter((id) => id !== authorId))
+  }
+
+  const setDraftBlockedTagIds = (ids: number[]) => {
+    if (!settingsDraft) return
+    const normalizedIds = normalizeIds(ids)
+    const byId = new Map<number, ComunTagOption>()
+    for (const tag of settingsTagOptions) byId.set(tag.id, tag)
+    for (const tag of settingsDraft.blocked_tags ?? settingsDraft.excluded_tags ?? []) {
+      byId.set(tag.id, tag)
+    }
+    const selectedTags = normalizedIds
+      .map((id) => byId.get(id))
+      .filter(Boolean)
+      .map((tag) => ({ id: tag!.id, name: tag!.name, lemma: tag!.lemma ?? null }))
+    settingsDraft = {
+      ...settingsDraft,
+      blocked_tag_ids: normalizedIds,
+      excluded_tag_ids: normalizedIds,
+      blocked_tags: selectedTags,
+      excluded_tags: selectedTags,
+    }
+  }
+
+  const addDraftBlockedTag = (tagId: number) => {
+    if (!settingsDraft) return
+    setDraftBlockedTagIds([...comunBlockedTagIds(settingsDraft), tagId])
+  }
+
+  const removeDraftBlockedTag = (tagId: number) => {
+    if (!settingsDraft) return
+    setDraftBlockedTagIds(comunBlockedTagIds(settingsDraft).filter((id) => id !== tagId))
   }
 
   const chooseDraftTag = (tag: ComunTagOption) => {
@@ -351,14 +441,34 @@
       )
     })
     .slice(0, 30)
+  $: normalizedBlockedTagSearch = settingsBlockedTagSearch.trim().toLowerCase()
+  $: blockedTagIdSet = new Set<number>(comunBlockedTagIds(settingsDraft))
+  $: filteredBlockedTagOptions = (settingsTagOptions ?? [])
+    .filter((tag) => {
+      if (!normalizedBlockedTagSearch) return false
+      return [tag.name, tag.lemma ?? ''].some((value) =>
+        value.toLowerCase().includes(normalizedBlockedTagSearch)
+      )
+    })
+    .slice(0, 30)
   $: normalizedUserSearch = settingsUserSearch.trim().toLowerCase()
   $: draftModeratorIdSet = new Set<number>(comunModeratorIds(settingsDraft))
+  $: draftExcludedAuthorIdSet = new Set<number>(comunExcludedAuthorIds(settingsDraft))
   $: settingsHasChanges = settingsComparable(settingsDraft) !== settingsComparable(comun)
   $: filteredUserOptions = (settingsUserOptions ?? [])
     .filter((user) => {
       if (!normalizedUserSearch) return false
       return [user.username, user.display_name ?? ''].some((value) =>
         value.toLowerCase().includes(normalizedUserSearch)
+      )
+    })
+    .slice(0, 50)
+  $: normalizedAuthorSearch = settingsAuthorSearch.trim().toLowerCase()
+  $: filteredAuthorOptions = (settingsAuthorOptions ?? [])
+    .filter((author) => {
+      if (!normalizedAuthorSearch) return false
+      return [author.username, author.title ?? ''].some((value) =>
+        value.toLowerCase().includes(normalizedAuthorSearch)
       )
     })
     .slice(0, 50)
@@ -373,6 +483,19 @@
     }
   })
   $: selectedProductTag = settingsDraft?.product_tag ?? null
+  $: selectedBlockedTags =
+    (settingsDraft?.blocked_tags?.length ? settingsDraft.blocked_tags : settingsDraft?.excluded_tags) ?? []
+  $: selectedExcludedAuthors = comunExcludedAuthorIds(settingsDraft).map((id) => {
+    const fromOptions = settingsAuthorOptions.find((author) => author.id === id)
+    if (fromOptions) return fromOptions
+    const fromDraft = settingsDraft?.excluded_authors?.find((author) => author.id === id)
+    return {
+      id,
+      username: fromDraft?.username ?? String(id),
+      title: fromDraft?.title ?? null,
+      avatar_url: fromDraft?.avatar_url ?? null,
+    }
+  })
 
   const createTagAndChooseDraft = async () => {
     const tagName = normalizeTagInput(settingsTagSearch)
@@ -485,7 +608,9 @@
           hide_from_home: canManageComunModerators() ? Boolean(settingsDraft.hide_from_home) : undefined,
           hide_from_fresh: canManageComunModerators() ? Boolean(settingsDraft.hide_from_fresh) : undefined,
           moderator_ids: canManageComunModerators() ? comunModeratorIds(settingsDraft) : undefined,
+          excluded_author_ids: comunExcludedAuthorIds(settingsDraft),
           product_tag_id: settingsDraft.product_tag_id ?? null,
+          blocked_tag_ids: comunBlockedTagIds(settingsDraft),
           category_ids:
             settingsDraft.category_ids ??
             (settingsDraft.categories ?? []).map((category) => category.id),
@@ -502,6 +627,7 @@
         payload.comun?.options?.categories ?? payload.comun?.categories ?? settingsCategoryOptions
       settingsTagOptions = payload.comun?.options?.tags ?? settingsTagOptions
       settingsUserOptions = payload.comun?.options?.users ?? settingsUserOptions
+      settingsAuthorOptions = payload.comun?.options?.authors ?? settingsAuthorOptions
       settingsTemplateTypeOptions = normalizeTemplateTypeOptions(
         payload.comun?.options?.template_types
       )
@@ -747,65 +873,6 @@
             ></textarea>
           </label>
 
-          <div class="flex flex-col gap-2">
-            <div class="text-sm text-slate-700 dark:text-zinc-300">Тег продукта (посты с этим тегом попадут в сообщество)</div>
-            <input
-              bind:value={settingsTagSearch}
-              placeholder="Поиск тега..."
-              class="rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"
-            />
-            <div class="flex flex-wrap items-center gap-2">
-              {#if selectedProductTag}
-                <span class="rounded-full bg-slate-100 dark:bg-zinc-800 px-3 py-1 text-sm">
-                  #{selectedProductTag.name}
-                </span>
-                <Button color="ghost" size="sm" on:click={clearDraftTag}>Сбросить</Button>
-              {:else}
-                <span class="text-sm text-slate-500 dark:text-zinc-400">Тег не выбран</span>
-              {/if}
-            </div>
-            <div class="max-h-48 overflow-auto rounded-xl border border-slate-200 dark:border-zinc-800 divide-y divide-slate-100 dark:divide-zinc-800">
-              {#if normalizedTagCreateValue && !hasExactTagMatch}
-                <div class="flex items-center justify-between gap-2 px-3 py-2 bg-slate-50 dark:bg-zinc-900/60">
-                  <div class="min-w-0 text-sm">
-                    <div class="font-medium text-slate-900 dark:text-zinc-100 truncate">
-                      Добавить тег #{normalizedTagCreateValue}
-                    </div>
-                    <div class="text-xs text-slate-500 dark:text-zinc-400">
-                      Создаст тег в системе и выберет его для сообщества
-                    </div>
-                  </div>
-                  <Button size="sm" on:click={createTagAndChooseDraft} disabled={settingsTagCreating || settingsSaving}>
-                    {settingsTagCreating ? '...' : 'Добавить'}
-                  </Button>
-                </div>
-              {/if}
-              {#if filteredTagOptions.length}
-                {#each filteredTagOptions as tag}
-                  <div class="flex items-center justify-between gap-2 px-3 py-2 text-sm">
-                    <div class="min-w-0">
-                      <div class="font-medium text-slate-900 dark:text-zinc-100 truncate">{tag.name}</div>
-                      {#if tag.lemma}
-                        <div class="text-xs text-slate-500 dark:text-zinc-400 truncate">{tag.lemma}</div>
-                      {/if}
-                    </div>
-                    <Button size="sm" on:click={() => chooseDraftTag(tag)} disabled={settingsTagCreating || settingsSaving}>Выбрать</Button>
-                  </div>
-                {/each}
-              {:else}
-                {#if normalizedTagCreateValue && !hasExactTagMatch}
-                  <div class="px-3 py-2 text-sm text-slate-500 dark:text-zinc-400">
-                    Можно добавить новый тег выше
-                  </div>
-                {:else if normalizedTagSearch}
-                  <div class="px-3 py-2 text-sm text-slate-500 dark:text-zinc-400">
-                    Ничего не найдено
-                  </div>
-                {/if}
-              {/if}
-            </div>
-          </div>
-
           <label class="flex flex-col gap-1">
             <span class="text-sm text-slate-700 dark:text-zinc-300">Приветственный пост (ID или ссылка на пост)</span>
             <input
@@ -889,6 +956,69 @@
             </div>
           {/if}
 
+        {:else if settingsTab === 'moderation'}
+          <div class="flex flex-col gap-2">
+            <div class="text-sm text-slate-700 dark:text-zinc-300">Тег продукта</div>
+            <div class="text-xs text-slate-500 dark:text-zinc-400">
+              Посты с этим тегом автоматически попадают в сообщество, если не отфильтрованы правилами ниже.
+            </div>
+            <input
+              bind:value={settingsTagSearch}
+              placeholder="Поиск тега..."
+              class="rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"
+            />
+            <div class="flex flex-wrap items-center gap-2">
+              {#if selectedProductTag}
+                <span class="rounded-full bg-slate-100 dark:bg-zinc-800 px-3 py-1 text-sm">
+                  #{selectedProductTag.name}
+                </span>
+                <Button color="ghost" size="sm" on:click={clearDraftTag}>Сбросить</Button>
+              {:else}
+                <span class="text-sm text-slate-500 dark:text-zinc-400">Тег не выбран</span>
+              {/if}
+            </div>
+            <div class="max-h-48 overflow-auto rounded-xl border border-slate-200 dark:border-zinc-800 divide-y divide-slate-100 dark:divide-zinc-800">
+              {#if normalizedTagCreateValue && !hasExactTagMatch}
+                <div class="flex items-center justify-between gap-2 px-3 py-2 bg-slate-50 dark:bg-zinc-900/60">
+                  <div class="min-w-0 text-sm">
+                    <div class="font-medium text-slate-900 dark:text-zinc-100 truncate">
+                      Добавить тег #{normalizedTagCreateValue}
+                    </div>
+                    <div class="text-xs text-slate-500 dark:text-zinc-400">
+                      Создаст тег в системе и выберет его для сообщества
+                    </div>
+                  </div>
+                  <Button size="sm" on:click={createTagAndChooseDraft} disabled={settingsTagCreating || settingsSaving}>
+                    {settingsTagCreating ? '...' : 'Добавить'}
+                  </Button>
+                </div>
+              {/if}
+              {#if filteredTagOptions.length}
+                {#each filteredTagOptions as tag}
+                  <div class="flex items-center justify-between gap-2 px-3 py-2 text-sm">
+                    <div class="min-w-0">
+                      <div class="font-medium text-slate-900 dark:text-zinc-100 truncate">{tag.name}</div>
+                      {#if tag.lemma}
+                        <div class="text-xs text-slate-500 dark:text-zinc-400 truncate">{tag.lemma}</div>
+                      {/if}
+                    </div>
+                    <Button size="sm" on:click={() => chooseDraftTag(tag)} disabled={settingsTagCreating || settingsSaving}>Выбрать</Button>
+                  </div>
+                {/each}
+              {:else}
+                {#if normalizedTagCreateValue && !hasExactTagMatch}
+                  <div class="px-3 py-2 text-sm text-slate-500 dark:text-zinc-400">
+                    Можно добавить новый тег выше
+                  </div>
+                {:else if normalizedTagSearch}
+                  <div class="px-3 py-2 text-sm text-slate-500 dark:text-zinc-400">
+                    Ничего не найдено
+                  </div>
+                {/if}
+              {/if}
+            </div>
+          </div>
+
           {#if canManageComunModerators()}
             <div class="flex flex-col gap-2">
               <div class="text-sm text-slate-700 dark:text-zinc-300">Модераторы сообщества</div>
@@ -941,16 +1071,118 @@
                       </Button>
                     </div>
                   {/each}
-                {:else}
-                  {#if normalizedUserSearch}
-                    <div class="px-3 py-2 text-sm text-slate-500 dark:text-zinc-400">
-                      Пользователи не найдены
-                    </div>
-                  {/if}
+                {:else if normalizedUserSearch}
+                  <div class="px-3 py-2 text-sm text-slate-500 dark:text-zinc-400">
+                    Пользователи не найдены
+                  </div>
                 {/if}
               </div>
             </div>
           {/if}
+
+          <div class="flex flex-col gap-2">
+            <div class="text-sm text-slate-700 dark:text-zinc-300">Черный список авторов</div>
+            <div class="text-xs text-slate-500 dark:text-zinc-400">
+              Посты этих авторов будут исключаться из сообщества, даже если подходят по тегу или исходной рубрике.
+            </div>
+            <input
+              bind:value={settingsAuthorSearch}
+              placeholder="Поиск автора по логину или названию..."
+              class="rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"
+            />
+            <div class="flex flex-col gap-2">
+              <div class="text-xs uppercase tracking-wide text-slate-500 dark:text-zinc-400">
+                Исключенные авторы
+              </div>
+              {#if selectedExcludedAuthors.length}
+                <div class="flex flex-col gap-2">
+                  {#each selectedExcludedAuthors as author}
+                    <div class="flex items-center justify-between gap-2 rounded-xl border border-slate-200 dark:border-zinc-800 px-3 py-2">
+                      <div class="min-w-0">
+                        <div class="text-sm font-medium text-slate-900 dark:text-zinc-100 truncate">
+                          {author.title || author.username}
+                        </div>
+                        <div class="text-xs text-slate-500 dark:text-zinc-400 truncate">@{author.username}</div>
+                      </div>
+                      <Button color="ghost" size="sm" on:click={() => removeDraftExcludedAuthor(author.id)}>
+                        Убрать
+                      </Button>
+                    </div>
+                  {/each}
+                </div>
+              {:else}
+                <div class="rounded-xl border border-slate-200 dark:border-zinc-800 px-3 py-2 text-sm text-slate-500 dark:text-zinc-400">
+                  Пока никого не исключили
+                </div>
+              {/if}
+            </div>
+            <div class="max-h-52 overflow-auto rounded-xl border border-slate-200 dark:border-zinc-800 divide-y divide-slate-100 dark:divide-zinc-800">
+              {#if filteredAuthorOptions.length}
+                {#each filteredAuthorOptions as author}
+                  <div class="flex items-center justify-between gap-2 px-3 py-2">
+                    <div class="min-w-0">
+                      <div class="text-sm font-medium text-slate-900 dark:text-zinc-100 truncate">
+                        {author.title || author.username}
+                      </div>
+                      <div class="text-xs text-slate-500 dark:text-zinc-400 truncate">@{author.username}</div>
+                    </div>
+                    <Button size="sm" on:click={() => addDraftExcludedAuthor(author.id)} disabled={draftExcludedAuthorIdSet.has(author.id)}>
+                      {draftExcludedAuthorIdSet.has(author.id) ? 'Добавлен' : 'Добавить'}
+                    </Button>
+                  </div>
+                {/each}
+              {:else if normalizedAuthorSearch}
+                <div class="px-3 py-2 text-sm text-slate-500 dark:text-zinc-400">
+                  Авторы не найдены
+                </div>
+              {/if}
+            </div>
+          </div>
+
+          <div class="flex flex-col gap-2">
+            <div class="text-sm text-slate-700 dark:text-zinc-300">Черный список тегов</div>
+            <div class="text-xs text-slate-500 dark:text-zinc-400">
+              Посты с этими тегами будут исключаться из сообщества.
+            </div>
+            <input
+              bind:value={settingsBlockedTagSearch}
+              placeholder="Поиск тега..."
+              class="rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"
+            />
+            <div class="flex flex-wrap gap-2">
+              {#if selectedBlockedTags.length}
+                {#each selectedBlockedTags as tag}
+                  <span class="inline-flex items-center gap-2 rounded-full bg-slate-100 dark:bg-zinc-800 px-3 py-1 text-sm">
+                    #{tag.name}
+                    <button type="button" class="text-slate-500 hover:text-slate-900 dark:hover:text-white" on:click={() => removeDraftBlockedTag(tag.id)}>×</button>
+                  </span>
+                {/each}
+              {:else}
+                <span class="text-sm text-slate-500 dark:text-zinc-400">Черный список тегов пуст</span>
+              {/if}
+            </div>
+            <div class="max-h-48 overflow-auto rounded-xl border border-slate-200 dark:border-zinc-800 divide-y divide-slate-100 dark:divide-zinc-800">
+              {#if filteredBlockedTagOptions.length}
+                {#each filteredBlockedTagOptions as tag}
+                  <div class="flex items-center justify-between gap-2 px-3 py-2 text-sm">
+                    <div class="min-w-0">
+                      <div class="font-medium text-slate-900 dark:text-zinc-100 truncate">{tag.name}</div>
+                      {#if tag.lemma}
+                        <div class="text-xs text-slate-500 dark:text-zinc-400 truncate">{tag.lemma}</div>
+                      {/if}
+                    </div>
+                    <Button size="sm" on:click={() => addDraftBlockedTag(tag.id)} disabled={blockedTagIdSet.has(tag.id)}>
+                      {blockedTagIdSet.has(tag.id) ? 'Добавлен' : 'Добавить'}
+                    </Button>
+                  </div>
+                {/each}
+              {:else if normalizedBlockedTagSearch}
+                <div class="px-3 py-2 text-sm text-slate-500 dark:text-zinc-400">
+                  Теги не найдены
+                </div>
+              {/if}
+            </div>
+          </div>
         {:else}
           <div class="flex flex-col gap-2">
             <div class="text-sm text-slate-700 dark:text-zinc-300">Доступные шаблоны публикаций</div>

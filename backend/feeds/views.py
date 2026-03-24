@@ -8072,7 +8072,8 @@ def _serialize_comun(
     categories = _comun_categories_list(comun)
     moderators = list(comun.moderators.select_related("site_profile").order_by("username"))
     excluded_authors = list(comun.excluded_authors.filter(is_blocked=False).order_by("username"))
-    product_tag = comun.product_tag
+    source_tags = _comun_source_tags_list(comun)
+    product_tag = source_tags[0] if source_tags else comun.product_tag
     source_rubric = getattr(comun, "source_rubric", None)
     tags = list(comun.tags.filter(is_active=True).order_by("name"))
     blocked_tags = list(comun.blocked_tags.filter(is_active=True).order_by("name"))
@@ -8134,6 +8135,14 @@ def _serialize_comun(
         "excluded_authors_count": len(excluded_authors),
         "categories": [_serialize_comun_category(category) for category in categories],
         "categories_count": len(categories),
+        "source_tags": [
+            {
+                "id": tag.id,
+                "name": tag.name,
+                "lemma": tag.lemma or _lemmatize_tag(tag.name) or tag.name,
+            }
+            for tag in source_tags
+        ],
         "product_tag": (
             {
                 "id": product_tag.id,
@@ -8197,6 +8206,7 @@ def _serialize_comun(
         payload["category_ids"] = [category.id for category in categories]
         payload["moderator_ids"] = [moderator.id for moderator in moderators]
         payload["tag_ids"] = [tag.id for tag in tags]
+        payload["source_tag_ids"] = [tag.id for tag in source_tags]
         payload["excluded_author_ids"] = [author.id for author in excluded_authors]
         payload["blocked_tag_ids"] = [tag.id for tag in blocked_tags]
         payload["excluded_tag_ids"] = [tag.id for tag in blocked_tags]
@@ -8261,12 +8271,24 @@ def _comun_product_tag_filter(product_tag: Tag | None) -> Q | None:
     return filters
 
 
+def _comun_source_tags_list(comun: Comun) -> list[Tag]:
+    source_tags = list(comun.source_tags.filter(is_active=True).order_by("name"))
+    if source_tags:
+        return source_tags
+    product_tag = comun.product_tag
+    if product_tag and product_tag.is_active:
+        return [product_tag]
+    return []
+
+
 def _comun_source_filter(comun: Comun) -> Q | None:
     combined_filter = Q()
     has_source = False
 
-    tag_filter = _comun_product_tag_filter(comun.product_tag)
-    if tag_filter is not None:
+    for source_tag in _comun_source_tags_list(comun):
+        tag_filter = _comun_product_tag_filter(source_tag)
+        if tag_filter is None:
+            continue
         combined_filter |= tag_filter
         has_source = True
 
@@ -8535,7 +8557,7 @@ def comuns_list_create(request: HttpRequest) -> HttpResponse:
         comuns = list(
             Comun.objects.filter(is_active=True)
             .select_related("creator", "product_tag", "source_rubric")
-            .prefetch_related("moderators", "excluded_authors", "categories", "tags", "blocked_tags")
+            .prefetch_related("moderators", "excluded_authors", "categories", "tags", "source_tags", "blocked_tags")
             .order_by("sort_order", "name")
         )
         payload = [
@@ -8585,6 +8607,10 @@ def comuns_list_create(request: HttpRequest) -> HttpResponse:
     tag_ids = _parse_int_list(body.get("tag_ids"))[:5]
     raw_tag_names = body.get("tag_names") if isinstance(body.get("tag_names"), list) else []
     category_ids = _parse_int_list(body.get("category_ids"))
+    source_tag_ids = _parse_int_list(body.get("source_tag_ids"))[:5]
+    raw_source_tag_names = (
+        body.get("source_tag_names") if isinstance(body.get("source_tag_names"), list) else []
+    )
     product_tag_id = _parse_post_reference_to_id(body.get("product_tag_id"))
     product_tag_name = str(body.get("product_tag_name") or "").strip()
     welcome_post_id = _parse_post_reference_to_id(body.get("welcome_post_id") or body.get("welcome_post_ref"))
@@ -8603,6 +8629,29 @@ def comuns_list_create(request: HttpRequest) -> HttpResponse:
         selected_tag_ids.append(tag.id)
         if len(selected_tag_ids) >= 5:
             break
+    selected_source_tag_ids: list[int] = []
+    seen_source_tag_ids: set[int] = set()
+    for tag_id in source_tag_ids:
+        if tag_id in seen_source_tag_ids:
+            continue
+        seen_source_tag_ids.add(tag_id)
+        selected_source_tag_ids.append(tag_id)
+    if product_tag_id and product_tag_id not in seen_source_tag_ids:
+        seen_source_tag_ids.add(product_tag_id)
+        selected_source_tag_ids.append(product_tag_id)
+    for raw_source_tag_name in raw_source_tag_names:
+        tag, _created = _ensure_tag_by_name(str(raw_source_tag_name or ""))
+        if not tag or tag.id in seen_source_tag_ids:
+            continue
+        seen_source_tag_ids.add(tag.id)
+        selected_source_tag_ids.append(tag.id)
+        if len(selected_source_tag_ids) >= 5:
+            break
+    if product_tag_name and len(selected_source_tag_ids) < 5:
+        tag, _created = _ensure_tag_by_name(product_tag_name)
+        if tag and tag.id not in seen_source_tag_ids:
+            selected_source_tag_ids.append(tag.id)
+            seen_source_tag_ids.add(tag.id)
 
     comun = Comun.objects.create(
         name=name,
@@ -8621,14 +8670,10 @@ def comuns_list_create(request: HttpRequest) -> HttpResponse:
         )
     if selected_tag_ids:
         comun.tags.set(Tag.objects.filter(id__in=selected_tag_ids, is_active=True))
-    if product_tag_id:
-        product_tag = Tag.objects.filter(id=product_tag_id, is_active=True).first()
-        if product_tag:
-            comun.product_tag = product_tag
-    elif product_tag_name:
-        product_tag, _created = _ensure_tag_by_name(product_tag_name)
-        if product_tag:
-            comun.product_tag = product_tag
+    if selected_source_tag_ids:
+        source_tag_queryset = Tag.objects.filter(id__in=selected_source_tag_ids, is_active=True)
+        comun.source_tags.set(source_tag_queryset)
+        comun.product_tag = source_tag_queryset.order_by("name").first()
     if welcome_post_id:
         welcome_post = Post.objects.filter(id=welcome_post_id, is_blocked=False, author__is_blocked=False).first()
         if welcome_post:
@@ -8638,7 +8683,7 @@ def comuns_list_create(request: HttpRequest) -> HttpResponse:
     comun = (
         Comun.objects.filter(id=comun.id)
         .select_related("creator", "product_tag", "source_rubric", "welcome_post")
-        .prefetch_related("moderators", "excluded_authors", "categories", "tags", "blocked_tags")
+        .prefetch_related("moderators", "excluded_authors", "categories", "tags", "source_tags", "blocked_tags")
         .get()
     )
     return JsonResponse({"ok": True, "comun": _serialize_comun(request, comun, current_user=current_user, include_manage_fields=True)})
@@ -8651,7 +8696,7 @@ def comun_detail_manage(request: HttpRequest, slug: str) -> HttpResponse:
         comun = (
             Comun.objects.filter(slug=slug)
             .select_related("creator", "product_tag", "source_rubric", "welcome_post")
-            .prefetch_related("moderators", "excluded_authors", "categories", "tags", "blocked_tags")
+            .prefetch_related("moderators", "excluded_authors", "categories", "tags", "source_tags", "blocked_tags")
             .get()
         )
     except Comun.DoesNotExist:
@@ -8759,21 +8804,44 @@ def comun_detail_manage(request: HttpRequest, slug: str) -> HttpResponse:
             )
         )
 
-    if "product_tag_id" in body or "product_tag_name" in body:
-        product_tag_id = _parse_post_reference_to_id(body.get("product_tag_id"))
-        product_tag_name = str(body.get("product_tag_name") or "").strip()
-        if product_tag_id:
-            product_tag = Tag.objects.filter(id=product_tag_id, is_active=True).first()
-            if not product_tag:
-                return JsonResponse({"ok": False, "error": "tag not found"}, status=400)
-            comun.product_tag = product_tag
-        elif product_tag_name:
-            product_tag, _created = _ensure_tag_by_name(product_tag_name)
-            if not product_tag:
-                return JsonResponse({"ok": False, "error": "tag not found"}, status=400)
-            comun.product_tag = product_tag
-        else:
-            comun.product_tag = None
+    if (
+        "source_tag_ids" in body
+        or "source_tag_names" in body
+        or "product_tag_id" in body
+        or "product_tag_name" in body
+    ):
+        source_tag_ids = _parse_int_list(body.get("source_tag_ids"))[:5]
+        raw_source_tag_names = (
+            body.get("source_tag_names") if isinstance(body.get("source_tag_names"), list) else []
+        )
+        if "product_tag_id" in body:
+            product_tag_id = _parse_post_reference_to_id(body.get("product_tag_id"))
+            if product_tag_id and product_tag_id not in source_tag_ids:
+                source_tag_ids.append(product_tag_id)
+        if "product_tag_name" in body:
+            product_tag_name = str(body.get("product_tag_name") or "").strip()
+            if product_tag_name:
+                raw_source_tag_names = [*raw_source_tag_names, product_tag_name]
+
+        selected_source_tag_ids: list[int] = []
+        seen_source_tag_ids: set[int] = set()
+        for tag_id in source_tag_ids:
+            if tag_id in seen_source_tag_ids:
+                continue
+            seen_source_tag_ids.add(tag_id)
+            selected_source_tag_ids.append(tag_id)
+        for raw_source_tag_name in raw_source_tag_names:
+            tag, _created = _ensure_tag_by_name(str(raw_source_tag_name or ""))
+            if not tag or tag.id in seen_source_tag_ids:
+                continue
+            seen_source_tag_ids.add(tag.id)
+            selected_source_tag_ids.append(tag.id)
+            if len(selected_source_tag_ids) >= 5:
+                break
+
+        source_tags_queryset = Tag.objects.filter(id__in=selected_source_tag_ids, is_active=True)
+        comun.source_tags.set(source_tags_queryset)
+        comun.product_tag = source_tags_queryset.order_by("name").first()
 
     if "welcome_post_id" in body or "welcome_post_ref" in body:
         welcome_post_id = _parse_post_reference_to_id(
@@ -8821,7 +8889,7 @@ def comun_detail_manage(request: HttpRequest, slug: str) -> HttpResponse:
     comun = (
         Comun.objects.filter(id=comun.id)
         .select_related("creator", "product_tag", "source_rubric", "welcome_post")
-        .prefetch_related("moderators", "excluded_authors", "categories", "tags", "blocked_tags")
+        .prefetch_related("moderators", "excluded_authors", "categories", "tags", "source_tags", "blocked_tags")
         .get()
     )
     return JsonResponse(
@@ -8915,7 +8983,7 @@ def comun_posts(request: HttpRequest, slug: str) -> HttpResponse:
         comun = (
             Comun.objects.filter(slug=slug)
             .select_related("creator", "product_tag", "source_rubric", "welcome_post")
-            .prefetch_related("moderators", "excluded_authors", "categories", "blocked_tags")
+            .prefetch_related("moderators", "excluded_authors", "categories", "source_tags", "blocked_tags")
             .get()
         )
     except Comun.DoesNotExist:
@@ -9033,11 +9101,15 @@ def comun_posts(request: HttpRequest, slug: str) -> HttpResponse:
         raw_explicit_tags = _parse_tag_payload(payload.get("tags"))
         explicit_tags: list[str] = []
         seen_tag_keys: set[str] = set()
-        product_tag_name = (comun.product_tag.name if comun.product_tag else "").strip()
-        if product_tag_name:
-            product_tag_key = product_tag_name.lower()
-            explicit_tags.append(product_tag_name)
-            seen_tag_keys.add(product_tag_key)
+        for source_tag in _comun_source_tags_list(comun):
+            source_tag_name = (source_tag.name or "").strip()
+            if not source_tag_name:
+                continue
+            source_tag_key = source_tag_name.lower()
+            if source_tag_key in seen_tag_keys:
+                continue
+            explicit_tags.append(source_tag_name)
+            seen_tag_keys.add(source_tag_key)
         for tag_name in raw_explicit_tags:
             key = (tag_name or "").strip().lower()
             if not key or key in seen_tag_keys:

@@ -1140,12 +1140,20 @@
             <h1 class="text-2xl font-semibold tracking-tight text-slate-900 dark:text-zinc-100">
               {comun?.name ?? 'Сообщество'}
             </h1>
-            {#if comun?.product_tag}
+            {#if comun?.source_tags?.length}
               <div
                 class="mt-1 text-sm text-slate-600 dark:text-zinc-400"
-                title="Записи опубликованные с данным тегом на всем сайте будут отображаться в этом сообществе"
+                title="Записи опубликованные с этими тегами на всем сайте будут отображаться в этом сообществе"
               >
-                Тег продукта: <span class="font-medium">#{comun.product_tag.name}</span>
+                Теги сообщества:
+                <span class="font-medium">{comun.source_tags.map((tag) => `#${tag.name}`).join(', ')}</span>
+              </div>
+            {:else if comun?.product_tag}
+              <div
+                class="mt-1 text-sm text-slate-600 dark:text-zinc-400"
+                title="Записи опубликованные с этим тегом на всем сайте будут отображаться в этом сообществе"
+              >
+                Теги сообщества: <span class="font-medium">#{comun.product_tag.name}</span>
               </div>
             {/if}
             {#if comun?.creator?.username}
@@ -1464,7 +1472,9 @@
     {/if}
   {:else}
     <div class="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white/95 dark:bg-zinc-900/85 p-6 text-slate-600 dark:text-zinc-400">
-      {#if comun?.product_tag}
+      {#if comun?.source_tags?.length}
+        В этом сообществе пока нет публикаций по тегам {comun.source_tags.map((tag) => `#${tag.name}`).join(', ')}.
+      {:else if comun?.product_tag}
         В этом сообществе пока нет публикаций по тегу #{comun.product_tag.name}.
       {:else if comun?.source_rubric}
         В этом сообществе пока нет публикаций из рубрики {comun.source_rubric.name}.

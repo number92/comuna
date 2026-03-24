@@ -311,8 +311,12 @@
         <div class="rounded-lg border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-800/40 px-3 py-2 text-sm text-slate-700 dark:text-zinc-300">
           {#if comun?.source_rubric}
             Пост будет опубликован в рубрике <span class="font-semibold">{comun.source_rubric.name}</span>.
+          {:else if comun?.source_tags?.length}
+            Теги сообщества будут добавлены автоматически:
+            <span class="font-semibold">{comun.source_tags.map((tag) => `#${tag.name}`).join(', ')}</span>.
           {:else if comun?.product_tag?.name}
-            Тег продукта <span class="font-semibold">#{comun.product_tag.name}</span> будет добавлен автоматически.
+            Теги сообщества будут добавлены автоматически:
+            <span class="font-semibold">#{comun.product_tag.name}</span>.
           {:else}
             Запись будет автоматически привязана к этому сообществу.
           {/if}

@@ -671,6 +671,13 @@ class Comun(models.Model):
         verbose_name="Тег продукта",
         help_text="Все посты с этим тегом попадут в коммуну.",
     )
+    source_tags = models.ManyToManyField(
+        Tag,
+        blank=True,
+        related_name="comuns_source",
+        verbose_name="Теги сообщества",
+        help_text="Посты с этими тегами будут попадать в сообщество.",
+    )
     welcome_post = models.ForeignKey(
         "Post",
         null=True,

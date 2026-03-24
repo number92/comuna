@@ -121,6 +121,12 @@
         (value?.blocked_tags ?? value?.excluded_tags ?? []).map((tag) => tag.id ?? 0)) as number[]
     )
 
+  const comunSourceTagIds = (value: BackendComun | null) =>
+    normalizeIds(
+      ((value?.source_tag_ids as number[] | undefined) ??
+        (value?.source_tags ?? (value?.product_tag ? [value.product_tag] : [])).map((tag) => tag.id ?? 0)) as number[]
+    )
+
   const comunAllowedTemplateTypes = (value: BackendComun | null) =>
     normalizeAllowedPostTemplateTypes(
       value?.allowed_template_types ?? value?.allowed_post_templates
@@ -159,7 +165,7 @@
       only_moderators_can_post: Boolean(value?.only_moderators_can_post),
       hide_from_home: Boolean(value?.hide_from_home),
       hide_from_fresh: Boolean(value?.hide_from_fresh),
-      product_tag_id: value?.product_tag_id ?? value?.product_tag?.id ?? null,
+      source_tag_ids: comunSourceTagIds(value),
       allowed_template_types: comunAllowedTemplateTypes(value),
       category_ids: comunCategoryIds(value),
       moderator_ids: comunModeratorIds(value),
@@ -348,18 +354,35 @@
     setDraftBlockedTagIds(comunBlockedTagIds(settingsDraft).filter((id) => id !== tagId))
   }
 
-  const chooseDraftTag = (tag: ComunTagOption) => {
+  const setDraftSourceTagIds = (ids: number[]) => {
     if (!settingsDraft) return
+    const normalizedIds = normalizeIds(ids).slice(0, 5)
+    const byId = new Map<number, ComunTagOption>()
+    for (const tag of settingsTagOptions) byId.set(tag.id, tag)
+    for (const tag of settingsDraft.source_tags ?? (settingsDraft.product_tag ? [settingsDraft.product_tag] : [])) {
+      byId.set(tag.id, tag)
+    }
+    const selectedTags = normalizedIds
+      .map((id) => byId.get(id))
+      .filter(Boolean)
+      .map((tag) => ({ id: tag!.id, name: tag!.name, lemma: tag!.lemma ?? null }))
     settingsDraft = {
       ...settingsDraft,
-      product_tag_id: tag.id,
-      product_tag: { id: tag.id, name: tag.name, lemma: tag.lemma ?? null },
+      source_tag_ids: normalizedIds,
+      source_tags: selectedTags,
+      product_tag_id: selectedTags[0]?.id ?? null,
+      product_tag: selectedTags[0] ?? null,
     }
   }
 
-  const clearDraftTag = () => {
+  const addDraftSourceTag = (tagId: number) => {
     if (!settingsDraft) return
-    settingsDraft = { ...settingsDraft, product_tag_id: null, product_tag: null }
+    setDraftSourceTagIds([...comunSourceTagIds(settingsDraft), tagId])
+  }
+
+  const removeDraftSourceTag = (tagId: number) => {
+    if (!settingsDraft) return
+    setDraftSourceTagIds(comunSourceTagIds(settingsDraft).filter((id) => id !== tagId))
   }
 
   const setDraftAllowedTemplateTypes = (values: PostTemplateCode[]) => {
@@ -406,6 +429,7 @@
   }
 
   $: normalizedTagSearch = settingsTagSearch.trim().toLowerCase()
+  $: sourceTagIdSet = new Set<number>(comunSourceTagIds(settingsDraft))
   $: normalizedTagCreateValue = normalizeTagInput(settingsTagSearch)
   $: hasExactTagMatch = (settingsTagOptions ?? []).some((tag) => {
     const needle = normalizedTagCreateValue.toLowerCase()
@@ -482,7 +506,8 @@
       display_name: fromDraft?.display_name ?? null,
     }
   })
-  $: selectedProductTag = settingsDraft?.product_tag ?? null
+  $: selectedSourceTags =
+    (settingsDraft?.source_tags?.length ? settingsDraft.source_tags : settingsDraft?.product_tag ? [settingsDraft.product_tag] : []) ?? []
   $: selectedBlockedTags =
     (settingsDraft?.blocked_tags?.length ? settingsDraft.blocked_tags : settingsDraft?.excluded_tags) ?? []
   $: selectedExcludedAuthors = comunExcludedAuthorIds(settingsDraft).map((id) => {
@@ -521,10 +546,10 @@
       if (existingIndex >= 0) nextOptions[existingIndex] = nextTag
       else nextOptions.push(nextTag)
       settingsTagOptions = nextOptions.sort((a, b) => a.name.localeCompare(b.name, 'ru'))
-      chooseDraftTag(nextTag)
-      settingsTagSearch = nextTag.name
+      addDraftSourceTag(nextTag.id)
+      settingsTagSearch = ''
       toast({
-        content: payload.created ? 'Тег добавлен и выбран' : 'Тег найден и выбран',
+        content: payload.created ? 'Тег добавлен в сообщество' : 'Тег добавлен в сообщество',
         type: 'success',
       })
     } catch (error) {
@@ -609,7 +634,7 @@
           hide_from_fresh: canManageComunModerators() ? Boolean(settingsDraft.hide_from_fresh) : undefined,
           moderator_ids: canManageComunModerators() ? comunModeratorIds(settingsDraft) : undefined,
           excluded_author_ids: comunExcludedAuthorIds(settingsDraft),
-          product_tag_id: settingsDraft.product_tag_id ?? null,
+          source_tag_ids: comunSourceTagIds(settingsDraft),
           blocked_tag_ids: comunBlockedTagIds(settingsDraft),
           category_ids:
             settingsDraft.category_ids ??
@@ -958,23 +983,25 @@
 
         {:else if settingsTab === 'moderation'}
           <div class="flex flex-col gap-2">
-            <div class="text-sm text-slate-700 dark:text-zinc-300">Тег продукта</div>
+            <div class="text-sm text-slate-700 dark:text-zinc-300">Теги сообщества</div>
             <div class="text-xs text-slate-500 dark:text-zinc-400">
-              Посты с этим тегом автоматически попадают в сообщество, если не отфильтрованы правилами ниже.
+              Посты с этими тегами автоматически попадают в сообщество, если не отфильтрованы правилами ниже.
             </div>
             <input
               bind:value={settingsTagSearch}
-              placeholder="Поиск тега..."
+              placeholder="Поиск тега для добавления..."
               class="rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"
             />
             <div class="flex flex-wrap items-center gap-2">
-              {#if selectedProductTag}
-                <span class="rounded-full bg-slate-100 dark:bg-zinc-800 px-3 py-1 text-sm">
-                  #{selectedProductTag.name}
-                </span>
-                <Button color="ghost" size="sm" on:click={clearDraftTag}>Сбросить</Button>
+              {#if selectedSourceTags.length}
+                {#each selectedSourceTags as tag}
+                  <span class="inline-flex items-center gap-2 rounded-full bg-slate-100 dark:bg-zinc-800 px-3 py-1 text-sm">
+                    #{tag.name}
+                    <button type="button" class="text-slate-500 hover:text-slate-900 dark:hover:text-white" on:click={() => removeDraftSourceTag(tag.id)}>×</button>
+                  </span>
+                {/each}
               {:else}
-                <span class="text-sm text-slate-500 dark:text-zinc-400">Тег не выбран</span>
+                <span class="text-sm text-slate-500 dark:text-zinc-400">Теги пока не выбраны</span>
               {/if}
             </div>
             <div class="max-h-48 overflow-auto rounded-xl border border-slate-200 dark:border-zinc-800 divide-y divide-slate-100 dark:divide-zinc-800">
@@ -985,7 +1012,7 @@
                       Добавить тег #{normalizedTagCreateValue}
                     </div>
                     <div class="text-xs text-slate-500 dark:text-zinc-400">
-                      Создаст тег в системе и выберет его для сообщества
+                      Создаст тег в системе и добавит его в теги сообщества
                     </div>
                   </div>
                   <Button size="sm" on:click={createTagAndChooseDraft} disabled={settingsTagCreating || settingsSaving}>
@@ -1002,7 +1029,9 @@
                         <div class="text-xs text-slate-500 dark:text-zinc-400 truncate">{tag.lemma}</div>
                       {/if}
                     </div>
-                    <Button size="sm" on:click={() => chooseDraftTag(tag)} disabled={settingsTagCreating || settingsSaving}>Выбрать</Button>
+                    <Button size="sm" on:click={() => addDraftSourceTag(tag.id)} disabled={settingsTagCreating || settingsSaving || sourceTagIdSet.has(tag.id)}>
+                      {sourceTagIdSet.has(tag.id) ? 'Добавлен' : 'Добавить'}
+                    </Button>
                   </div>
                 {/each}
               {:else}

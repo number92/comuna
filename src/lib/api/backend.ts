@@ -436,6 +436,8 @@ export type BackendComun = {
   categories?: BackendComunCategory[]
   categories_count?: number
   category_ids?: number[]
+  source_tags?: BackendTag[]
+  source_tag_ids?: number[]
   product_tag?: { id: number; name: string; lemma?: string | null } | null
   blocked_tags?: BackendTag[]
   excluded_tags?: BackendTag[]

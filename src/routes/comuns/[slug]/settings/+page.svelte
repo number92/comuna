@@ -43,11 +43,17 @@
   type ComunTagOption = BackendTag & { id: number }
   type ComunUserOption = { id: number; username: string; display_name?: string | null }
   type TemplateTypeOption = { value: PostTemplateCode; label: string }
+  type ComunSettingsTabKey = 'description' | 'availability' | 'categories'
   const fallbackTemplateTypeOptions: TemplateTypeOption[] = [
     { value: 'basic', label: 'Пост' },
     { value: 'movie_review', label: 'Кинообзор' },
     { value: 'post_vote_poll', label: 'Голосование за посты' },
     { value: 'music_release', label: 'Музыкальный релиз' },
+  ]
+  const comunSettingsTabs: Array<{ value: ComunSettingsTabKey; label: string }> = [
+    { value: 'description', label: 'Описание' },
+    { value: 'availability', label: 'Доступность' },
+    { value: 'categories', label: 'Категории и шаблоны' },
   ]
   const allowedTemplateCodes = new Set<PostTemplateCode>([
     'basic',
@@ -59,6 +65,14 @@
   let settingsUserOptions: ComunUserOption[] = []
   let settingsTemplateTypeOptions: TemplateTypeOption[] = fallbackTemplateTypeOptions
   let settingsLogoInput: HTMLInputElement | null = null
+  let settingsTab: ComunSettingsTabKey = 'description'
+
+  const settingsTabClass = (activeTab: ComunSettingsTabKey, tab: ComunSettingsTabKey) =>
+    `rounded-full px-3 py-2 text-sm font-medium transition-colors ${
+      activeTab === tab
+        ? 'bg-slate-900 text-white dark:bg-white dark:text-zinc-900'
+        : 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700'
+    }`
 
   const cloneComun = (value: BackendComun | null): BackendComun | null =>
     value ? JSON.parse(JSON.stringify(value)) : null
@@ -633,361 +647,375 @@
     </div>
   {:else if settingsDraft}
     <section class="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white/95 dark:bg-zinc-900/85 p-5 sm:p-6">
+      <div class="mb-5 flex flex-wrap gap-2">
+        {#each comunSettingsTabs as tab}
+          <button
+            type="button"
+            class={settingsTabClass(settingsTab, tab.value)}
+            on:click={() => (settingsTab = tab.value)}
+          >
+            {tab.label}
+          </button>
+        {/each}
+      </div>
+
       <div class="grid gap-4">
-        <label class="flex flex-col gap-1">
-          <span class="text-sm text-slate-700 dark:text-zinc-300">Название сообщества</span>
-          <input
-            bind:value={settingsDraft.name}
-            type="text"
-            class="rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"
-            disabled={!canManageComunModerators()}
-          />
-        </label>
-
-        <label class="flex flex-col gap-1">
-          <span class="text-sm text-slate-700 dark:text-zinc-300">Веб-сайт</span>
-          <input
-            bind:value={settingsDraft.website_url}
-            type="url"
-            class="rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"
-          />
-        </label>
-
-        <div class="flex flex-col gap-2">
-          <span class="text-sm text-slate-700 dark:text-zinc-300">Логотип</span>
-          <input
-            bind:this={settingsLogoInput}
-            type="file"
-            accept="image/*"
-            class="hidden"
-            on:change={onSettingsLogoSelected}
-          />
-          <div class="flex items-center gap-3 rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-3">
-            <div class="h-14 w-14 rounded-xl overflow-hidden border border-slate-200 dark:border-zinc-800 bg-slate-100 dark:bg-zinc-800 shrink-0">
-              {#if settingsDraft.logo_url}
-                <img src={settingsDraft.logo_url} alt="Предпросмотр логотипа" class="h-full w-full object-cover" />
-              {:else}
-                <div class="h-full w-full grid place-items-center text-slate-400 dark:text-zinc-500 text-xs text-center px-1">
-                  Нет лого
-                </div>
-              {/if}
-            </div>
-            <div class="min-w-0 flex-1 flex flex-col gap-1">
-              <div class="text-sm text-slate-700 dark:text-zinc-300">
-                {#if settingsLogoUploading}
-                  Загрузка логотипа...
-                {:else if settingsDraft.logo_url}
-                  Логотип выбран
-                {:else}
-                  Загрузите файл изображения
-                {/if}
-              </div>
-              <div class="text-xs text-slate-500 dark:text-zinc-400">PNG, JPG, WEBP, GIF</div>
-            </div>
-            <div class="flex flex-wrap gap-2 justify-end">
-              <Button size="sm" on:click={pickSettingsLogo} disabled={settingsSaving || settingsLogoUploading}>
-                {settingsDraft.logo_url ? 'Заменить' : 'Выбрать файл'}
-              </Button>
-              {#if settingsDraft.logo_url}
-                <Button
-                  color="ghost"
-                  size="sm"
-                  on:click={clearDraftLogo}
-                  disabled={settingsSaving || settingsLogoUploading}
-                >
-                  Убрать
-                </Button>
-              {/if}
-            </div>
-          </div>
-        </div>
-
-        <label class="flex flex-col gap-1">
-          <span class="text-sm text-slate-700 dark:text-zinc-300">Описание сообщества</span>
-          <textarea
-            bind:value={settingsDraft.product_description}
-            rows="4"
-            class="rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"
-          ></textarea>
-        </label>
-
-        <label class="flex flex-col gap-1">
-          <span class="text-sm text-slate-700 dark:text-zinc-300">Целевая аудитория</span>
-          <textarea
-            bind:value={settingsDraft.target_audience}
-            rows="2"
-            class="rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"
-          ></textarea>
-        </label>
-
-        <label class="flex flex-col gap-1">
-          <span class="text-sm text-slate-700 dark:text-zinc-300">
-            Минимальный рейтинг автора для публикации
-          </span>
-          <input
-            bind:value={settingsDraft.minimum_author_rating_to_post}
-            type="number"
-            min="0"
-            step="0.5"
-            class="rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"
-          />
-          <span class="text-xs text-slate-500 dark:text-zinc-400">
-            `0` означает, что писать в сообщество может любой автор. Сейчас установлен порог от
-            {formatRatingValue(settingsDraft.minimum_author_rating_to_post)}.
-          </span>
-        </label>
-
-        <label class="flex items-start gap-2 cursor-pointer rounded-xl border border-slate-200 dark:border-zinc-800 px-3 py-3">
-          <input
-            type="checkbox"
-            class="mt-0.5"
-            checked={Boolean(settingsDraft.only_moderators_can_post)}
-            on:change={() =>
-              (settingsDraft = {
-                ...settingsDraft,
-                only_moderators_can_post: !Boolean(settingsDraft.only_moderators_can_post),
-              })}
-          />
-          <span class="min-w-0">
-            <span class="block text-sm text-slate-900 dark:text-zinc-100">
-              Писать в сообщество могут только администраторы и модераторы
-            </span>
-            <span class="block text-xs text-slate-500 dark:text-zinc-400">
-              Если включить, новые записи смогут создавать только создатель сообщества, его модераторы и администраторы сайта.
-            </span>
-          </span>
-        </label>
-
-        {#if canManageComunModerators()}
-          <div class="flex flex-col gap-2 rounded-xl border border-slate-200 dark:border-zinc-800 px-3 py-3">
-            <div class="text-sm font-medium text-slate-900 dark:text-zinc-100">
-              Видимость постов сообщества в общих лентах
-            </div>
-            <label class="flex items-start gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                class="mt-0.5"
-                checked={!settingsDraft.hide_from_home}
-                on:change={toggleDraftHideFromHome}
-              />
-              <span class="min-w-0">
-                <span class="block text-sm text-slate-900 dark:text-zinc-100">Показывать в Горячем</span>
-                <span class="block text-xs text-slate-500 dark:text-zinc-400">
-                  Если выключить, посты, созданные в этом сообществе, не попадут на главную.
-                </span>
-              </span>
-            </label>
-            <label class="flex items-start gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                class="mt-0.5"
-                checked={!settingsDraft.hide_from_fresh}
-                on:change={toggleDraftHideFromFresh}
-              />
-              <span class="min-w-0">
-                <span class="block text-sm text-slate-900 dark:text-zinc-100">Показывать в Свежее</span>
-                <span class="block text-xs text-slate-500 dark:text-zinc-400">
-                  Если выключить, посты, созданные в этом сообществе, останутся в ленте сообщества и персональных лентах.
-                </span>
-              </span>
-            </label>
-          </div>
-        {/if}
-
-        <div class="flex flex-col gap-2">
-          <div class="text-sm text-slate-700 dark:text-zinc-300">Доступные шаблоны публикаций</div>
-          <div class="text-xs text-slate-500 dark:text-zinc-400">
-            Определяет, какие типы постов можно публиковать внутри сообщества.
-          </div>
-          <TemplateTypeDropdown
-            options={settingsTemplateTypeOptions}
-            selectedValues={comunAllowedTemplateTypes(settingsDraft)}
-            disabled={settingsSaving}
-            helperText="Можно искать по названию и выбрать несколько шаблонов. Хотя бы один шаблон должен остаться доступным."
-            on:change={(event) => setDraftAllowedTemplateTypes(event.detail)}
-          />
-        </div>
-
-        {#if canManageComunModerators()}
-          <div class="flex flex-col gap-2">
-            <div class="text-sm text-slate-700 dark:text-zinc-300">Модераторы сообщества</div>
-            <div class="text-xs text-slate-500 dark:text-zinc-400">
-              Только создатель сообщества может назначать и снимать модераторов. Создатель всегда остается модератором.
-            </div>
+        {#if settingsTab === 'description'}
+          <label class="flex flex-col gap-1">
+            <span class="text-sm text-slate-700 dark:text-zinc-300">Название сообщества</span>
             <input
-              bind:value={settingsUserSearch}
-              placeholder="Поиск пользователя по имени или логину..."
+              bind:value={settingsDraft.name}
+              type="text"
+              class="rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"
+              disabled={!canManageComunModerators()}
+            />
+          </label>
+
+          <label class="flex flex-col gap-1">
+            <span class="text-sm text-slate-700 dark:text-zinc-300">Веб-сайт</span>
+            <input
+              bind:value={settingsDraft.website_url}
+              type="url"
               class="rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"
             />
-            <div class="flex flex-col gap-2">
-              <div class="text-xs uppercase tracking-wide text-slate-500 dark:text-zinc-400">
-                Выбранные модераторы
-              </div>
-              <div class="flex flex-col gap-2">
-                {#each selectedModeratorUsers as user}
-                  <div class="flex items-center justify-between gap-2 rounded-xl border border-slate-200 dark:border-zinc-800 px-3 py-2">
-                    <div class="min-w-0">
-                      <div class="text-sm font-medium text-slate-900 dark:text-zinc-100 truncate">
-                        {userDisplayName(user)}
-                      </div>
-                      <div class="text-xs text-slate-500 dark:text-zinc-400 truncate">@{user.username}</div>
-                    </div>
-                    <Button
-                      color="ghost"
-                      size="sm"
-                      on:click={() => removeDraftModerator(user.id)}
-                      disabled={user.id === comun?.creator?.id}
-                      title={user.id === comun?.creator?.id ? 'Создателя нельзя убрать из модераторов' : 'Убрать модератора'}
-                    >
-                      Убрать
-                    </Button>
+          </label>
+
+          <div class="flex flex-col gap-2">
+            <span class="text-sm text-slate-700 dark:text-zinc-300">Логотип</span>
+            <input
+              bind:this={settingsLogoInput}
+              type="file"
+              accept="image/*"
+              class="hidden"
+              on:change={onSettingsLogoSelected}
+            />
+            <div class="flex items-center gap-3 rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-3">
+              <div class="h-14 w-14 rounded-xl overflow-hidden border border-slate-200 dark:border-zinc-800 bg-slate-100 dark:bg-zinc-800 shrink-0">
+                {#if settingsDraft.logo_url}
+                  <img src={settingsDraft.logo_url} alt="Предпросмотр логотипа" class="h-full w-full object-cover" />
+                {:else}
+                  <div class="h-full w-full grid place-items-center text-slate-400 dark:text-zinc-500 text-xs text-center px-1">
+                    Нет лого
                   </div>
-                {/each}
+                {/if}
+              </div>
+              <div class="min-w-0 flex-1 flex flex-col gap-1">
+                <div class="text-sm text-slate-700 dark:text-zinc-300">
+                  {#if settingsLogoUploading}
+                    Загрузка логотипа...
+                  {:else if settingsDraft.logo_url}
+                    Логотип выбран
+                  {:else}
+                    Загрузите файл изображения
+                  {/if}
+                </div>
+                <div class="text-xs text-slate-500 dark:text-zinc-400">PNG, JPG, WEBP, GIF</div>
+              </div>
+              <div class="flex flex-wrap gap-2 justify-end">
+                <Button size="sm" on:click={pickSettingsLogo} disabled={settingsSaving || settingsLogoUploading}>
+                  {settingsDraft.logo_url ? 'Заменить' : 'Выбрать файл'}
+                </Button>
+                {#if settingsDraft.logo_url}
+                  <Button
+                    color="ghost"
+                    size="sm"
+                    on:click={clearDraftLogo}
+                    disabled={settingsSaving || settingsLogoUploading}
+                  >
+                    Убрать
+                  </Button>
+                {/if}
               </div>
             </div>
-            <div class="max-h-52 overflow-auto rounded-xl border border-slate-200 dark:border-zinc-800 divide-y divide-slate-100 dark:divide-zinc-800">
-              {#if filteredUserOptions.length}
-                {#each filteredUserOptions as user}
-                  <div class="flex items-center justify-between gap-2 px-3 py-2">
-                    <div class="min-w-0">
-                      <div class="text-sm font-medium text-slate-900 dark:text-zinc-100 truncate">
-                        {userDisplayName(user)}
-                      </div>
-                      <div class="text-xs text-slate-500 dark:text-zinc-400 truncate">@{user.username}</div>
+          </div>
+
+          <label class="flex flex-col gap-1">
+            <span class="text-sm text-slate-700 dark:text-zinc-300">Описание сообщества</span>
+            <textarea
+              bind:value={settingsDraft.product_description}
+              rows="4"
+              class="rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"
+            ></textarea>
+          </label>
+
+          <label class="flex flex-col gap-1">
+            <span class="text-sm text-slate-700 dark:text-zinc-300">Целевая аудитория</span>
+            <textarea
+              bind:value={settingsDraft.target_audience}
+              rows="2"
+              class="rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"
+            ></textarea>
+          </label>
+
+          <div class="flex flex-col gap-2">
+            <div class="text-sm text-slate-700 dark:text-zinc-300">Тег продукта (посты с этим тегом попадут в сообщество)</div>
+            <input
+              bind:value={settingsTagSearch}
+              placeholder="Поиск тега..."
+              class="rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"
+            />
+            <div class="flex flex-wrap items-center gap-2">
+              {#if selectedProductTag}
+                <span class="rounded-full bg-slate-100 dark:bg-zinc-800 px-3 py-1 text-sm">
+                  #{selectedProductTag.name}
+                </span>
+                <Button color="ghost" size="sm" on:click={clearDraftTag}>Сбросить</Button>
+              {:else}
+                <span class="text-sm text-slate-500 dark:text-zinc-400">Тег не выбран</span>
+              {/if}
+            </div>
+            <div class="max-h-48 overflow-auto rounded-xl border border-slate-200 dark:border-zinc-800 divide-y divide-slate-100 dark:divide-zinc-800">
+              {#if normalizedTagCreateValue && !hasExactTagMatch}
+                <div class="flex items-center justify-between gap-2 px-3 py-2 bg-slate-50 dark:bg-zinc-900/60">
+                  <div class="min-w-0 text-sm">
+                    <div class="font-medium text-slate-900 dark:text-zinc-100 truncate">
+                      Добавить тег #{normalizedTagCreateValue}
                     </div>
-                    <Button size="sm" on:click={() => addDraftModerator(user.id)} disabled={draftModeratorIdSet.has(user.id)}>
-                      {draftModeratorIdSet.has(user.id) ? 'Добавлен' : 'Добавить'}
-                    </Button>
+                    <div class="text-xs text-slate-500 dark:text-zinc-400">
+                      Создаст тег в системе и выберет его для сообщества
+                    </div>
+                  </div>
+                  <Button size="sm" on:click={createTagAndChooseDraft} disabled={settingsTagCreating || settingsSaving}>
+                    {settingsTagCreating ? '...' : 'Добавить'}
+                  </Button>
+                </div>
+              {/if}
+              {#if filteredTagOptions.length}
+                {#each filteredTagOptions as tag}
+                  <div class="flex items-center justify-between gap-2 px-3 py-2 text-sm">
+                    <div class="min-w-0">
+                      <div class="font-medium text-slate-900 dark:text-zinc-100 truncate">{tag.name}</div>
+                      {#if tag.lemma}
+                        <div class="text-xs text-slate-500 dark:text-zinc-400 truncate">{tag.lemma}</div>
+                      {/if}
+                    </div>
+                    <Button size="sm" on:click={() => chooseDraftTag(tag)} disabled={settingsTagCreating || settingsSaving}>Выбрать</Button>
                   </div>
                 {/each}
               {:else}
-                {#if normalizedUserSearch}
+                {#if normalizedTagCreateValue && !hasExactTagMatch}
                   <div class="px-3 py-2 text-sm text-slate-500 dark:text-zinc-400">
-                    Пользователи не найдены
+                    Можно добавить новый тег выше
+                  </div>
+                {:else if normalizedTagSearch}
+                  <div class="px-3 py-2 text-sm text-slate-500 dark:text-zinc-400">
+                    Ничего не найдено
                   </div>
                 {/if}
               {/if}
             </div>
           </div>
-        {/if}
 
-        <div class="flex flex-col gap-2">
-          <div class="text-sm text-slate-700 dark:text-zinc-300">Тег продукта (посты с этим тегом попадут в сообщество)</div>
-          <input
-            bind:value={settingsTagSearch}
-            placeholder="Поиск тега..."
-            class="rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"
-          />
-          <div class="flex flex-wrap items-center gap-2">
-            {#if selectedProductTag}
-              <span class="rounded-full bg-slate-100 dark:bg-zinc-800 px-3 py-1 text-sm">
-                #{selectedProductTag.name}
-              </span>
-              <Button color="ghost" size="sm" on:click={clearDraftTag}>Сбросить</Button>
-            {:else}
-              <span class="text-sm text-slate-500 dark:text-zinc-400">Тег не выбран</span>
-            {/if}
-          </div>
-          <div class="max-h-48 overflow-auto rounded-xl border border-slate-200 dark:border-zinc-800 divide-y divide-slate-100 dark:divide-zinc-800">
-            {#if normalizedTagCreateValue && !hasExactTagMatch}
-              <div class="flex items-center justify-between gap-2 px-3 py-2 bg-slate-50 dark:bg-zinc-900/60">
-                <div class="min-w-0 text-sm">
-                  <div class="font-medium text-slate-900 dark:text-zinc-100 truncate">
-                    Добавить тег #{normalizedTagCreateValue}
-                  </div>
-                  <div class="text-xs text-slate-500 dark:text-zinc-400">
-                    Создаст тег в системе и выберет его для сообщества
-                  </div>
-                </div>
-                <Button size="sm" on:click={createTagAndChooseDraft} disabled={settingsTagCreating || settingsSaving}>
-                  {settingsTagCreating ? '...' : 'Добавить'}
-                </Button>
-              </div>
-            {/if}
-            {#if filteredTagOptions.length}
-              {#each filteredTagOptions as tag}
-                <div class="flex items-center justify-between gap-2 px-3 py-2 text-sm">
-                  <div class="min-w-0">
-                    <div class="font-medium text-slate-900 dark:text-zinc-100 truncate">{tag.name}</div>
-                    {#if tag.lemma}
-                      <div class="text-xs text-slate-500 dark:text-zinc-400 truncate">{tag.lemma}</div>
-                    {/if}
-                  </div>
-                  <Button size="sm" on:click={() => chooseDraftTag(tag)} disabled={settingsTagCreating || settingsSaving}>Выбрать</Button>
-                </div>
-              {/each}
-            {:else}
-              {#if normalizedTagCreateValue && !hasExactTagMatch}
-                <div class="px-3 py-2 text-sm text-slate-500 dark:text-zinc-400">
-                  Можно добавить новый тег выше
-                </div>
-              {:else if normalizedTagSearch}
-                <div class="px-3 py-2 text-sm text-slate-500 dark:text-zinc-400">
-                  Ничего не найдено
-                </div>
-              {/if}
-            {/if}
-          </div>
-        </div>
-
-        <div class="flex flex-col gap-2">
-          <div class="text-sm text-slate-700 dark:text-zinc-300">Внутренние категории</div>
-          <div class="text-xs text-slate-500 dark:text-zinc-400">
-            Эти категории принадлежат только этому сообществу. Можно создать свои прямо здесь.
-          </div>
-          <div class="flex gap-2">
+          <label class="flex flex-col gap-1">
+            <span class="text-sm text-slate-700 dark:text-zinc-300">Приветственный пост (ID или ссылка на пост)</span>
             <input
-              bind:value={settingsCategorySearch}
-              placeholder="Например: Релизы, Баги, Исследования"
-              class="flex-1 rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"
+              bind:value={settingsDraft.welcome_post_ref}
+              placeholder="/b/post/123... или 123"
+              class="rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"
             />
-            <Button
-              size="sm"
-              on:click={createCategoryAndSelectDraft}
-              disabled={settingsCategoryCreating || !normalizedCategoryCreateValue}
-            >
-              {settingsCategoryCreating ? '...' : 'Добавить'}
-            </Button>
-          </div>
-          {#if normalizedCategoryCreateValue && !hasExactCategoryMatch}
-            <div class="rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900/60 px-3 py-2 text-sm text-slate-700 dark:text-zinc-300">
-              Новой категории пока нет. Нажмите `Добавить`, чтобы создать ее только для этого сообщества и сразу подключить.
+          </label>
+        {:else if settingsTab === 'availability'}
+          <label class="flex flex-col gap-1">
+            <span class="text-sm text-slate-700 dark:text-zinc-300">
+              Минимальный рейтинг автора для публикации
+            </span>
+            <input
+              bind:value={settingsDraft.minimum_author_rating_to_post}
+              type="number"
+              min="0"
+              step="0.5"
+              class="rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"
+            />
+            <span class="text-xs text-slate-500 dark:text-zinc-400">
+              `0` означает, что писать в сообщество может любой автор. Сейчас установлен порог от
+              {formatRatingValue(settingsDraft.minimum_author_rating_to_post)}.
+            </span>
+          </label>
+
+          <label class="flex items-start gap-2 cursor-pointer rounded-xl border border-slate-200 dark:border-zinc-800 px-3 py-3">
+            <input
+              type="checkbox"
+              class="mt-0.5"
+              checked={Boolean(settingsDraft.only_moderators_can_post)}
+              on:change={() =>
+                (settingsDraft = {
+                  ...settingsDraft,
+                  only_moderators_can_post: !Boolean(settingsDraft.only_moderators_can_post),
+                })}
+            />
+            <span class="min-w-0">
+              <span class="block text-sm text-slate-900 dark:text-zinc-100">
+                Писать в сообщество могут только администраторы и модераторы
+              </span>
+              <span class="block text-xs text-slate-500 dark:text-zinc-400">
+                Если включить, новые записи смогут создавать только создатель сообщества, его модераторы и администраторы сайта.
+              </span>
+            </span>
+          </label>
+
+          {#if canManageComunModerators()}
+            <div class="flex flex-col gap-2 rounded-xl border border-slate-200 dark:border-zinc-800 px-3 py-3">
+              <div class="text-sm font-medium text-slate-900 dark:text-zinc-100">
+                Видимость постов сообщества в общих лентах
+              </div>
+              <label class="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  class="mt-0.5"
+                  checked={!settingsDraft.hide_from_home}
+                  on:change={toggleDraftHideFromHome}
+                />
+                <span class="min-w-0">
+                  <span class="block text-sm text-slate-900 dark:text-zinc-100">Показывать в Горячем</span>
+                  <span class="block text-xs text-slate-500 dark:text-zinc-400">
+                    Если выключить, посты, созданные в этом сообществе, не попадут на главную.
+                  </span>
+                </span>
+              </label>
+              <label class="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  class="mt-0.5"
+                  checked={!settingsDraft.hide_from_fresh}
+                  on:change={toggleDraftHideFromFresh}
+                />
+                <span class="min-w-0">
+                  <span class="block text-sm text-slate-900 dark:text-zinc-100">Показывать в Свежее</span>
+                  <span class="block text-xs text-slate-500 dark:text-zinc-400">
+                    Если выключить, посты, созданные в этом сообществе, останутся в ленте сообщества и персональных лентах.
+                  </span>
+                </span>
+              </label>
             </div>
           {/if}
-          <div class="grid gap-2 sm:grid-cols-2">
-            {#if filteredCategoryOptions.length}
-              {#each filteredCategoryOptions as category}
-                <label class="rounded-xl border border-slate-200 dark:border-zinc-800 px-3 py-2 flex items-start gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={draftCategoryIdSet.has(category.id)}
-                    on:change={() => toggleDraftCategory(category.id)}
-                    class="mt-0.5"
-                  />
-                  <span class="min-w-0">
-                    <span class="block text-sm font-medium text-slate-900 dark:text-zinc-100">{category.name}</span>
-                    {#if category.description}
-                      <span class="block text-xs text-slate-500 dark:text-zinc-400">{category.description}</span>
-                    {/if}
-                  </span>
-                </label>
-              {/each}
-            {:else}
-              <div class="rounded-xl border border-slate-200 dark:border-zinc-800 px-3 py-2 text-sm text-slate-500 dark:text-zinc-400 sm:col-span-2">
-                {normalizedCategorySearch ? 'Категории не найдены' : 'Категории пока не добавлены'}
+
+          {#if canManageComunModerators()}
+            <div class="flex flex-col gap-2">
+              <div class="text-sm text-slate-700 dark:text-zinc-300">Модераторы сообщества</div>
+              <div class="text-xs text-slate-500 dark:text-zinc-400">
+                Только создатель сообщества может назначать и снимать модераторов. Создатель всегда остается модератором.
+              </div>
+              <input
+                bind:value={settingsUserSearch}
+                placeholder="Поиск пользователя по имени или логину..."
+                class="rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"
+              />
+              <div class="flex flex-col gap-2">
+                <div class="text-xs uppercase tracking-wide text-slate-500 dark:text-zinc-400">
+                  Выбранные модераторы
+                </div>
+                <div class="flex flex-col gap-2">
+                  {#each selectedModeratorUsers as user}
+                    <div class="flex items-center justify-between gap-2 rounded-xl border border-slate-200 dark:border-zinc-800 px-3 py-2">
+                      <div class="min-w-0">
+                        <div class="text-sm font-medium text-slate-900 dark:text-zinc-100 truncate">
+                          {userDisplayName(user)}
+                        </div>
+                        <div class="text-xs text-slate-500 dark:text-zinc-400 truncate">@{user.username}</div>
+                      </div>
+                      <Button
+                        color="ghost"
+                        size="sm"
+                        on:click={() => removeDraftModerator(user.id)}
+                        disabled={user.id === comun?.creator?.id}
+                        title={user.id === comun?.creator?.id ? 'Создателя нельзя убрать из модераторов' : 'Убрать модератора'}
+                      >
+                        Убрать
+                      </Button>
+                    </div>
+                  {/each}
+                </div>
+              </div>
+              <div class="max-h-52 overflow-auto rounded-xl border border-slate-200 dark:border-zinc-800 divide-y divide-slate-100 dark:divide-zinc-800">
+                {#if filteredUserOptions.length}
+                  {#each filteredUserOptions as user}
+                    <div class="flex items-center justify-between gap-2 px-3 py-2">
+                      <div class="min-w-0">
+                        <div class="text-sm font-medium text-slate-900 dark:text-zinc-100 truncate">
+                          {userDisplayName(user)}
+                        </div>
+                        <div class="text-xs text-slate-500 dark:text-zinc-400 truncate">@{user.username}</div>
+                      </div>
+                      <Button size="sm" on:click={() => addDraftModerator(user.id)} disabled={draftModeratorIdSet.has(user.id)}>
+                        {draftModeratorIdSet.has(user.id) ? 'Добавлен' : 'Добавить'}
+                      </Button>
+                    </div>
+                  {/each}
+                {:else}
+                  {#if normalizedUserSearch}
+                    <div class="px-3 py-2 text-sm text-slate-500 dark:text-zinc-400">
+                      Пользователи не найдены
+                    </div>
+                  {/if}
+                {/if}
+              </div>
+            </div>
+          {/if}
+        {:else}
+          <div class="flex flex-col gap-2">
+            <div class="text-sm text-slate-700 dark:text-zinc-300">Доступные шаблоны публикаций</div>
+            <div class="text-xs text-slate-500 dark:text-zinc-400">
+              Определяет, какие типы постов можно публиковать внутри сообщества.
+            </div>
+            <TemplateTypeDropdown
+              options={settingsTemplateTypeOptions}
+              selectedValues={comunAllowedTemplateTypes(settingsDraft)}
+              disabled={settingsSaving}
+              helperText="Можно искать по названию и выбрать несколько шаблонов. Хотя бы один шаблон должен остаться доступным."
+              on:change={(event) => setDraftAllowedTemplateTypes(event.detail)}
+            />
+          </div>
+
+          <div class="flex flex-col gap-2">
+            <div class="text-sm text-slate-700 dark:text-zinc-300">Внутренние категории</div>
+            <div class="text-xs text-slate-500 dark:text-zinc-400">
+              Эти категории принадлежат только этому сообществу. Можно создать свои прямо здесь.
+            </div>
+            <div class="flex gap-2">
+              <input
+                bind:value={settingsCategorySearch}
+                placeholder="Например: Релизы, Баги, Исследования"
+                class="flex-1 rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"
+              />
+              <Button
+                size="sm"
+                on:click={createCategoryAndSelectDraft}
+                disabled={settingsCategoryCreating || !normalizedCategoryCreateValue}
+              >
+                {settingsCategoryCreating ? '...' : 'Добавить'}
+              </Button>
+            </div>
+            {#if normalizedCategoryCreateValue && !hasExactCategoryMatch}
+              <div class="rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900/60 px-3 py-2 text-sm text-slate-700 dark:text-zinc-300">
+                Новой категории пока нет. Нажмите `Добавить`, чтобы создать ее только для этого сообщества и сразу подключить.
               </div>
             {/if}
+            <div class="grid gap-2 sm:grid-cols-2">
+              {#if filteredCategoryOptions.length}
+                {#each filteredCategoryOptions as category}
+                  <label class="rounded-xl border border-slate-200 dark:border-zinc-800 px-3 py-2 flex items-start gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={draftCategoryIdSet.has(category.id)}
+                      on:change={() => toggleDraftCategory(category.id)}
+                      class="mt-0.5"
+                    />
+                    <span class="min-w-0">
+                      <span class="block text-sm font-medium text-slate-900 dark:text-zinc-100">{category.name}</span>
+                      {#if category.description}
+                        <span class="block text-xs text-slate-500 dark:text-zinc-400">{category.description}</span>
+                      {/if}
+                    </span>
+                  </label>
+                {/each}
+              {:else}
+                <div class="rounded-xl border border-slate-200 dark:border-zinc-800 px-3 py-2 text-sm text-slate-500 dark:text-zinc-400 sm:col-span-2">
+                  {normalizedCategorySearch ? 'Категории не найдены' : 'Категории пока не добавлены'}
+                </div>
+              {/if}
+            </div>
           </div>
-        </div>
-
-        <label class="flex flex-col gap-1">
-          <span class="text-sm text-slate-700 dark:text-zinc-300">Приветственный пост (ID или ссылка на пост)</span>
-          <input
-            bind:value={settingsDraft.welcome_post_ref}
-            placeholder="/b/post/123... или 123"
-            class="rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"
-          />
-        </label>
+        {/if}
       </div>
 
       <div class="flex items-center justify-between gap-3 pt-5">

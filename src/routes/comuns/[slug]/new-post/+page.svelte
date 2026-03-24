@@ -4,7 +4,7 @@
   import Header from '$lib/components/ui/layout/pages/Header.svelte'
   import { Button, Spinner, TextInput, toast } from 'mono-svelte'
   import EditorJS from '$lib/components/editor/EditorJS.svelte'
-  import { deserializeEditorModel } from '$lib/util'
+  import { deserializeEditorModel, postPayloadContainsExternalLinks } from '$lib/util'
   import { buildComunUrl, type BackendComun } from '$lib/api/backend'
   import { createComunPost, refreshSiteUser, siteToken, siteUser } from '$lib/siteAuth'
   import { onMount } from 'svelte'
@@ -216,14 +216,27 @@
       return
     }
 
+    const template = buildPostTemplatePayload(
+      createTemplateType,
+      createMovieReviewData,
+      createPostVotePollData,
+      createMusicReleaseData
+    )
+    if (
+      comun?.forbid_external_links &&
+      postPayloadContainsExternalLinks({
+        title: createTitle.trim(),
+        content: createContent.trim(),
+        template,
+      })
+    ) {
+      createError =
+        'В этом сообществе запрещены внешние ссылки. Удалите ссылки из текста и шаблона публикации.'
+      return
+    }
+
     creating = true
     try {
-      const template = buildPostTemplatePayload(
-        createTemplateType,
-        createMovieReviewData,
-        createPostVotePollData,
-        createMusicReleaseData
-      )
       await createComunPost(comun.slug, {
         title: createTitle.trim(),
         content: createContent.trim(),

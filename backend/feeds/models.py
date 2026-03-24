@@ -722,6 +722,11 @@ class Comun(models.Model):
         verbose_name="Публикация только для создателя и модераторов",
         help_text="Если включено, писать в коммуну смогут только ее создатель, модераторы и администраторы сайта.",
     )
+    forbid_external_links = models.BooleanField(
+        default=False,
+        verbose_name="Запретить внешние ссылки",
+        help_text="Если включено, посты с внешними ссылками не будут попадать в сообщество, а новые публикации с такими ссылками будут отклоняться.",
+    )
     rating_score = models.IntegerField(default=0, verbose_name="Рейтинг")
     votes_up = models.PositiveIntegerField(default=0, verbose_name="Буду использовать")
     votes_down = models.PositiveIntegerField(default=0, verbose_name="Не нравится")

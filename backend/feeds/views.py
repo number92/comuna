@@ -118,6 +118,11 @@ _POST_TEMPLATE_TYPE_OPTIONS = tuple(
 )
 _POST_TEMPLATE_TYPES = {value for value, _label in _POST_TEMPLATE_TYPE_OPTIONS}
 _POST_TEMPLATE_MOVIE_KINDS = {"movie", "series"}
+_EXTERNAL_URL_RE = re.compile(r"""https?://[^\s<>"')\]]+|www\.[^\s<>"')\]]+""", re.IGNORECASE)
+_INTERNAL_COMUNA_HOSTS = {"comuna.ru", "www.comuna.ru", "localhost", "127.0.0.1"}
+_COMUN_EXTERNAL_LINKS_FORBIDDEN_ERROR = (
+    "В этом сообществе запрещены внешние ссылки. Удалите ссылки из текста и шаблона публикации."
+)
 _POST_TEMPLATE_MOVIE_GENRES = {
     "action",
     "adventure",
@@ -8098,6 +8103,7 @@ def _serialize_comun(
         "target_audience": comun.target_audience,
         "minimum_author_rating_to_post": _comun_minimum_author_rating_value(comun),
         "only_moderators_can_post": bool(getattr(comun, "only_moderators_can_post", False)),
+        "forbid_external_links": bool(getattr(comun, "forbid_external_links", False)),
         "rating": _serialize_comun_rating(comun, current_user=current_user),
         "hide_from_home": bool(comun.hide_from_home),
         "hide_from_fresh": bool(comun.hide_from_fresh),
@@ -8300,6 +8306,52 @@ def _comun_source_filter(comun: Comun) -> Q | None:
     return combined_filter if has_source else None
 
 
+def _is_internal_comuna_url(url_value: str) -> bool:
+    raw_value = str(url_value or "").strip()
+    if not raw_value:
+        return True
+    normalized_value = raw_value if "://" in raw_value else f"https://{raw_value}"
+    try:
+        parsed = urllib.parse.urlparse(normalized_value)
+    except Exception:
+        return False
+    hostname = (parsed.hostname or "").strip().lower().rstrip(".")
+    if not hostname:
+        return True
+    return hostname in _INTERNAL_COMUNA_HOSTS or hostname.endswith(".comuna.ru")
+
+
+def _text_contains_external_links(value: str | None) -> bool:
+    raw_value = str(value or "").strip()
+    if not raw_value:
+        return False
+    for match in _EXTERNAL_URL_RE.finditer(raw_value):
+        candidate = (match.group(0) or "").strip().rstrip(".,;:!?")
+        if candidate and not _is_internal_comuna_url(candidate):
+            return True
+    return False
+
+
+def _payload_contains_external_links(
+    *,
+    title: str | None = None,
+    content: str | None = None,
+    template_payload=None,
+) -> bool:
+    if _text_contains_external_links(title):
+        return True
+    if _text_contains_external_links(content):
+        return True
+    if template_payload:
+        try:
+            serialized_template = json.dumps(template_payload, ensure_ascii=False)
+        except (TypeError, ValueError):
+            serialized_template = str(template_payload)
+        if _text_contains_external_links(serialized_template):
+            return True
+    return False
+
+
 def _site_user_avatar_url(
     request: HttpRequest | None,
     user: User,
@@ -8366,6 +8418,19 @@ def _comun_posts_base_queryset(comun: Comun, now=None):
         if blocked_tag_lemmas:
             blocked_tags_filter |= Q(tags__lemma__in=blocked_tag_lemmas)
         base_query = base_query.exclude(blocked_tags_filter).distinct()
+    if bool(getattr(comun, "forbid_external_links", False)):
+        blocked_post_ids: list[int] = []
+        for row in base_query.values("id", "title", "content", "raw_data").iterator(chunk_size=200):
+            raw_data = row.get("raw_data") if isinstance(row, dict) else {}
+            template_payload = raw_data.get("template") if isinstance(raw_data, dict) else None
+            if _payload_contains_external_links(
+                title=row.get("title") if isinstance(row, dict) else None,
+                content=row.get("content") if isinstance(row, dict) else None,
+                template_payload=template_payload,
+            ):
+                blocked_post_ids.append(int(row["id"]))
+        if blocked_post_ids:
+            base_query = base_query.exclude(id__in=blocked_post_ids)
     return base_query
 
 
@@ -8769,6 +8834,8 @@ def comun_detail_manage(request: HttpRequest, slug: str) -> HttpResponse:
         comun.minimum_author_rating_to_post = minimum_author_rating_to_post or 0
     if "only_moderators_can_post" in body:
         comun.only_moderators_can_post = bool(body.get("only_moderators_can_post"))
+    if "forbid_external_links" in body:
+        comun.forbid_external_links = bool(body.get("forbid_external_links"))
     if "allowed_template_types" in body:
         comun.allowed_post_templates = normalize_allowed_post_templates(
             body.get("allowed_template_types")
@@ -9031,6 +9098,15 @@ def comun_posts(request: HttpRequest, slug: str) -> HttpResponse:
             return JsonResponse({"ok": False, "error": "title is required"}, status=400)
         if not content:
             return JsonResponse({"ok": False, "error": "content is required"}, status=400)
+        if bool(getattr(comun, "forbid_external_links", False)) and _payload_contains_external_links(
+            title=title,
+            content=content,
+            template_payload=template_payload,
+        ):
+            return JsonResponse(
+                {"ok": False, "error": _COMUN_EXTERNAL_LINKS_FORBIDDEN_ERROR},
+                status=400,
+            )
 
         category_id = _parse_post_reference_to_id(
             payload.get("comun_category_id") or payload.get("category_id")

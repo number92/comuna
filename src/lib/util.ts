@@ -213,6 +213,50 @@ export function canParseUrl(url: string): boolean {
   }
 }
 
+const EXTERNAL_URL_REGEX = /https?:\/\/[^\s<>"')\]]+|www\.[^\s<>"')\]]+/gi
+const INTERNAL_COMUNA_HOSTS = new Set(['comuna.ru', 'www.comuna.ru', 'localhost', '127.0.0.1'])
+
+const isInternalComunaUrl = (value: string) => {
+  const raw = String(value || '').trim()
+  if (!raw) return true
+  const normalized = raw.includes('://') ? raw : `https://${raw}`
+  try {
+    const parsed = new URL(normalized)
+    const hostname = parsed.hostname.trim().toLowerCase().replace(/\.+$/, '')
+    if (!hostname) return true
+    return INTERNAL_COMUNA_HOSTS.has(hostname) || hostname.endsWith('.comuna.ru')
+  } catch {
+    return false
+  }
+}
+
+const textContainsExternalLinks = (value: string | null | undefined) => {
+  const raw = String(value || '').trim()
+  if (!raw) return false
+  const matches = raw.match(EXTERNAL_URL_REGEX) ?? []
+  return matches.some((match) => {
+    const candidate = match.trim().replace(/[.,;:!?]+$/, '')
+    return candidate && !isInternalComunaUrl(candidate)
+  })
+}
+
+export const postPayloadContainsExternalLinks = (payload: {
+  title?: string | null
+  content?: string | null
+  template?: unknown
+}) => {
+  if (textContainsExternalLinks(payload.title)) return true
+  if (textContainsExternalLinks(payload.content)) return true
+  if (payload.template) {
+    try {
+      if (textContainsExternalLinks(JSON.stringify(payload.template))) return true
+    } catch {
+      if (textContainsExternalLinks(String(payload.template))) return true
+    }
+  }
+  return false
+}
+
 export function instanceId(actorId: string) {
   return new URL(actorId).hostname
 }

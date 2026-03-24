@@ -163,6 +163,7 @@
         0
       ),
       only_moderators_can_post: Boolean(value?.only_moderators_can_post),
+      forbid_external_links: Boolean(value?.forbid_external_links),
       hide_from_home: Boolean(value?.hide_from_home),
       hide_from_fresh: Boolean(value?.hide_from_fresh),
       source_tag_ids: comunSourceTagIds(value),
@@ -629,6 +630,7 @@
             0
           ),
           only_moderators_can_post: Boolean(settingsDraft.only_moderators_can_post),
+          forbid_external_links: Boolean(settingsDraft.forbid_external_links),
           allowed_template_types: comunAllowedTemplateTypes(settingsDraft),
           hide_from_home: canManageComunModerators() ? Boolean(settingsDraft.hide_from_home) : undefined,
           hide_from_fresh: canManageComunModerators() ? Boolean(settingsDraft.hide_from_fresh) : undefined,
@@ -1047,6 +1049,27 @@
               {/if}
             </div>
           </div>
+
+          <label class="flex items-start gap-2 cursor-pointer rounded-xl border border-slate-200 dark:border-zinc-800 px-3 py-3">
+            <input
+              type="checkbox"
+              class="mt-0.5"
+              checked={Boolean(settingsDraft.forbid_external_links)}
+              on:change={() =>
+                (settingsDraft = {
+                  ...settingsDraft,
+                  forbid_external_links: !Boolean(settingsDraft.forbid_external_links),
+                })}
+            />
+            <span class="min-w-0">
+              <span class="block text-sm text-slate-900 dark:text-zinc-100">
+                Запретить внешние ссылки
+              </span>
+              <span class="block text-xs text-slate-500 dark:text-zinc-400">
+                Посты с внешними ссылками не будут попадать в это сообщество, а новые публикации с такими ссылками будут отклоняться.
+              </span>
+            </span>
+          </label>
 
           {#if canManageComunModerators()}
             <div class="flex flex-col gap-2">

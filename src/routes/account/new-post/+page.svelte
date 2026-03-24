@@ -6,7 +6,7 @@
   import { Button, Spinner, TextInput, toast } from 'mono-svelte'
   import EditorJS from '$lib/components/editor/EditorJS.svelte'
   import { onDestroy, onMount, tick } from 'svelte'
-  import { deserializeEditorModel } from '$lib/util'
+  import { deserializeEditorModel, postPayloadContainsExternalLinks } from '$lib/util'
   import {
     createUserPost,
     createComunPost,
@@ -620,6 +620,19 @@
       createError = 'Выберите сообщество для публикации.'
       return
     }
+    const template = buildTemplate()
+    if (
+      selectedComun?.forbid_external_links &&
+      postPayloadContainsExternalLinks({
+        title: createTitle.trim(),
+        content: createContent.trim(),
+        template,
+      })
+    ) {
+      createError =
+        'В этом сообществе запрещены внешние ссылки. Удалите ссылки из текста и шаблона публикации.'
+      return
+    }
     creating = true
     try {
       await createComunPost(createComunSlug, {
@@ -631,7 +644,7 @@
             ? createAuthor.replace(/^channel:/, '')
             : undefined,
         comun_category_id: createComunCategoryId ? Number(createComunCategoryId) : null,
-        template: buildTemplate() ?? undefined,
+        template: template ?? undefined,
       })
       clearLocalDraftBuffer()
       draftId = null

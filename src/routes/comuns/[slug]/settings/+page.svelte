@@ -268,16 +268,16 @@
     }
   }
 
-  const toggleDraftCategory = (categoryId: number) => {
+  const removeDraftCategory = (categoryId: number) => {
     if (!settingsDraft) return
-    const current = new Set(
-      (settingsDraft.category_ids ?? settingsDraft.categories ?? [])
-        .map((item: any) => (typeof item === 'number' ? item : item?.id))
-        .filter(Boolean)
+    settingsDraft = {
+      ...settingsDraft,
+      category_ids: comunCategoryIds(settingsDraft).filter((id) => id !== categoryId),
+      categories: (settingsDraft.categories ?? []).filter((category) => category.id !== categoryId),
+    }
+    settingsCategoryOptions = (settingsCategoryOptions ?? []).filter(
+      (category) => category.id !== categoryId
     )
-    if (current.has(categoryId)) current.delete(categoryId)
-    else current.add(categoryId)
-    settingsDraft = { ...settingsDraft, category_ids: Array.from(current) as number[] }
   }
 
   const setDraftCategoryOnlyModeratorIds = (ids: number[]) => {
@@ -527,10 +527,6 @@
       .map((value) => normalizeTagInput(value).toLowerCase())
       .some((value) => value === needle)
   })
-  $: draftCategoryIdSet = new Set<number>(
-    ((settingsDraft?.category_ids as number[] | undefined) ??
-      (settingsDraft?.categories ?? []).map((item) => item.id)) as number[]
-  )
   $: normalizedCategorySearch = settingsCategorySearch.trim().toLowerCase()
   $: normalizedCategoryCreateValue = normalizeCategoryInput(settingsCategorySearch)
   $: hasExactCategoryMatch = (settingsCategoryOptions ?? []).some((category) => {
@@ -1375,17 +1371,26 @@
               {#if filteredCategoryOptions.length}
                 {#each filteredCategoryOptions as category}
                   <div class="rounded-xl border border-slate-200 dark:border-zinc-800 px-3 py-3 flex flex-col gap-3">
-                    <label class="flex items-start gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={draftCategoryIdSet.has(category.id)}
-                        on:change={() => toggleDraftCategory(category.id)}
-                        class="mt-0.5"
-                      />
-                      <span class="min-w-0">
-                        <span class="block text-sm font-medium text-slate-900 dark:text-zinc-100">{category.name}</span>
-                      </span>
-                    </label>
+                    <div class="flex items-start justify-between gap-3">
+                      <div class="min-w-0">
+                        <div class="block text-sm font-medium text-slate-900 dark:text-zinc-100">{category.name}</div>
+                      </div>
+                      <button
+                        type="button"
+                        class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600 dark:border-zinc-700 dark:text-zinc-400 dark:hover:border-rose-900/60 dark:hover:bg-rose-950/30 dark:hover:text-rose-300"
+                        title="Удалить категорию"
+                        aria-label="Удалить категорию"
+                        on:click={() => removeDraftCategory(category.id)}
+                      >
+                        <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                          <path d="M3 6h18"></path>
+                          <path d="M8 6V4.8c0-.9.7-1.6 1.6-1.6h4.8c.9 0 1.6.7 1.6 1.6V6"></path>
+                          <path d="M18 6v12.2c0 .9-.7 1.6-1.6 1.6H7.6c-.9 0-1.6-.7-1.6-1.6V6"></path>
+                          <path d="M10 10.5v5"></path>
+                          <path d="M14 10.5v5"></path>
+                        </svg>
+                      </button>
+                    </div>
                     <div class="flex flex-col gap-2">
                       <div class="text-xs uppercase tracking-wide text-slate-500 dark:text-zinc-400">
                         Шаблоны категории

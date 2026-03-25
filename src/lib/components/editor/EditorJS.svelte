@@ -80,6 +80,7 @@
     orderedList: `${iconPath}/list-ol.svg`,
     checklist: `${iconPath}/list-check.svg`,
     poll: `${iconPath}/list-check.svg`,
+    rating: `${iconPath}/star-fill.svg`,
     clock: `${iconPath}/clock.svg`,
     music: `${iconPath}/music-note.svg`,
     map: `${iconPath}/geo-alt.svg`,
@@ -590,6 +591,31 @@
 
     save() {
       return {}
+    }
+  }
+
+  class PostRatingTool {
+    static get toolbox() {
+      return {
+        title: 'Рейтинг',
+        icon: `<img src="${icons.rating}" width="16" height="16" />`,
+      }
+    }
+
+    render() {
+      const wrapper = document.createElement('div')
+      wrapper.classList.add('post-rating-tool')
+      wrapper.innerHTML = `
+        <div class="post-rating-tool__title">Рейтинг публикации</div>
+        <div class="post-rating-tool__subtitle">
+          После публикации блок появится под статьей и позволит читателям поставить оценку от 1 до 10.
+        </div>
+      `
+      return wrapper
+    }
+
+    save() {
+      return { enabled: true }
     }
   }
 
@@ -3849,6 +3875,11 @@
               poll: PollTool,
             }
           : {}),
+        ...(enabledTemplateBlockTypes.has('post_rating')
+          ? {
+              post_rating: PostRatingTool,
+            }
+          : {}),
         ...(enabledTemplateBlockTypes.has('divider')
           ? {
               divider: DividerTool,
@@ -5051,6 +5082,35 @@
     display: flex;
     align-items: center;
     justify-content: center;
+  }
+
+  :global(.post-rating-tool) {
+    border-radius: 0.9rem;
+    border: 1px solid rgba(251, 191, 36, 0.34);
+    background:
+      radial-gradient(circle at top left, rgba(251, 191, 36, 0.12), transparent 54%),
+      linear-gradient(135deg, rgba(23, 23, 23, 0.98), rgba(30, 41, 59, 0.95));
+    color: #e2e8f0;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+  }
+
+  :global(.dark .post-rating-tool) {
+    border-color: rgba(251, 191, 36, 0.3);
+  }
+
+  :global(.post-rating-tool__title) {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #fff;
+  }
+
+  :global(.post-rating-tool__subtitle) {
+    font-size: 0.82rem;
+    line-height: 1.45;
+    color: #cbd5e1;
   }
 
   :global(.poll-tool) {

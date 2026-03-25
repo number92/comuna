@@ -1609,6 +1609,9 @@
         return `<pre><code>${block.data.code}</code></pre>`;
       case 'poll':
         return renderInlinePollBlock(block.data)
+      case 'post_rating':
+      case 'postrating':
+        return ''
       case 'delimiter':
       case 'divider':
         return '<div class="post-divider" aria-hidden="true"></div>'

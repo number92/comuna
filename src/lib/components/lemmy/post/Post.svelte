@@ -29,6 +29,7 @@
   import { getTagKey, getTagName, normalizeTag, type TagItem } from '$lib/tags'
   import { buildPostReadUrl, type BackendPoll, type BackendPostRating } from '$lib/api/backend'
   import { siteToken } from '$lib/siteAuth'
+  import { parseSerializedEditorModel } from '$lib/util'
   import PostTemplateHeader from '$lib/components/site/post-templates/PostTemplateHeader.svelte'
   import PostTemplateRatingFooter from '$lib/components/site/post-templates/PostTemplateRatingFooter.svelte'
   import {
@@ -88,10 +89,21 @@
   ).vote_poll_participations ?? []
   $: activeVotePollParticipation = backendVotePollParticipations[0] ?? null
   $: extraVotePollParticipationCount = Math.max(backendVotePollParticipations.length - 1, 0)
+  $: bodyContainsPostRatingBlock = (() => {
+    const rawBody = typeof post.post?.body === 'string' ? post.post.body : ''
+    if (!rawBody) return false
+    const parsed = parseSerializedEditorModel(rawBody)
+    const blocks = Array.isArray(parsed?.blocks) ? parsed.blocks : []
+    return blocks.some((block: any) => {
+      const type = String(block?.type || '').trim().toLowerCase()
+      return type === 'post_rating' || type === 'postrating'
+    })
+  })()
   $: showTemplateHeader = Boolean(isBackendPost && showFullBody && backendTemplate)
   $: showTemplateRatingFooter = Boolean(
       showFullBody &&
       backendPostRating &&
+      bodyContainsPostRatingBlock &&
       (
         backendEnabledTemplateEditorBlocks.length
           ? backendEnabledTemplateEditorBlocks

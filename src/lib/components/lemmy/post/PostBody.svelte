@@ -2668,12 +2668,12 @@
       linear-gradient(
         90deg,
         rgba(148, 163, 184, 0) 0%,
-        rgba(148, 163, 184, 0.48) 18%,
-        rgba(148, 163, 184, 0.82) 50%,
-        rgba(148, 163, 184, 0.48) 82%,
+        rgba(251, 191, 36, 0.28) 18%,
+        rgba(251, 191, 36, 0.68) 50%,
+        rgba(251, 191, 36, 0.28) 82%,
         rgba(148, 163, 184, 0) 100%
       );
-    box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.05);
+    box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.05);
   }
 
   :global(.dark .post-content .post-divider) {
@@ -2681,20 +2681,20 @@
       linear-gradient(
         90deg,
         rgba(63, 63, 70, 0) 0%,
-        rgba(103, 232, 249, 0.2) 18%,
-        rgba(56, 189, 248, 0.42) 50%,
-        rgba(103, 232, 249, 0.2) 82%,
+        rgba(251, 191, 36, 0.22) 18%,
+        rgba(251, 191, 36, 0.46) 50%,
+        rgba(251, 191, 36, 0.22) 82%,
         rgba(63, 63, 70, 0) 100%
       );
-    box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.05);
+    box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.05);
   }
 
   :global(.post-content .post-inline-poll) {
     margin: 1.1rem 0;
     border-radius: 1rem;
-    border: 1px solid rgba(16, 185, 129, 0.28);
+    border: 1px solid rgba(251, 191, 36, 0.34);
     background:
-      radial-gradient(130% 140% at 0% 0%, rgba(52, 211, 153, 0.18), rgba(52, 211, 153, 0) 60%),
+      radial-gradient(130% 140% at 0% 0%, rgba(251, 191, 36, 0.18), rgba(251, 191, 36, 0) 60%),
       linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(30, 41, 59, 0.9));
     color: #e2e8f0;
     padding: 0.9rem;
@@ -2710,7 +2710,7 @@
   }
 
   :global(.post-content .post-inline-poll__eyebrow) {
-    color: #86efac;
+    color: #fde68a;
     font-size: 0.72rem;
     font-weight: 700;
     letter-spacing: 0.08em;
@@ -2725,7 +2725,7 @@
   }
 
   :global(.post-content .post-inline-poll__mode) {
-    color: #bbf7d0;
+    color: #cbd5e1;
     font-size: 0.8rem;
     line-height: 1.4;
   }
@@ -2751,7 +2751,7 @@
 
   :global(.post-content .post-inline-poll__option:hover) {
     transform: translateY(-1px);
-    border-color: rgba(52, 211, 153, 0.42);
+    border-color: rgba(251, 191, 36, 0.42);
     background: rgba(15, 23, 42, 0.48);
   }
 
@@ -2775,13 +2775,13 @@
 
   :global(.post .post-content .post-inline-poll__option.is-selected),
   :global(.post .post-content .post-inline-poll__option--selected-vote) {
-    border-color: rgba(96, 165, 250, 0.38);
+    border-color: rgba(251, 191, 36, 0.46);
     background: rgba(30, 41, 59, 0.52);
   }
 
   :global(.post .post-content .post-inline-poll__option.is-selected:hover),
   :global(.post .post-content .post-inline-poll__option--selected-vote:hover) {
-    border-color: rgba(96, 165, 250, 0.38);
+    border-color: rgba(251, 191, 36, 0.46);
     background: rgba(30, 41, 59, 0.52);
   }
 
@@ -2804,7 +2804,7 @@
     position: absolute;
     inset: 0;
     border-radius: 999px;
-    border: 1px solid rgba(134, 239, 172, 0.5);
+    border: 1px solid rgba(251, 191, 36, 0.42);
     background: rgba(15, 23, 42, 0.5);
     transition: border-color 0.18s ease, background 0.18s ease, box-shadow 0.18s ease;
   }
@@ -2814,19 +2814,19 @@
   }
 
   :global(.post-content .post-inline-poll__control input:checked + .post-inline-poll__marker) {
-    border-color: rgba(110, 231, 183, 0.92);
+    border-color: rgba(251, 191, 36, 0.92);
     background:
-      radial-gradient(circle at 50% 50%, rgba(16, 185, 129, 0.95) 0 34%, transparent 35%),
-      rgba(16, 185, 129, 0.18);
-    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.14);
+      radial-gradient(circle at 50% 50%, rgba(251, 191, 36, 0.95) 0 34%, transparent 35%),
+      rgba(251, 191, 36, 0.18);
+    box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.14);
   }
 
   :global(.post-content .post-inline-poll__option.is-selected .post-inline-poll__marker) {
-    border-color: rgba(110, 231, 183, 0.92);
+    border-color: rgba(251, 191, 36, 0.92);
     background:
-      radial-gradient(circle at 50% 50%, rgba(16, 185, 129, 0.95) 0 34%, transparent 35%),
-      rgba(16, 185, 129, 0.18);
-    box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.14);
+      radial-gradient(circle at 50% 50%, rgba(251, 191, 36, 0.95) 0 34%, transparent 35%),
+      rgba(251, 191, 36, 0.18);
+    box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.14);
   }
 
   :global(.post-content .post-inline-poll__checkmark) {
@@ -2838,12 +2838,12 @@
     align-items: center;
     justify-content: center;
     border-radius: 999px;
-    background: rgba(59, 130, 246, 0.22);
-    color: #bfdbfe;
+    background: rgba(251, 191, 36, 0.18);
+    color: #fde68a;
     font-size: 0.78rem;
     font-weight: 800;
     line-height: 1;
-    box-shadow: 0 0 0 1px rgba(96, 165, 250, 0.28);
+    box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.28);
   }
 
   :global(.post-content .post-inline-poll__checkmark--empty) {
@@ -2874,7 +2874,7 @@
 
   :global(.post-content .post-inline-poll__option-percent) {
     flex: 0 0 auto;
-    color: #86efac;
+    color: #fde68a;
     font-size: 0.84rem;
     font-weight: 700;
     line-height: 1.2;
@@ -2897,20 +2897,20 @@
 
   :global(.post-content .post-inline-poll__progress::-webkit-progress-value) {
     border-radius: 999px;
-    background: linear-gradient(90deg, rgba(74, 222, 128, 0.72), rgba(16, 185, 129, 0.98));
+    background: linear-gradient(90deg, rgba(252, 211, 77, 0.72), rgba(245, 158, 11, 0.98));
   }
 
   :global(.post-content .post-inline-poll__progress::-moz-progress-bar) {
     border-radius: 999px;
-    background: linear-gradient(90deg, rgba(74, 222, 128, 0.72), rgba(16, 185, 129, 0.98));
+    background: linear-gradient(90deg, rgba(252, 211, 77, 0.72), rgba(245, 158, 11, 0.98));
   }
 
   :global(.post-content .post-inline-poll__progress.is-selected::-webkit-progress-value) {
-    background: linear-gradient(90deg, rgba(96, 165, 250, 0.9), rgba(59, 130, 246, 1));
+    background: linear-gradient(90deg, rgba(252, 211, 77, 0.84), rgba(251, 191, 36, 1));
   }
 
   :global(.post-content .post-inline-poll__progress.is-selected::-moz-progress-bar) {
-    background: linear-gradient(90deg, rgba(96, 165, 250, 0.9), rgba(59, 130, 246, 1));
+    background: linear-gradient(90deg, rgba(252, 211, 77, 0.84), rgba(251, 191, 36, 1));
   }
 
   :global(.post-content .post-inline-poll__option-meta) {
@@ -2929,8 +2929,8 @@
     gap: 0.3rem;
     border-radius: 999px;
     padding: 0.16rem 0.48rem;
-    background: rgba(59, 130, 246, 0.18);
-    color: #bfdbfe;
+    background: rgba(251, 191, 36, 0.16);
+    color: #fde68a;
     font-weight: 600;
   }
 
@@ -2949,7 +2949,7 @@
   }
 
   :global(.dark .post-content .post-inline-poll) {
-    border-color: rgba(52, 211, 153, 0.22);
+    border-color: rgba(251, 191, 36, 0.22);
   }
 
   :global(.post-content .post-gallery img) {
@@ -3317,9 +3317,9 @@
   }
 
   :global(.post-content .post-linked-material__note) {
-    border: 1px solid rgba(255, 255, 255, 0.14);
+    border: 1px solid rgba(251, 191, 36, 0.24);
     border-radius: 0.7rem;
-    background: rgba(15, 23, 42, 0.42);
+    background: rgba(15, 23, 42, 0.58);
     padding: 0.48rem 0.62rem;
   }
 
@@ -3546,9 +3546,9 @@
   :global(.post-content .post-spoiler) {
     margin: 1rem 0;
     border-radius: 0.9rem;
-    border: 1px solid rgba(148, 163, 184, 0.36);
+    border: 1px solid rgba(251, 191, 36, 0.34);
     background:
-      radial-gradient(120% 120% at 0% 0%, rgba(148, 163, 184, 0.16), rgba(148, 163, 184, 0) 62%),
+      radial-gradient(120% 120% at 0% 0%, rgba(251, 191, 36, 0.16), rgba(251, 191, 36, 0) 62%),
       linear-gradient(135deg, rgba(15, 23, 42, 0.94), rgba(30, 41, 59, 0.9));
     color: #e2e8f0;
     overflow: hidden;
@@ -3565,7 +3565,7 @@
   }
 
   :global(.post-content .post-spoiler__trigger:focus-visible) {
-    outline: 2px solid rgba(148, 163, 184, 0.9);
+    outline: 2px solid rgba(251, 191, 36, 0.9);
     outline-offset: -2px;
   }
 
@@ -3577,7 +3577,7 @@
   }
 
   :global(.post-content .post-spoiler__hint) {
-    color: #cbd5e1;
+    color: #fde68a;
     font-size: 0.75rem;
     line-height: 1.2;
     white-space: nowrap;
@@ -3620,15 +3620,15 @@
   }
 
   :global(.post-content .post-spoiler.is-open .post-spoiler__hint) {
-    color: #94a3b8;
+    color: #cbd5e1;
   }
 
   :global(.post-content .post-music) {
     margin: 1rem 0;
     border-radius: 0.95rem;
-    border: 1px solid rgba(56, 189, 248, 0.34);
+    border: 1px solid rgba(251, 191, 36, 0.34);
     background:
-      radial-gradient(130% 140% at 0% 0%, rgba(56, 189, 248, 0.18), rgba(56, 189, 248, 0) 60%),
+      radial-gradient(130% 140% at 0% 0%, rgba(251, 191, 36, 0.18), rgba(251, 191, 36, 0) 60%),
       linear-gradient(135deg, rgba(15, 23, 42, 0.96), rgba(30, 41, 59, 0.9));
     color: #e2e8f0;
     padding: 0.78rem;
@@ -3646,9 +3646,9 @@
 
   :global(.post-content .post-music__badge) {
     border-radius: 999px;
-    border: 1px solid rgba(56, 189, 248, 0.4);
+    border: 1px solid rgba(251, 191, 36, 0.38);
     background: rgba(15, 23, 42, 0.45);
-    color: #7dd3fc;
+    color: #fde68a;
     font-size: 0.7rem;
     line-height: 1.1;
     padding: 0.23rem 0.54rem;
@@ -3660,13 +3660,13 @@
   :global(.post-content .post-music__provider) {
     font-size: 0.78rem;
     line-height: 1.2;
-    color: #e0f2fe;
+    color: #f8fafc;
     font-weight: 600;
   }
 
   :global(.post-content .post-music__open-link) {
     margin-left: auto;
-    color: #38bdf8;
+    color: #f59e0b;
     font-size: 0.78rem;
     text-decoration: underline;
     text-underline-offset: 2px;
@@ -3674,7 +3674,7 @@
   }
 
   :global(.post-content .post-music__open-link:hover) {
-    color: #7dd3fc;
+    color: #fbbf24;
   }
 
   :global(.post-content .post-music__frame) {
@@ -3698,7 +3698,7 @@
 
   :global(.post-content .post-music--link-only .post-music__fallback) {
     margin: 0;
-    color: #bae6fd;
+    color: #cbd5e1;
     font-size: 0.8rem;
     line-height: 1.35;
   }

@@ -31,7 +31,11 @@
   import { siteToken } from '$lib/siteAuth'
   import PostTemplateHeader from '$lib/components/site/post-templates/PostTemplateHeader.svelte'
   import PostTemplateRatingFooter from '$lib/components/site/post-templates/PostTemplateRatingFooter.svelte'
-  import { getTemplateEditorBlockTypes, type SitePostTemplate } from '$lib/postTemplates'
+  import {
+    getTemplateEditorBlockTypes,
+    normalizeTemplateEditorBlockTypes,
+    type SitePostTemplate,
+  } from '$lib/postTemplates'
 
   export let post: PostView
   export let actions: boolean = true
@@ -72,6 +76,13 @@
   $: backendTemplate = (post.post as { template?: SitePostTemplate | null }).template ?? null
   $: backendPoll = (post.post as { poll?: BackendPoll | null }).poll ?? null
   $: backendPostRating = (post.post as { post_rating?: BackendPostRating | null }).post_rating ?? null
+  $: backendEnabledTemplateEditorBlocks = normalizeTemplateEditorBlockTypes(
+    (
+      post.post as {
+        enabled_template_editor_blocks?: string[] | null
+      }
+    ).enabled_template_editor_blocks ?? []
+  )
   $: backendVotePollParticipations = (
     post.post as { vote_poll_participations?: VotePollParticipation[] }
   ).vote_poll_participations ?? []
@@ -79,10 +90,13 @@
   $: extraVotePollParticipationCount = Math.max(backendVotePollParticipations.length - 1, 0)
   $: showTemplateHeader = Boolean(isBackendPost && showFullBody && backendTemplate)
   $: showTemplateRatingFooter = Boolean(
-    isBackendPost &&
       showFullBody &&
       backendPostRating &&
-      getTemplateEditorBlockTypes(backendTemplate?.type ?? '').includes('post_rating')
+      (
+        backendEnabledTemplateEditorBlocks.length
+          ? backendEnabledTemplateEditorBlocks
+          : getTemplateEditorBlockTypes(backendTemplate?.type ?? '')
+      ).includes('post_rating')
   )
   $: showTemplateHeaderPreview = Boolean(
     isBackendPost &&
@@ -307,13 +321,6 @@
             </Button>
           </div>
         {/if}
-        {#if showTemplateRatingFooter}
-          <PostTemplateRatingFooter
-            postId={post.post.id}
-            rating={backendPostRating}
-            allowVoting={isBackendPost}
-          />
-        {/if}
       </div>
     {:else}
       {#if isBackendPost}
@@ -382,6 +389,16 @@
         </a>
       {/if}
     {/if}
+  {/if}
+
+  {#if showTemplateRatingFooter}
+    <div style="grid-area: body;">
+      <PostTemplateRatingFooter
+        postId={post.post.id}
+        rating={backendPostRating}
+        allowVoting={isBackendPost}
+      />
+    </div>
   {/if}
 
   <!-- Возвращаем отдельную ссылку "читать далее" -->

@@ -3705,6 +3705,18 @@ def _serialize_post_rating(
     }
 
 
+def _serialize_enabled_template_editor_blocks(
+    template_payload: dict | None = None,
+) -> list[str]:
+    template_type = _template_type_from_payload(template_payload)
+    config = PostTemplateConfig.objects.filter(template_type=template_type).first()
+    if not config:
+        return default_enabled_template_editor_blocks(template_type)
+    return normalize_template_editor_blocks_for_template(
+        template_type, config.enabled_editor_blocks
+    )
+
+
 def _extract_telegram_poll(message: dict) -> tuple[str, str]:
     poll = message.get("poll")
     payload = _build_poll_payload(poll)
@@ -5312,6 +5324,7 @@ def _serialize_post_for_user(request: HttpRequest, post: Post, user: User | None
         "id": post.id,
         "title": _post_display_title(post),
         "template": template_payload,
+        "enabled_template_editor_blocks": _serialize_enabled_template_editor_blocks(template_payload),
         "content": content,
         "poll": poll_payload,
         "post_rating": _serialize_post_rating(post, user, template_payload=template_payload),
@@ -8739,6 +8752,7 @@ def _serialize_backend_post_card(
         "id": post.id,
         "title": _post_display_title(post),
         "template": template_payload,
+        "enabled_template_editor_blocks": _serialize_enabled_template_editor_blocks(template_payload),
         "rubric": rubric.name if rubric else None,
         "rubric_slug": rubric.slug if rubric else None,
         "rubric_icon_url": _rubric_icon_url(request, rubric),
@@ -9778,6 +9792,59 @@ def top_authors_month(request: HttpRequest) -> HttpResponse:
     return _top_authors_response(request, default_period="month")
 
 
+def _serialize_search_author_result(
+    request: HttpRequest,
+    author: Author,
+) -> dict:
+    rubric = author.rubric
+    author_channel_url, author_title = _author_display_fields(request, author, rubric)
+    return {
+        "username": author.username,
+        "title": author_title,
+        "avatar_url": _author_avatar_for_rubric(request, author, rubric),
+        "description": author.description,
+        "channel_url": author_channel_url or "",
+        "subscribers_count": author.subscribers_count,
+        "author_rating": _author_rating_value(author.rating_total),
+    }
+
+
+def _serialize_search_site_user_result(
+    request: HttpRequest,
+    user: User,
+) -> dict:
+    return {
+        "username": user.username,
+        "title": _site_user_display_name(user) or user.username,
+        "avatar_url": _site_user_avatar_url(request, user),
+        "description": "",
+        "channel_url": "",
+        "subscribers_count": 0,
+        "author_rating": None,
+    }
+
+
+def _search_author_result_rank(item: dict, query: str) -> tuple[int, str]:
+    normalized_query = (query or "").strip().lower()
+    username = str(item.get("username") or "").strip().lower()
+    title = str(item.get("title") or "").strip().lower()
+    if not normalized_query:
+        return (10, username)
+    if username == normalized_query:
+        return (0, username)
+    if title == normalized_query:
+        return (1, username)
+    if username.startswith(normalized_query):
+        return (2, username)
+    if title.startswith(normalized_query):
+        return (3, username)
+    if normalized_query in username:
+        return (4, username)
+    if normalized_query in title:
+        return (5, username)
+    return (6, username)
+
+
 def search_content(request: HttpRequest) -> HttpResponse:
     query = (request.GET.get("q") or "").strip()
     if not query:
@@ -9883,20 +9950,47 @@ def search_content(request: HttpRequest) -> HttpResponse:
                 | Q(title__icontains=query)
                 | Q(description__icontains=query)
             )
+            .select_related("rubric")
+            .order_by("username")
         )
-        total_authors = authors_qs.count()
-        for author in authors_qs[offset : offset + limit]:
-            authors.append(
-                {
-                    "username": author.username,
-                    "title": author.title,
-                    "avatar_url": _author_avatar_url(request, author),
-                    "description": author.description,
-                    "channel_url": author.invite_url or author.channel_url,
-                    "subscribers_count": author.subscribers_count,
-                    "author_rating": _author_rating_value(author.rating_total),
-                }
+        combined_author_results: list[dict] = []
+        seen_usernames: set[str] = set()
+
+        for author in authors_qs:
+            serialized = _serialize_search_author_result(request, author)
+            normalized_username = str(serialized.get("username") or "").strip().lower()
+            if not normalized_username or normalized_username in seen_usernames:
+                continue
+            seen_usernames.add(normalized_username)
+            combined_author_results.append(serialized)
+
+        if type_filter in ("all", "users"):
+            users_qs = (
+                User.objects.filter(is_active=True)
+                .filter(
+                    Q(username__icontains=query)
+                    | Q(first_name__icontains=query)
+                    | Q(last_name__icontains=query)
+                    | Q(site_profile__display_name__icontains=query)
+                )
+                .select_related("site_profile", "telegram_account", "vk_account")
+                .order_by("username")
+                .distinct()
             )
+            for user in users_qs:
+                normalized_username = (user.username or "").strip().lower()
+                if not normalized_username or normalized_username in seen_usernames:
+                    continue
+                seen_usernames.add(normalized_username)
+                combined_author_results.append(
+                    _serialize_search_site_user_result(request, user)
+                )
+
+        combined_author_results.sort(
+            key=lambda item: _search_author_result_rank(item, query)
+        )
+        total_authors = len(combined_author_results)
+        authors.extend(combined_author_results[offset : offset + limit])
 
     return JsonResponse(
         {

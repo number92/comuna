@@ -547,6 +547,7 @@ export type BackendPost = {
   title: string
   content: string
   template?: SitePostTemplate | null
+  enabled_template_editor_blocks?: string[]
   vote_poll_participations?: BackendPostVotePollParticipation[]
   poll?: BackendPoll | null
   post_rating?: BackendPostRating | null
@@ -592,6 +593,7 @@ export const backendPostToPostView = (
       name: titleWithTags,
       body: post.content,
       template: post.template ?? null,
+      enabled_template_editor_blocks: post.enabled_template_editor_blocks ?? [],
       vote_poll_participations: post.vote_poll_participations ?? [],
       poll: post.poll ?? null,
       post_rating: post.post_rating ?? null,

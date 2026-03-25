@@ -9,7 +9,7 @@
 
   export let data
 
-  const COMMUNITY_CREATION_MIN_AUTHOR_RATING = 5
+  const COMMUNITY_CREATION_MIN_AUTHOR_RATING = 0
   const COMMUNITIES_FAQ_HREF = '/faq'
   const COMMUNITIES_LANDING_HREF = '/lp/communities'
 
@@ -71,10 +71,7 @@
   const canCreate = (user = $siteUser) => {
     if (!$siteToken) return false
     if (user?.is_staff) return true
-    return Boolean(
-      user?.can_create_comun ??
-        currentUserMaxAuthorRating(user) >= Number(user?.create_comun_min_author_rating ?? COMMUNITY_CREATION_MIN_AUTHOR_RATING)
-    )
+    return Boolean(user?.can_create_comun ?? currentUserMaxAuthorRating(user) > COMMUNITY_CREATION_MIN_AUTHOR_RATING)
   }
 
   const resetForm = () => {
@@ -460,8 +457,7 @@
     <div class="text-sm leading-6 text-slate-600 dark:text-zinc-400">
       У вас недостаточно рейтинга для создания сообщества. Сейчас ваш максимальный рейтинг автора:
       <span class="font-semibold text-slate-900 dark:text-zinc-100">{formatRatingValue(currentUserMaxAuthorRating())}</span>.
-      Для создания нужен рейтинг от
-      <span class="font-semibold text-slate-900 dark:text-zinc-100">{formatRatingValue($siteUser?.create_comun_min_author_rating ?? COMMUNITY_CREATION_MIN_AUTHOR_RATING)}</span>.
+      Для создания нужен положительный рейтинг автора.
     </div>
     <div class="grid gap-3 sm:grid-cols-2">
       <a

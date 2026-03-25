@@ -87,7 +87,7 @@ _BOT_ID: int | None = None
 _TOKEN_SIGNER = TimestampSigner(salt="comuna-auth")
 _TOKEN_MAX_AGE = 60 * 60 * 24 * 30
 _FAKE_VIEWS_RAMP_SECONDS = 48 * 60 * 60
-_COMUN_CREATION_MIN_AUTHOR_RATING = 5.0
+_COMUN_CREATION_MIN_AUTHOR_RATING = 0.0
 _COMUN_ACTIVITY_POINTS = {
     "post": 10,
     "comment": 5,
@@ -1331,7 +1331,7 @@ def _user_max_author_rating(user: User | None) -> float:
 def _comun_creation_access_state(user: User | None) -> tuple[bool, float, float]:
     minimum_rating = round(_COMUN_CREATION_MIN_AUTHOR_RATING, 2)
     max_author_rating = _user_max_author_rating(user)
-    can_create = bool(user and user.is_staff) or max_author_rating >= minimum_rating
+    can_create = bool(user and user.is_staff) or max_author_rating > 0
     return can_create, minimum_rating, max_author_rating
 
 

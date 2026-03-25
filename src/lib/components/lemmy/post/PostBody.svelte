@@ -623,7 +623,6 @@
 
   const isExpandableImage = (image: HTMLImageElement | null): image is HTMLImageElement => {
     if (!image || !element?.contains(image)) return false
-    if (!image.hasAttribute('data-expandable-image')) return false
     if (
       image.closest(
         '.post-image-compare, .post-map, .post-quote__author, .featured-gallery-thumb, [data-post-link-id]'
@@ -2855,11 +2854,11 @@
     word-break: break-word;
   }
 
-  :global(.post-content img[data-expandable-image]) {
+  :global(.post-content img:not(.post-image-compare__image):not(.post-quote__author-photo)) {
     cursor: zoom-in;
   }
 
-  :global(.post-content .featured-gallery-thumb img[data-expandable-image]) {
+  :global(.post-content .featured-gallery-thumb img) {
     cursor: pointer;
   }
 

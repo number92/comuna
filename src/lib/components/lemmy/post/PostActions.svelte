@@ -121,6 +121,7 @@
         backendCreatorUsername &&
         backendOwnedAuthorUsernames.includes(backendCreatorUsername)
     )
+  $: canDeleteBackendPost = canEditBackendPost || Boolean(isBackendPost && $siteUser?.is_staff)
   $: if (backendLikes !== null && backendLikes !== undefined) backendLikesCount = backendLikes
   $: if (backendComments !== null && backendComments !== undefined)
     backendCommentsCount = backendComments
@@ -280,9 +281,9 @@
     }
   }
 
-  const deleteBackendPostByAdmin = async () => {
+  const deleteBackendPost = async () => {
     if (!backendPostId) return
-    if (!$siteUser?.is_staff) {
+    if (!canDeleteBackendPost) {
       toast({ content: 'Недостаточно прав', type: 'warning' })
       return
     }
@@ -587,14 +588,14 @@
         {$t('post.actions.more.edit')}
       </MenuButton>
     {/if}
-    {#if isBackendPost && $siteUser?.is_staff}
+    {#if isBackendPost && canDeleteBackendPost}
       <MenuButton
-        on:click={deleteBackendPostByAdmin}
+        on:click={deleteBackendPost}
         color="danger-subtle"
         disabled={deletingBackendPost}
       >
         <Icon src={Trash} size="16" micro slot="prefix" />
-        {deletingBackendPost ? 'Удаление...' : 'Удалить пост (админ)'}
+        {deletingBackendPost ? 'Удаление...' : 'Удалить пост'}
       </MenuButton>
     {/if}
     {#if $profile?.jwt}

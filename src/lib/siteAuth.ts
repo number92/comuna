@@ -14,6 +14,7 @@ import type {
 import { writable, get } from 'svelte/store'
 
 export type SiteAuthorLink = {
+  id?: number
   username: string
   title?: string | null
   channel_url?: string | null
@@ -25,6 +26,8 @@ export type SiteAuthorLink = {
   notify_comments?: boolean
   invite_url?: string | null
   author_rating?: number
+  linked_comun_slug?: string | null
+  linked_comun_name?: string | null
 }
 
 export type SiteUser = {

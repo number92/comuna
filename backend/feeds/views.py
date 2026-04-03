@@ -703,8 +703,10 @@ def _serialize_user(user: User) -> dict:
         author = link.author
         if not avatar_url:
             avatar_url = _author_avatar_url(None, author)
+        linked_comun = _author_telegram_source_comun(author)
         authors.append(
             {
+                "id": author.id,
                 "username": author.username,
                 "title": author.title,
                 "channel_url": author.invite_url or author.channel_url,
@@ -716,6 +718,8 @@ def _serialize_user(user: User) -> dict:
                 "notify_comments": author.notify_comments,
                 "invite_url": author.invite_url,
                 "author_rating": _author_rating_value(author.rating_total),
+                "linked_comun_slug": linked_comun.slug if linked_comun and linked_comun.is_active else None,
+                "linked_comun_name": linked_comun.name if linked_comun and linked_comun.is_active else None,
             }
         )
     can_create_comun, create_comun_min_author_rating, max_author_rating = _comun_creation_access_state(user)
@@ -4321,6 +4325,7 @@ def _handle_verification_code(chat_id: int, code: str) -> None:
         link.telegram_user_id = chat_id
         link.verified_at = now
         link.save(update_fields=["telegram_user_id", "verified_at"])
+        _attach_pending_comuns_for_author(author)
         linked.append(f"@{author.username}")
 
     record.used_at = now
@@ -5322,7 +5327,7 @@ def public_user_profile(request: HttpRequest, user_id: int) -> HttpResponse:
 
     comuns = list(
         Comun.objects.filter(Q(creator_id=profile_user.id) | Q(moderators__id=profile_user.id), is_active=True)
-        .select_related("creator", "product_tag", "source_rubric")
+        .select_related("creator", "product_tag", "source_rubric", "telegram_source_author")
         .prefetch_related("moderators", "categories")
         .distinct()
         .order_by("sort_order", "name")
@@ -7094,6 +7099,49 @@ def _parse_int_list(value: object) -> list[int]:
     return result
 
 
+def _normalize_telegram_channel_username(value: object) -> str:
+    raw_value = str(value or "").strip()
+    if not raw_value:
+        return ""
+    if raw_value.startswith("@"):
+        raw_value = raw_value[1:]
+    elif raw_value.startswith("https://") or raw_value.startswith("http://"):
+        try:
+            parsed = urllib.parse.urlparse(raw_value)
+        except Exception:
+            return ""
+        path_parts = [part for part in (parsed.path or "").split("/") if part]
+        raw_value = path_parts[0] if path_parts else ""
+    raw_value = raw_value.strip().lstrip("@").split("/", 1)[0].strip()
+    if not raw_value:
+        return ""
+    if not re.fullmatch(r"[A-Za-z0-9_]{4,64}", raw_value):
+        return ""
+    return raw_value
+
+
+def _generate_unique_comun_name(base_name: str, fallback_username: str = "") -> str:
+    candidate = str(base_name or "").strip()
+    if not candidate:
+        normalized_username = _normalize_telegram_channel_username(fallback_username)
+        candidate = f"@{normalized_username}" if normalized_username else "Сообщество"
+    if not Comun.objects.filter(name__iexact=candidate).exists():
+        return candidate
+
+    normalized_username = _normalize_telegram_channel_username(fallback_username)
+    if normalized_username:
+        username_candidate = f"@{normalized_username}"
+        if not Comun.objects.filter(name__iexact=username_candidate).exists():
+            return username_candidate
+
+    suffix = 2
+    while True:
+        next_candidate = f"{candidate} {suffix}"
+        if not Comun.objects.filter(name__iexact=next_candidate).exists():
+            return next_candidate
+        suffix += 1
+
+
 def _generate_unique_comun_slug(name: str) -> str:
     base_slug = slugify(str(name or "").strip())[:160]
     if not base_slug:
@@ -8246,6 +8294,93 @@ def _comun_can_manage_moderators(user: User | None, comun: Comun) -> bool:
     return comun.creator_id == user.id
 
 
+def _serialize_author_source_summary(
+    request: HttpRequest | None,
+    author: Author | None,
+) -> dict | None:
+    if not author:
+        return None
+    return {
+        "id": author.id,
+        "username": author.username,
+        "title": (author.title or "").strip() or None,
+        "channel_url": (author.invite_url or author.channel_url or "").strip() or None,
+        "avatar_url": _author_avatar_url(request, author),
+    }
+
+
+def _current_user_verified_telegram_authors(user: User | None) -> list[Author]:
+    if not user:
+        return []
+    return list(
+        Author.objects.filter(
+            admin_links__user=user,
+            admin_links__verified_at__isnull=False,
+            is_blocked=False,
+        )
+        .distinct()
+        .order_by("username")
+    )
+
+
+def _comun_team_user_ids(comun: Comun) -> list[int]:
+    team_user_ids = {int(comun.creator_id or 0)}
+    for moderator_id in comun.moderators.values_list("id", flat=True):
+        team_user_ids.add(int(moderator_id or 0))
+    return [user_id for user_id in team_user_ids if user_id > 0]
+
+
+def _author_is_managed_by_comun_team(author: Author | None, comun: Comun) -> bool:
+    if not author:
+        return False
+    team_user_ids = _comun_team_user_ids(comun)
+    if not team_user_ids:
+        return False
+    return AuthorAdmin.objects.filter(
+        author=author,
+        user_id__in=team_user_ids,
+        verified_at__isnull=False,
+    ).exists()
+
+
+def _author_telegram_source_comun(author: Author | None) -> Comun | None:
+    if not author:
+        return None
+    try:
+        return author.telegram_source_comun
+    except Comun.DoesNotExist:
+        return None
+
+
+def _attach_pending_comuns_for_author(author: Author | None) -> None:
+    if not author:
+        return
+    normalized_username = _normalize_telegram_channel_username(author.username)
+    if not normalized_username:
+        return
+
+    current_comun = _author_telegram_source_comun(author)
+    pending_comuns = (
+        Comun.objects.filter(
+            telegram_channel_username__iexact=normalized_username,
+            is_active=True,
+        )
+        .exclude(telegram_source_author_id=author.id)
+        .prefetch_related("moderators")
+        .select_related("creator")
+        .order_by("id")
+    )
+    for comun in pending_comuns:
+        if current_comun and current_comun.id != comun.id:
+            continue
+        if not _author_is_managed_by_comun_team(author, comun):
+            continue
+        comun.telegram_source_author = author
+        comun.telegram_channel_username = normalized_username
+        comun.save(update_fields=["telegram_source_author", "telegram_channel_username", "updated_at"])
+        current_comun = comun
+
+
 def _serialize_comun_category(category: ComunCategory, comun: Comun | None = None) -> dict:
     category_allowed_template_types = _allowed_template_overrides_for_comun_category(category)
     return {
@@ -8352,6 +8487,7 @@ def _serialize_comun(
     source_tags = _comun_source_tags_list(comun)
     product_tag = source_tags[0] if source_tags else comun.product_tag
     source_rubric = getattr(comun, "source_rubric", None)
+    telegram_source_author = getattr(comun, "telegram_source_author", None)
     tags = list(comun.tags.filter(is_active=True).order_by("name"))
     blocked_tags = list(comun.blocked_tags.filter(is_active=True).order_by("name"))
     welcome_post_payload = None
@@ -8440,6 +8576,13 @@ def _serialize_comun(
             if source_rubric
             else None
         ),
+        "telegram_source_author": _serialize_author_source_summary(request, telegram_source_author),
+        "telegram_channel_username": (
+            _normalize_telegram_channel_username(
+                comun.telegram_channel_username or getattr(telegram_source_author, "username", "")
+            )
+            or None
+        ),
         "tags": [
             {
                 "id": tag.id,
@@ -8490,8 +8633,10 @@ def _serialize_comun(
         payload["blocked_tag_ids"] = [tag.id for tag in blocked_tags]
         payload["excluded_tag_ids"] = [tag.id for tag in blocked_tags]
         payload["product_tag_id"] = comun.product_tag_id
+        payload["telegram_source_author_id"] = comun.telegram_source_author_id
         payload["welcome_post_ref"] = str(comun.welcome_post_id or "")
     if include_options:
+        verified_telegram_authors = _current_user_verified_telegram_authors(current_user)
         payload["options"] = {
             "categories": [
                 _serialize_comun_category(category, comun)
@@ -8513,6 +8658,10 @@ def _serialize_comun(
                     "avatar_url": _author_avatar_url(request, author),
                 }
                 for author in Author.objects.filter(is_blocked=False).order_by("username")
+            ],
+            "telegram_channels": [
+                _serialize_author_source_summary(request, author)
+                for author in verified_telegram_authors
             ],
             "template_types": _serialize_post_template_type_options(),
             "template_editor_block_options_by_template": (
@@ -8574,6 +8723,11 @@ def _comun_source_filter(comun: Comun) -> Q | None:
     source_rubric_id = getattr(comun, "source_rubric_id", None)
     if source_rubric_id:
         combined_filter |= Q(rubric_id=source_rubric_id)
+        has_source = True
+
+    telegram_source_author_id = getattr(comun, "telegram_source_author_id", None)
+    if telegram_source_author_id:
+        combined_filter |= Q(author_id=telegram_source_author_id)
         has_source = True
 
     return combined_filter if has_source else None
@@ -8890,13 +9044,127 @@ def _serialize_backend_post_card(
 
 
 @csrf_exempt
+def comun_create_from_telegram_channel(request: HttpRequest) -> HttpResponse:
+    if request.method != "POST":
+        return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)
+
+    current_user = _get_user_from_request(request)
+    if not current_user:
+        return JsonResponse({"ok": False, "error": "unauthorized"}, status=401)
+
+    can_create_comun, minimum_rating, max_author_rating = _comun_creation_access_state(current_user)
+    if not can_create_comun:
+        return JsonResponse(
+            {
+                "ok": False,
+                "error": "insufficient author rating",
+                "reason": "insufficient_author_rating",
+                "minimum_author_rating": minimum_rating,
+                "max_author_rating": max_author_rating,
+            },
+            status=403,
+        )
+
+    try:
+        body = json.loads(request.body.decode("utf-8") or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"ok": False, "error": "invalid json"}, status=400)
+
+    author_id = _parse_post_reference_to_id(body.get("author_id"))
+    author_username = _normalize_telegram_channel_username(
+        body.get("author_username") or body.get("telegram_channel_username")
+    )
+
+    author_queryset = Author.objects.filter(is_blocked=False)
+    if author_id:
+        author_queryset = author_queryset.filter(id=author_id)
+    elif author_username:
+        author_queryset = author_queryset.filter(username__iexact=author_username)
+    else:
+        return JsonResponse({"ok": False, "error": "author required"}, status=400)
+
+    author = author_queryset.first()
+    if not author:
+        return JsonResponse({"ok": False, "error": "author not found"}, status=404)
+
+    if not current_user.is_staff and not AuthorAdmin.objects.filter(
+        user=current_user,
+        author=author,
+        verified_at__isnull=False,
+    ).exists():
+        return JsonResponse({"ok": False, "error": "forbidden"}, status=403)
+
+    existing_comun = _author_telegram_source_comun(author)
+    if existing_comun and existing_comun.is_active:
+        existing_comun = (
+            Comun.objects.filter(id=existing_comun.id)
+            .select_related("creator", "product_tag", "source_rubric", "welcome_post", "telegram_source_author")
+            .prefetch_related("moderators", "excluded_authors", "categories", "tags", "source_tags", "blocked_tags")
+            .first()
+        )
+        return JsonResponse(
+            {
+                "ok": True,
+                "created": False,
+                "comun": _serialize_comun(
+                    request,
+                    existing_comun,
+                    current_user=current_user,
+                    include_manage_fields=True,
+                    include_options=True,
+                    include_activity=True,
+                ),
+            }
+        )
+
+    base_name = (author.title or "").strip() or f"@{author.username}"
+    comun_name = _generate_unique_comun_name(base_name, author.username)
+    comun_slug = _generate_unique_comun_slug(author.username or comun_name)
+    if not comun_slug:
+        comun_slug = _generate_unique_comun_slug(comun_name)
+    if not comun_slug:
+        return JsonResponse({"ok": False, "error": "unable to generate comun slug"}, status=400)
+
+    comun = Comun.objects.create(
+        name=comun_name,
+        slug=comun_slug,
+        creator=current_user,
+        logo_url=_author_avatar_url(request, author) or "",
+        product_description=(author.description or "").strip(),
+        telegram_source_author=author,
+        telegram_channel_username=_normalize_telegram_channel_username(author.username),
+    )
+    comun.moderators.add(current_user)
+    comun = (
+        Comun.objects.filter(id=comun.id)
+        .select_related("creator", "product_tag", "source_rubric", "welcome_post", "telegram_source_author")
+        .prefetch_related("moderators", "excluded_authors", "categories", "tags", "source_tags", "blocked_tags")
+        .get()
+    )
+    return JsonResponse(
+        {
+            "ok": True,
+            "created": True,
+            "comun": _serialize_comun(
+                request,
+                comun,
+                current_user=current_user,
+                include_manage_fields=True,
+                include_options=True,
+                include_activity=True,
+            ),
+        }
+    )
+
+
+@csrf_exempt
 def comuns_list_create(request: HttpRequest) -> HttpResponse:
     current_user = _get_user_from_request(request)
 
     if request.method == "GET":
         comuns = list(
             Comun.objects.filter(is_active=True)
-            .select_related("creator", "product_tag", "source_rubric")
+            .select_related("creator", "product_tag", "source_rubric", "telegram_source_author")
             .prefetch_related("moderators", "excluded_authors", "categories", "tags", "source_tags", "blocked_tags")
             .order_by("sort_order", "name")
         )
@@ -9024,7 +9292,7 @@ def comuns_list_create(request: HttpRequest) -> HttpResponse:
 
     comun = (
         Comun.objects.filter(id=comun.id)
-        .select_related("creator", "product_tag", "source_rubric", "welcome_post")
+        .select_related("creator", "product_tag", "source_rubric", "welcome_post", "telegram_source_author")
         .prefetch_related("moderators", "excluded_authors", "categories", "tags", "source_tags", "blocked_tags")
         .get()
     )
@@ -9037,7 +9305,7 @@ def comun_detail_manage(request: HttpRequest, slug: str) -> HttpResponse:
     try:
         comun = (
             Comun.objects.filter(slug=slug)
-            .select_related("creator", "product_tag", "source_rubric", "welcome_post")
+            .select_related("creator", "product_tag", "source_rubric", "welcome_post", "telegram_source_author")
             .prefetch_related("moderators", "excluded_authors", "categories", "tags", "source_tags", "blocked_tags")
             .get()
         )
@@ -9189,6 +9457,63 @@ def comun_detail_manage(request: HttpRequest, slug: str) -> HttpResponse:
         comun.source_tags.set(source_tags_queryset)
         comun.product_tag = source_tags_queryset.order_by("name").first()
 
+    if "telegram_source_author_id" in body or "telegram_channel_username" in body:
+        telegram_source_author_id = _parse_post_reference_to_id(body.get("telegram_source_author_id"))
+        requested_channel_username = _normalize_telegram_channel_username(
+            body.get("telegram_channel_username")
+        )
+        next_telegram_author = None
+
+        if telegram_source_author_id:
+            next_telegram_author = (
+                Author.objects.filter(
+                    id=telegram_source_author_id,
+                    is_blocked=False,
+                )
+                .first()
+            )
+            if not next_telegram_author:
+                return JsonResponse({"ok": False, "error": "telegram channel not found"}, status=400)
+            linked_comun = _author_telegram_source_comun(next_telegram_author)
+            if linked_comun and linked_comun.id != comun.id:
+                return JsonResponse(
+                    {"ok": False, "error": "telegram channel already linked to another comun"},
+                    status=400,
+                )
+            if not (
+                (current_user and current_user.is_staff)
+                or _author_is_managed_by_comun_team(next_telegram_author, comun)
+            ):
+                return JsonResponse(
+                    {"ok": False, "error": "telegram channel is not managed by comun team"},
+                    status=403,
+                )
+            requested_channel_username = _normalize_telegram_channel_username(
+                next_telegram_author.username
+            )
+        elif requested_channel_username:
+            candidate_author = Author.objects.filter(
+                username__iexact=requested_channel_username,
+                is_blocked=False,
+            ).first()
+            linked_comun = _author_telegram_source_comun(candidate_author) if candidate_author else None
+            if linked_comun and linked_comun.id != comun.id:
+                return JsonResponse(
+                    {"ok": False, "error": "telegram channel already linked to another comun"},
+                    status=400,
+                )
+            if candidate_author and (
+                (current_user and current_user.is_staff)
+                or _author_is_managed_by_comun_team(candidate_author, comun)
+            ):
+                next_telegram_author = candidate_author
+                requested_channel_username = _normalize_telegram_channel_username(
+                    candidate_author.username
+                )
+
+        comun.telegram_source_author = next_telegram_author
+        comun.telegram_channel_username = requested_channel_username
+
     if "welcome_post_id" in body or "welcome_post_ref" in body:
         welcome_post_id = _parse_post_reference_to_id(
             body.get("welcome_post_id") if "welcome_post_id" in body else body.get("welcome_post_ref")
@@ -9274,7 +9599,7 @@ def comun_detail_manage(request: HttpRequest, slug: str) -> HttpResponse:
 
     comun = (
         Comun.objects.filter(id=comun.id)
-        .select_related("creator", "product_tag", "source_rubric", "welcome_post")
+        .select_related("creator", "product_tag", "source_rubric", "welcome_post", "telegram_source_author")
         .prefetch_related("moderators", "excluded_authors", "categories", "tags", "source_tags", "blocked_tags")
         .get()
     )
@@ -9368,7 +9693,7 @@ def comun_posts(request: HttpRequest, slug: str) -> HttpResponse:
     try:
         comun = (
             Comun.objects.filter(slug=slug)
-            .select_related("creator", "product_tag", "source_rubric", "welcome_post")
+            .select_related("creator", "product_tag", "source_rubric", "welcome_post", "telegram_source_author")
             .prefetch_related("moderators", "excluded_authors", "categories", "source_tags", "blocked_tags")
             .get()
         )
@@ -9709,7 +10034,7 @@ def comun_post_category_update(request: HttpRequest, slug: str, post_id: int) ->
     try:
         comun = (
             Comun.objects.filter(slug=slug)
-            .select_related("creator", "product_tag", "source_rubric")
+            .select_related("creator", "product_tag", "source_rubric", "telegram_source_author")
             .prefetch_related("moderators", "categories")
             .get()
         )

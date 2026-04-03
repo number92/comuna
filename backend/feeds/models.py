@@ -682,6 +682,21 @@ class Comun(models.Model):
         verbose_name="Исходная рубрика",
         help_text="Если указана, посты этой рубрики отображаются в сообществе.",
     )
+    telegram_source_author = models.OneToOneField(
+        "Author",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="telegram_source_comun",
+        verbose_name="Telegram-канал сообщества",
+        help_text="Если указан, новые посты этого Telegram-канала попадают в сообщество.",
+    )
+    telegram_channel_username = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name="Username Telegram-канала",
+        help_text="Публичный @username канала. Можно указать заранее на сайте, а затем завершить настройку в боте.",
+    )
     moderators = models.ManyToManyField(
         User,
         blank=True,

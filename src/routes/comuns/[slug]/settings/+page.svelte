@@ -51,6 +51,13 @@
     title?: string | null
     avatar_url?: string | null
   }
+  type ComunTelegramChannelOption = {
+    id: number
+    username: string
+    title?: string | null
+    channel_url?: string | null
+    avatar_url?: string | null
+  }
   type TemplateTypeOption = { value: PostTemplateCode; label: string }
   type ComunSettingsTabKey = 'description' | 'availability' | 'moderation' | 'categories' | 'rules'
   const fallbackTemplateTypeOptions: TemplateTypeOption[] = [
@@ -76,6 +83,7 @@
   let settingsUserOptions: ComunUserOption[] = []
   let settingsAuthorOptions: ComunAuthorOption[] = []
   let settingsTemplateTypeOptions: TemplateTypeOption[] = fallbackTemplateTypeOptions
+  let settingsTelegramChannelOptions: ComunTelegramChannelOption[] = []
   let settingsLogoInput: HTMLInputElement | null = null
   let settingsTab: ComunSettingsTabKey = 'description'
 
@@ -195,6 +203,10 @@
       moderator_ids: comunModeratorIds(value),
       excluded_author_ids: comunExcludedAuthorIds(value),
       blocked_tag_ids: comunBlockedTagIds(value),
+      telegram_source_author_id: Number(
+        value?.telegram_source_author_id ?? value?.telegram_source_author?.id ?? 0
+      ),
+      telegram_channel_username: String(value?.telegram_channel_username ?? '').trim().toLowerCase(),
       welcome_post_ref: String(value?.welcome_post_ref ?? value?.welcome_post_id ?? '').trim(),
     })
 
@@ -255,6 +267,7 @@
       settingsTagOptions = payload.comun?.options?.tags ?? []
       settingsUserOptions = payload.comun?.options?.users ?? []
       settingsAuthorOptions = payload.comun?.options?.authors ?? []
+      settingsTelegramChannelOptions = payload.comun?.options?.telegram_channels ?? []
       settingsTemplateTypeOptions = normalizeTemplateTypeOptions(payload.comun?.options?.template_types)
       if (!payload.comun?.can_moderate) {
         settingsError = 'Настройки доступны только модераторам сообщества'
@@ -298,6 +311,33 @@
     if (current.has(categoryId)) current.delete(categoryId)
     else current.add(categoryId)
     setDraftCategoryOnlyModeratorIds(Array.from(current))
+  }
+
+  const setDraftTelegramChannel = (
+    channelUsername: string,
+    telegramSourceAuthor?: ComunTelegramChannelOption | null
+  ) => {
+    if (!settingsDraft) return
+    settingsDraft = {
+      ...settingsDraft,
+      telegram_channel_username: channelUsername,
+      telegram_source_author_id: telegramSourceAuthor?.id ?? null,
+      telegram_source_author: telegramSourceAuthor
+        ? {
+            id: telegramSourceAuthor.id,
+            username: telegramSourceAuthor.username,
+            title: telegramSourceAuthor.title ?? null,
+            channel_url: telegramSourceAuthor.channel_url ?? null,
+            avatar_url: telegramSourceAuthor.avatar_url ?? null,
+          }
+        : null,
+    }
+  }
+
+  const onTelegramChannelInput = (event: Event) => {
+    const target = event.currentTarget as HTMLInputElement | null
+    const nextValue = target?.value ?? ''
+    setDraftTelegramChannel(nextValue, null)
   }
 
   const setDraftModeratorIds = (ids: number[]) => {
@@ -606,6 +646,21 @@
       avatar_url: fromDraft?.avatar_url ?? null,
     }
   })
+  $: selectedTelegramSourceAuthor =
+    settingsDraft?.telegram_source_author ??
+    (settingsTelegramChannelOptions.find(
+      (author) => author.id === Number(settingsDraft?.telegram_source_author_id ?? 0)
+    ) ??
+      null)
+  $: normalizedTelegramChannelUsername = String(
+    settingsDraft?.telegram_channel_username ??
+      selectedTelegramSourceAuthor?.username ??
+      ''
+  ).trim()
+  $: pendingTelegramChannelUsername =
+    normalizedTelegramChannelUsername && !selectedTelegramSourceAuthor
+      ? normalizedTelegramChannelUsername
+      : ''
 
   const createTagAndChooseDraft = async () => {
     const tagName = normalizeTagInput(settingsTagSearch)
@@ -727,6 +782,11 @@
           excluded_author_ids: comunExcludedAuthorIds(settingsDraft),
           source_tag_ids: comunSourceTagIds(settingsDraft),
           blocked_tag_ids: comunBlockedTagIds(settingsDraft),
+          telegram_source_author_id:
+            Number(
+              settingsDraft.telegram_source_author_id ?? settingsDraft.telegram_source_author?.id ?? 0
+            ) || undefined,
+          telegram_channel_username: settingsDraft.telegram_channel_username ?? '',
           category_ids:
             settingsDraft.category_ids ??
             (settingsDraft.categories ?? []).map((category) => category.id),
@@ -745,6 +805,8 @@
       settingsTagOptions = payload.comun?.options?.tags ?? settingsTagOptions
       settingsUserOptions = payload.comun?.options?.users ?? settingsUserOptions
       settingsAuthorOptions = payload.comun?.options?.authors ?? settingsAuthorOptions
+      settingsTelegramChannelOptions =
+        payload.comun?.options?.telegram_channels ?? settingsTelegramChannelOptions
       settingsTemplateTypeOptions = normalizeTemplateTypeOptions(
         payload.comun?.options?.template_types
       )
@@ -1090,6 +1152,57 @@
           {/if}
 
         {:else if settingsTab === 'moderation'}
+          <div class="flex flex-col gap-3 rounded-xl border border-slate-200 dark:border-zinc-800 px-3 py-3">
+            <div class="text-sm font-medium text-slate-900 dark:text-zinc-100">
+              Telegram-канал сообщества
+            </div>
+            <div class="text-xs text-slate-500 dark:text-zinc-400">
+              Укажите публичный `@username` канала. Если канал уже подтвержден у вас на сайте, его можно выбрать сразу. Если нет, сохраните username здесь и завершите подключение в боте.
+            </div>
+            <input
+              value={settingsDraft.telegram_channel_username ?? ''}
+              on:input={onTelegramChannelInput}
+              placeholder="@mychannel или https://t.me/mychannel"
+              class="rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"
+            />
+
+            {#if settingsTelegramChannelOptions.length}
+              <div class="flex flex-col gap-2">
+                <div class="text-xs uppercase tracking-wide text-slate-500 dark:text-zinc-400">
+                  Ваши подтвержденные каналы
+                </div>
+                <div class="flex flex-wrap gap-2">
+                  {#each settingsTelegramChannelOptions as author}
+                    <button
+                      type="button"
+                      class={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition ${
+                        Number(selectedTelegramSourceAuthor?.id) === Number(author.id)
+                          ? 'border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-zinc-900'
+                          : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800'
+                      }`}
+                      on:click={() => setDraftTelegramChannel(author.username, author)}
+                    >
+                      <span>@{author.username}</span>
+                      {#if author.title}
+                        <span class="text-xs opacity-70">{author.title}</span>
+                      {/if}
+                    </button>
+                  {/each}
+                </div>
+              </div>
+            {/if}
+
+            {#if selectedTelegramSourceAuthor}
+              <div class="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-200">
+                Канал уже связан с сообществом: @{selectedTelegramSourceAuthor.username}
+              </div>
+            {:else if pendingTelegramChannelUsername}
+              <div class="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-200">
+                Канал сохранен в ожидании: {pendingTelegramChannelUsername.startsWith('@') ? pendingTelegramChannelUsername : `@${pendingTelegramChannelUsername}`}. После сохранения завершите подключение в боте и отправьте код подтверждения.
+              </div>
+            {/if}
+          </div>
+
           <div class="flex flex-col gap-2">
             <div class="text-sm text-slate-700 dark:text-zinc-300">Теги сообщества</div>
             <div class="text-xs text-slate-500 dark:text-zinc-400">

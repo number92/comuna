@@ -94,6 +94,10 @@ export const buildComunsUrl = (): string => {
   return `${getBackendBaseUrl()}/api/comuns/`
 }
 
+export const buildComunFromTelegramChannelUrl = (): string => {
+  return `${getBackendBaseUrl()}/api/comuns/from-telegram-channel/`
+}
+
 export const buildComunUrl = (slug: string): string => {
   return `${getBackendBaseUrl()}/api/comuns/${encodeURIComponent(slug)}/`
 }
@@ -449,6 +453,15 @@ export type BackendComun = {
   excluded_tags?: BackendTag[]
   blocked_tag_ids?: number[]
   excluded_tag_ids?: number[]
+  telegram_source_author?: {
+    id: number
+    username: string
+    title?: string | null
+    channel_url?: string | null
+    avatar_url?: string | null
+  } | null
+  telegram_source_author_id?: number | null
+  telegram_channel_username?: string | null
   source_rubric?: { id: number; name: string; slug: string } | null
   product_tag_id?: number | null
   welcome_post_id?: number | null
@@ -460,6 +473,13 @@ export type BackendComun = {
     tags?: BackendTag[]
     users?: Array<{ id: number; username: string; display_name?: string | null }>
     authors?: Array<{ id: number; username: string; title?: string | null; avatar_url?: string | null }>
+    telegram_channels?: Array<{
+      id: number
+      username: string
+      title?: string | null
+      channel_url?: string | null
+      avatar_url?: string | null
+    }>
     template_types?: Array<{ value: string; label: string }>
     template_editor_block_options_by_template?: Record<string, Array<{ value: string; label: string }>>
     template_editor_blocks_by_template?: Record<string, string[]>

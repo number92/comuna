@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { goto } from '$app/navigation'
   import { defaultSettings, userSettings } from '$lib/settings'
   import Setting from './Setting.svelte'
   import { toast, Modal, TextArea, TextInput } from 'mono-svelte'
@@ -16,7 +17,11 @@
   import { t } from '$lib/translations'
   import Header from '$lib/components/ui/layout/pages/Header.svelte'
   import { profile } from '$lib/auth'
-  import { buildRubricsUrl, buildTagsListUrl } from '$lib/api/backend'
+  import {
+    buildComunFromTelegramChannelUrl,
+    buildRubricsUrl,
+    buildTagsListUrl,
+  } from '$lib/api/backend'
   import { normalizeTag } from '$lib/tags'
   import {
     fetchVerificationCode,
@@ -46,6 +51,7 @@
   let channelVerificationCode = ''
   let channelVerificationCodeLoading = false
   let channelVerificationCodeError = ''
+  let creatingComunByAuthorId: number | null = null
   let notificationEvents: SiteNotificationEventSetting[] = []
   let notificationSettingsLoading = false
   let notificationSettingsSaving = false
@@ -232,6 +238,47 @@
       })
     } finally {
       siteProfileSaving = false
+    }
+  }
+
+  const authHeaders = () => {
+    if (!$siteToken) throw new Error('Нужна авторизация')
+    return {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${$siteToken}`,
+    }
+  }
+
+  const createComunFromAuthor = async (author: { id?: number; username: string }) => {
+    const authorId = Number(author?.id ?? 0)
+    if (!authorId || creatingComunByAuthorId) return
+    creatingComunByAuthorId = authorId
+    try {
+      const response = await fetch(buildComunFromTelegramChannelUrl(), {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+          author_id: authorId,
+          author_username: author.username,
+        }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok || !payload?.comun?.slug) {
+        throw new Error(payload?.error || 'Не удалось создать сообщество')
+      }
+      await refreshSiteUser()
+      toast({
+        content: payload?.created === false ? 'Сообщество уже существует' : 'Сообщество создано',
+        type: 'success',
+      })
+      await goto(`/comuns/${payload.comun.slug}/settings`)
+    } catch (error) {
+      toast({
+        content: (error as Error)?.message ?? 'Не удалось создать сообщество',
+        type: 'error',
+      })
+    } finally {
+      creatingComunByAuthorId = null
     }
   }
 
@@ -631,6 +678,31 @@
                       Ссылка приглашения
                     </a>
                   {/if}
+                  <div class="mt-2 flex flex-wrap items-center gap-2">
+                    {#if author.linked_comun_slug}
+                      <a
+                        class="inline-flex items-center rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                        href={`/comuns/${author.linked_comun_slug}`}
+                      >
+                        {author.linked_comun_name ? `Открыть сообщество ${author.linked_comun_name}` : 'Открыть сообщество'}
+                      </a>
+                      <a
+                        class="inline-flex items-center rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+                        href={`/comuns/${author.linked_comun_slug}/settings`}
+                      >
+                        Настройки сообщества
+                      </a>
+                    {:else}
+                      <Button
+                        size="sm"
+                        on:click={() => createComunFromAuthor(author)}
+                        loading={creatingComunByAuthorId === author.id}
+                        disabled={creatingComunByAuthorId !== null}
+                      >
+                        Создать сообщество из канала
+                      </Button>
+                    {/if}
+                  </div>
                 </li>
               {/each}
             </ul>

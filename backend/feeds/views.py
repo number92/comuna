@@ -6957,6 +6957,14 @@ def _ensure_comun_category_by_name(
     return category, True
 
 
+def _comun_category_queryset(comun: Comun):
+    return ComunCategory.objects.filter(comun=comun)
+
+
+def _active_comun_category_queryset(comun: Comun):
+    return _comun_category_queryset(comun).filter(is_active=True)
+
+
 @csrf_exempt
 def tags_ensure(request: HttpRequest) -> HttpResponse:
     if request.method != "POST":
@@ -8398,7 +8406,7 @@ def _serialize_comun_category(category: ComunCategory, comun: Comun | None = Non
 
 def _comun_categories_list(comun: Comun) -> list[ComunCategory]:
     prefetched_objects_cache = getattr(comun, "_prefetched_objects_cache", {})
-    cached = prefetched_objects_cache.get("categories")
+    cached = prefetched_objects_cache.get("owned_categories")
     if cached is not None:
         return sorted(
             [
@@ -8411,7 +8419,7 @@ def _comun_categories_list(comun: Comun) -> list[ComunCategory]:
                 str(getattr(category, "name", "") or "").lower(),
             ),
         )
-    return list(comun.categories.filter(comun_id=comun.id, is_active=True).order_by("sort_order", "name"))
+    return list(_active_comun_category_queryset(comun).order_by("sort_order", "name"))
 
 
 def _comun_categories_count(comun: Comun) -> int:
@@ -9533,21 +9541,44 @@ def comun_detail_manage(request: HttpRequest, slug: str) -> HttpResponse:
     comun.save()
 
     if "category_ids" in body or "category_names" in body:
-        selected_categories: dict[int, ComunCategory] = {
-            category.id: category
-            for category in ComunCategory.objects.filter(
-                id__in=_parse_int_list(body.get("category_ids")),
-                is_active=True,
-                comun=comun,
-            )
-        }
-        raw_category_names = body.get("category_names") if isinstance(body.get("category_names"), list) else []
+        if "category_ids" in body:
+            selected_categories: dict[int, ComunCategory] = {
+                category.id: category
+                for category in _comun_category_queryset(comun).filter(
+                    id__in=_parse_int_list(body.get("category_ids")),
+                )
+            }
+        else:
+            selected_categories = {
+                category.id: category for category in _active_comun_category_queryset(comun)
+            }
+
+        raw_category_names = (
+            body.get("category_names") if isinstance(body.get("category_names"), list) else []
+        )
         for raw_category_name in raw_category_names:
             category, _created = _ensure_comun_category_by_name(comun, raw_category_name)
             if not category:
                 continue
+            if not category.is_active:
+                category.is_active = True
+                category.save(update_fields=["is_active", "updated_at"])
             selected_categories[category.id] = category
-        comun.categories.set(selected_categories.keys())
+
+        selected_category_ids = list(selected_categories.keys())
+        if "category_ids" in body:
+            _comun_category_queryset(comun).exclude(id__in=selected_category_ids).filter(
+                is_active=True
+            ).update(is_active=False)
+            if selected_category_ids:
+                _comun_category_queryset(comun).filter(id__in=selected_category_ids).exclude(
+                    is_active=True
+                ).update(is_active=True)
+            comun.categories.set(
+                _active_comun_category_queryset(comun).filter(id__in=selected_category_ids)
+            )
+        elif selected_category_ids:
+            comun.categories.add(*selected_category_ids)
 
     if "category_template_types_by_id" in body:
         raw_category_templates = body.get("category_template_types_by_id")
@@ -9749,7 +9780,7 @@ def comun_posts(request: HttpRequest, slug: str) -> HttpResponse:
         )
         category = None
         if category_id:
-            category = comun.categories.filter(id=category_id, is_active=True, comun=comun).first()
+            category = _active_comun_category_queryset(comun).filter(id=category_id).first()
             if not category:
                 return JsonResponse(
                     {"ok": False, "error": "category not found"},
@@ -9904,7 +9935,7 @@ def comun_posts(request: HttpRequest, slug: str) -> HttpResponse:
     selected_category = None
     if selected_category_slug:
         selected_category = (
-            comun.categories.filter(slug=selected_category_slug, is_active=True, comun=comun).first()
+            _active_comun_category_queryset(comun).filter(slug=selected_category_slug).first()
         )
         if not selected_category:
             return JsonResponse({"ok": False, "error": "category not found"}, status=404)
@@ -10051,7 +10082,7 @@ def comun_post_category_update(request: HttpRequest, slug: str, post_id: int) ->
     category_id = _parse_post_reference_to_id(body.get("category_id"))
     category = None
     if category_id:
-        category = comun.categories.filter(id=category_id, is_active=True, comun=comun).first()
+        category = _active_comun_category_queryset(comun).filter(id=category_id).first()
         if not category:
             return JsonResponse({"ok": False, "error": "category not found"}, status=400)
 

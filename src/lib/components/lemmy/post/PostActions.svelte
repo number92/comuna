@@ -123,7 +123,13 @@
           (backendCreatorUsername &&
             backendOwnedAuthorUsernames.includes(backendCreatorUsername)))
     )
-  $: canDeleteBackendPost = canEditBackendPost || Boolean(isBackendPost && $siteUser?.is_staff)
+  $: canEditViaLegacyProfile = Boolean(
+    $profile?.user &&
+      (post.creator.id == $profile.user.local_user_view.person.id || isAdmin($profile.user))
+  )
+  $: canManageBackendPost = Boolean(isBackendPost && (canEditBackendPost || canEditViaLegacyProfile))
+  $: canDeleteBackendPost =
+    canManageBackendPost || Boolean(isBackendPost && $siteUser?.is_staff)
   $: if (backendLikes !== null && backendLikes !== undefined) backendLikesCount = backendLikes
   $: if (backendComments !== null && backendComments !== undefined)
     backendCommentsCount = backendComments
@@ -574,13 +580,13 @@
     <MenuDivider>
       {$t('post.actions.more.actions')}
     </MenuDivider>
-    {#if canEditBackendPost && backendPostId}
+    {#if canManageBackendPost && backendPostId}
       <MenuButton link href={`/account/edit-post/${backendPostId}`}>
         <Icon src={PencilSquare} size="16" micro slot="prefix" />
         {$t('post.actions.more.edit')}
       </MenuButton>
     {/if}
-    {#if $profile?.user && (post.creator.id == $profile.user.local_user_view.person.id || isAdmin($profile.user))}
+    {#if !backendPostId && canEditViaLegacyProfile}
       <MenuButton 
         on:click={() => {
           goto(`/edit/post/${post.post.id}`)

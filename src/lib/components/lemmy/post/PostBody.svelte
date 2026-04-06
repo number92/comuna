@@ -1345,7 +1345,6 @@
       return `<div class="post-callout">
         <span class="post-callout__line" aria-hidden="true"></span>
         <div class="post-callout__body">
-          <span class="post-callout__eyebrow">Врезка</span>
           <div class="post-callout__text">${escapeHtml(text).replace(/\r?\n/g, '<br>')}</div>
         </div>
       </div>`
@@ -3830,15 +3829,6 @@
     display: flex;
     flex-direction: column;
     gap: 0.42rem;
-  }
-
-  :global(.post-content .post-callout__eyebrow) {
-    color: #fde68a;
-    font-size: 0.72rem;
-    line-height: 1.2;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    font-weight: 700;
   }
 
   :global(.post-content .post-callout__text) {

@@ -59,7 +59,18 @@
         <summary class="cursor-pointer list-none text-base font-semibold text-slate-900 dark:text-zinc-100">
           <span class="flex items-center justify-between gap-3">
             <span>Правила сообщества</span>
-            <span class="text-xs font-medium text-slate-500 dark:text-zinc-400">Показать</span>
+            <svg
+              viewBox="0 0 20 20"
+              class="h-4 w-4 shrink-0 text-slate-500 dark:text-zinc-400"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M5 7.5 10 12.5 15 7.5"></path>
+            </svg>
           </span>
         </summary>
         <div class="mt-3 whitespace-pre-line text-sm leading-relaxed text-slate-700 dark:text-zinc-300">
@@ -70,33 +81,21 @@
   {/if}
 
   {#if comun?.glossary_enabled}
-    <section class="rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/85">
-      <div class="text-base font-semibold text-slate-900 dark:text-zinc-100">Глоссарий</div>
-      <div class="mt-2 text-sm leading-relaxed text-slate-600 dark:text-zinc-400">
-        Все термины сообщества на одной странице с быстрым поиском.
-      </div>
-      <a
-        href={glossaryPath}
-        class="mt-4 inline-flex items-center rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-900 transition hover:bg-slate-50 dark:border-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-800"
-      >
-        Открыть глоссарий
-      </a>
-    </section>
+    <a
+      href={glossaryPath}
+      class="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-slate-50 dark:border-zinc-800 dark:bg-zinc-900/85 dark:text-zinc-100 dark:hover:bg-zinc-800"
+    >
+      Глоссарий
+    </a>
   {/if}
 
   {#if comun?.roadmap_enabled}
-    <section class="rounded-2xl border border-slate-200 bg-white/95 p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/85">
-      <div class="text-base font-semibold text-slate-900 dark:text-zinc-100">Дорожная карта</div>
-      <div class="mt-2 text-sm leading-relaxed text-slate-600 dark:text-zinc-400">
-        Публичные этапы и приоритеты сообщества в одном месте.
-      </div>
-      <a
-        href={roadmapPath}
-        class="mt-4 inline-flex items-center rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-900 transition hover:bg-slate-50 dark:border-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-800"
-      >
-        Открыть дорожную карту
-      </a>
-    </section>
+    <a
+      href={roadmapPath}
+      class="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white/95 px-4 py-3 text-sm font-semibold text-slate-900 shadow-sm transition hover:bg-slate-50 dark:border-zinc-800 dark:bg-zinc-900/85 dark:text-zinc-100 dark:hover:bg-zinc-800"
+    >
+      Дорожная карта
+    </a>
   {/if}
 
   {#if moderatorList.length}

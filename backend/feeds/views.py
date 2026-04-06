@@ -5306,6 +5306,15 @@ def public_user_profile(request: HttpRequest, user_id: int) -> HttpResponse:
     current_user = _get_user_from_request(request)
     now = timezone.now()
     author_ids, author_links = _public_user_author_ids(profile_user)
+    visible_author_links = [
+        link
+        for link in author_links
+        if getattr(link, "author", None) is not None
+        and not (
+            (linked_comun := _author_telegram_source_comun(link.author))
+            and linked_comun.is_active
+        )
+    ]
 
     public_posts_qs = Post.objects.none()
     if author_ids:
@@ -5347,9 +5356,7 @@ def public_user_profile(request: HttpRequest, user_id: int) -> HttpResponse:
             )
         )
     author_cards = [
-        _serialize_public_site_user_author_card(request, link)
-        for link in author_links
-        if getattr(link, "author", None) is not None
+        _serialize_public_site_user_author_card(request, link) for link in visible_author_links
     ]
 
     posts_payload = [
@@ -5369,7 +5376,7 @@ def public_user_profile(request: HttpRequest, user_id: int) -> HttpResponse:
             "user": _serialize_public_site_user_profile(
                 request,
                 profile_user,
-                author_links=author_links,
+                author_links=visible_author_links,
                 posts_count=total_posts,
                 comuns_count=total_comuns,
             ),

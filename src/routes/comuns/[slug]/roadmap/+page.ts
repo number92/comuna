@@ -15,6 +15,9 @@ export const load = async ({ fetch, params, url }) => {
   }
   const comunPayload = await comunResponse.json()
   const comun = comunPayload?.comun ?? null
+  if (comun && comun.roadmap_enabled === false) {
+    throw error(404, 'Дорожная карта отключена')
+  }
 
   const statsUrl = new URL(buildComunPostsUrl(slug), url.origin)
   statsUrl.searchParams.set('limit', '1')

@@ -8639,6 +8639,7 @@ def _serialize_comun(
         "rules_text": comun.rules_text,
         "target_audience": comun.target_audience,
         "glossary_enabled": bool(getattr(comun, "glossary_enabled", False)),
+        "roadmap_enabled": bool(getattr(comun, "roadmap_enabled", True)),
         "glossary_terms": [_serialize_comun_glossary_term(term) for term in glossary_terms],
         "glossary_terms_count": len(glossary_terms),
         "minimum_author_rating_to_post": _comun_minimum_author_rating_value(comun),
@@ -9505,6 +9506,8 @@ def comun_detail_manage(request: HttpRequest, slug: str) -> HttpResponse:
         comun.target_audience = str(body.get("target_audience") or "").strip()
     if "glossary_enabled" in body:
         comun.glossary_enabled = bool(body.get("glossary_enabled"))
+    if "roadmap_enabled" in body:
+        comun.roadmap_enabled = bool(body.get("roadmap_enabled"))
     if "minimum_author_rating_to_post" in body:
         minimum_author_rating_to_post, minimum_author_rating_error = _normalize_comun_minimum_author_rating(
             body.get("minimum_author_rating_to_post")

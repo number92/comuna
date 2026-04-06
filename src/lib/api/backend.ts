@@ -434,6 +434,7 @@ export type BackendComun = {
   rules_text?: string | null
   target_audience?: string | null
   glossary_enabled?: boolean
+  roadmap_enabled?: boolean
   glossary_terms?: BackendComunGlossaryTerm[]
   glossary_terms_count?: number
   tags?: BackendTag[]

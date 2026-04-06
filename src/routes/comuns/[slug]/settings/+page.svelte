@@ -209,6 +209,7 @@
       rules_text: (value?.rules_text ?? '').trim(),
       target_audience: (value?.target_audience ?? '').trim(),
       glossary_enabled: Boolean(value?.glossary_enabled),
+      roadmap_enabled: Boolean(value?.roadmap_enabled ?? true),
       minimum_author_rating_to_post: Math.max(
         Number(value?.minimum_author_rating_to_post ?? 0) || 0,
         0
@@ -864,6 +865,7 @@
           rules_text: settingsDraft.rules_text ?? '',
           target_audience: settingsDraft.target_audience ?? '',
           glossary_enabled: Boolean(settingsDraft.glossary_enabled),
+          roadmap_enabled: Boolean(settingsDraft.roadmap_enabled ?? true),
           glossary_terms: settingsGlossaryTerms.map((term, index) => ({
             id: Number(term.id) || undefined,
             term: term.term.trim(),
@@ -1257,103 +1259,6 @@
 
         {:else if settingsTab === 'moderation'}
           <div class="flex flex-col gap-3 rounded-xl border border-slate-200 dark:border-zinc-800 px-3 py-3">
-            <label class="flex items-start gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                class="mt-0.5"
-                checked={Boolean(settingsDraft.glossary_enabled)}
-                on:change={() =>
-                  (settingsDraft = {
-                    ...settingsDraft,
-                    glossary_enabled: !Boolean(settingsDraft.glossary_enabled),
-                  })}
-              />
-              <span class="min-w-0">
-                <span class="block text-sm text-slate-900 dark:text-zinc-100">
-                  Глоссарий
-                </span>
-                <span class="block text-xs text-slate-500 dark:text-zinc-400">
-                  Включает публичную страницу терминов сообщества и вставку терминов в публикации.
-                </span>
-              </span>
-            </label>
-
-            {#if settingsDraft.glossary_enabled}
-              <div class="flex flex-col gap-3 rounded-xl border border-slate-200 dark:border-zinc-800 bg-slate-50/70 dark:bg-zinc-900/40 p-3">
-                <div class="flex flex-wrap items-center justify-between gap-2">
-                  <div class="text-sm font-medium text-slate-900 dark:text-zinc-100">
-                    Термины глоссария
-                  </div>
-                  <Button size="sm" on:click={addDraftGlossaryTerm} disabled={settingsSaving}>
-                    Добавить термин
-                  </Button>
-                </div>
-                <input
-                  bind:value={settingsGlossarySearch}
-                  placeholder="Поиск по термину или расшифровке..."
-                  class="rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"
-                />
-                <div class="grid gap-3">
-                  {#if filteredGlossaryTerms.length}
-                    {#each filteredGlossaryTerms as glossaryTerm (glossaryTerm.localId)}
-                      <div class="rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-3">
-                        <div class="flex items-start justify-between gap-3">
-                          <div class="flex-1 grid gap-3">
-                            <label class="flex flex-col gap-1">
-                              <span class="text-xs uppercase tracking-wide text-slate-500 dark:text-zinc-400">
-                                Термин
-                              </span>
-                              <input
-                                value={glossaryTerm.term}
-                                on:input={(event) => onGlossaryTermTitleInput(glossaryTerm.localId, event)}
-                                class="rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"
-                                placeholder="Например: Шот-лист"
-                              />
-                            </label>
-                            <label class="flex flex-col gap-1">
-                              <span class="text-xs uppercase tracking-wide text-slate-500 dark:text-zinc-400">
-                                Расшифровка
-                              </span>
-                              <textarea
-                                rows="3"
-                                on:input={(event) =>
-                                  onGlossaryTermDefinitionInput(glossaryTerm.localId, event)}
-                                class="rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"
-                                placeholder="Короткое объяснение термина, которое будет показано при наведении"
-                              >{glossaryTerm.definition}</textarea>
-                            </label>
-                          </div>
-                          <button
-                            type="button"
-                            class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600 dark:border-zinc-700 dark:text-zinc-400 dark:hover:border-rose-900/60 dark:hover:bg-rose-950/30 dark:hover:text-rose-300"
-                            title="Удалить термин"
-                            aria-label="Удалить термин"
-                            on:click={() => removeDraftGlossaryTerm(glossaryTerm.localId)}
-                          >
-                            <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                              <path d="M3 6h18"></path>
-                              <path d="M8 6V4.8c0-.9.7-1.6 1.6-1.6h4.8c.9 0 1.6.7 1.6 1.6V6"></path>
-                              <path d="M18 6v12.2c0 .9-.7 1.6-1.6 1.6H7.6c-.9 0-1.6-.7-1.6-1.6V6"></path>
-                              <path d="M10 10.5v5"></path>
-                              <path d="M14 10.5v5"></path>
-                            </svg>
-                          </button>
-                        </div>
-                      </div>
-                    {/each}
-                  {:else}
-                    <div class="rounded-xl border border-slate-200 dark:border-zinc-800 px-3 py-3 text-sm text-slate-500 dark:text-zinc-400">
-                      {normalizedGlossarySearch
-                        ? 'Термины не найдены'
-                        : 'Добавьте термины, чтобы участники могли ссылаться на них в публикациях.'}
-                    </div>
-                  {/if}
-                </div>
-              </div>
-            {/if}
-          </div>
-
-          <div class="flex flex-col gap-3 rounded-xl border border-slate-200 dark:border-zinc-800 px-3 py-3">
             <div class="text-sm font-medium text-slate-900 dark:text-zinc-100">
               Telegram-канал сообщества
             </div>
@@ -1650,6 +1555,114 @@
             </div>
           </div>
         {:else if settingsTab === 'categories'}
+          <div class="flex flex-col gap-3 rounded-xl border border-slate-200 dark:border-zinc-800 px-3 py-3">
+            <div class="text-sm font-medium text-slate-900 dark:text-zinc-100">Блоки</div>
+            <label class="flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                class="mt-0.5"
+                checked={Boolean(settingsDraft.glossary_enabled)}
+                on:change={() =>
+                  (settingsDraft = {
+                    ...settingsDraft,
+                    glossary_enabled: !Boolean(settingsDraft.glossary_enabled),
+                  })}
+              />
+              <span class="min-w-0">
+                <span class="block text-sm text-slate-900 dark:text-zinc-100">Глоссарий</span>
+              </span>
+            </label>
+            <label class="flex items-start gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                class="mt-0.5"
+                checked={Boolean(settingsDraft.roadmap_enabled ?? true)}
+                on:change={() =>
+                  (settingsDraft = {
+                    ...settingsDraft,
+                    roadmap_enabled: !Boolean(settingsDraft.roadmap_enabled ?? true),
+                  })}
+              />
+              <span class="min-w-0">
+                <span class="block text-sm text-slate-900 dark:text-zinc-100">Дорожная карта</span>
+              </span>
+            </label>
+          </div>
+
+          {#if settingsDraft.glossary_enabled}
+            <div class="flex flex-col gap-3 rounded-xl border border-slate-200 dark:border-zinc-800 px-3 py-3">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="text-sm font-medium text-slate-900 dark:text-zinc-100">
+                  Термины глоссария
+                </div>
+                <Button size="sm" on:click={addDraftGlossaryTerm} disabled={settingsSaving}>
+                  Добавить термин
+                </Button>
+              </div>
+              <input
+                bind:value={settingsGlossarySearch}
+                placeholder="Поиск по термину или расшифровке..."
+                class="rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"
+              />
+              <div class="grid gap-3">
+                {#if filteredGlossaryTerms.length}
+                  {#each filteredGlossaryTerms as glossaryTerm (glossaryTerm.localId)}
+                    <div class="rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-3 py-3">
+                      <div class="flex items-start justify-between gap-3">
+                        <div class="flex-1 grid gap-3">
+                          <label class="flex flex-col gap-1">
+                            <span class="text-xs uppercase tracking-wide text-slate-500 dark:text-zinc-400">
+                              Термин
+                            </span>
+                            <input
+                              value={glossaryTerm.term}
+                              on:input={(event) => onGlossaryTermTitleInput(glossaryTerm.localId, event)}
+                              class="rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"
+                              placeholder="Например: Шот-лист"
+                            />
+                          </label>
+                          <label class="flex flex-col gap-1">
+                            <span class="text-xs uppercase tracking-wide text-slate-500 dark:text-zinc-400">
+                              Расшифровка
+                            </span>
+                            <textarea
+                              rows="3"
+                              on:input={(event) =>
+                                onGlossaryTermDefinitionInput(glossaryTerm.localId, event)}
+                              class="rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"
+                              placeholder="Короткое объяснение термина, которое будет показано при наведении"
+                            >{glossaryTerm.definition}</textarea>
+                          </label>
+                        </div>
+                        <button
+                          type="button"
+                          class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600 dark:border-zinc-700 dark:text-zinc-400 dark:hover:border-rose-900/60 dark:hover:bg-rose-950/30 dark:hover:text-rose-300"
+                          title="Удалить термин"
+                          aria-label="Удалить термин"
+                          on:click={() => removeDraftGlossaryTerm(glossaryTerm.localId)}
+                        >
+                          <svg viewBox="0 0 24 24" class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M3 6h18"></path>
+                            <path d="M8 6V4.8c0-.9.7-1.6 1.6-1.6h4.8c.9 0 1.6.7 1.6 1.6V6"></path>
+                            <path d="M18 6v12.2c0 .9-.7 1.6-1.6 1.6H7.6c-.9 0-1.6-.7-1.6-1.6V6"></path>
+                            <path d="M10 10.5v5"></path>
+                            <path d="M14 10.5v5"></path>
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  {/each}
+                {:else}
+                  <div class="rounded-xl border border-slate-200 dark:border-zinc-800 px-3 py-3 text-sm text-slate-500 dark:text-zinc-400">
+                    {normalizedGlossarySearch
+                      ? 'Термины не найдены'
+                      : 'Добавьте термины, чтобы участники могли ссылаться на них в публикациях.'}
+                  </div>
+                {/if}
+              </div>
+            </div>
+          {/if}
+
           <div class="flex flex-col gap-2">
             <div class="text-sm text-slate-700 dark:text-zinc-300">Доступные шаблоны публикаций</div>
             <TemplateTypeDropdown

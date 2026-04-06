@@ -228,6 +228,7 @@
     $page.url.pathname + (selectedCategorySlug ? `?category=${encodeURIComponent(selectedCategorySlug)}` : ''),
     (env.PUBLIC_SITE_URL || $page.url.origin).replace(/\/+$/, '') + '/'
   ).toString()
+  $: roadmapEnabled = Boolean(comun?.roadmap_enabled ?? true)
   $: publicRoadmapUrl = comun?.slug ? `/comuns/${comun.slug}/roadmap` : ''
   $: if (browser) {
     if (publicRoadmapModalOpen) {
@@ -638,7 +639,7 @@
   $: roadmapStages = buildRoadmapStages(comun?.categories ?? [], categoryCountById)
   $: roadmapStageSlugSet = new Set(roadmapStages.map((stage) => stage.category.slug))
   $: roadmapHasBacklog = roadmapStages.some((stage) => stage.key === 'backlog')
-  $: roadmapCanOpenModal = roadmapHasBacklog || roadmapStages.length >= 2
+  $: roadmapCanOpenModal = roadmapEnabled && (roadmapHasBacklog || roadmapStages.length >= 2)
   $: roadmapModalVisible = publicRoadmapModalOpen && roadmapCanOpenModal
   $: roadmapTrackedCount = roadmapStages.reduce((sum, stage) => sum + Math.max(stage.count, 0), 0)
   $: roadmapReleasedCount =
@@ -1158,7 +1159,7 @@
           >
             {isSubscribedToComun ? 'Вы подписаны' : 'Подписаться'}
           </Button>
-          {#if publicRoadmapUrl && roadmapCanOpenModal}
+          {#if roadmapEnabled && publicRoadmapUrl && roadmapCanOpenModal}
             <a
               href={publicRoadmapUrl}
               on:click={onPublicRoadmapLinkClick}

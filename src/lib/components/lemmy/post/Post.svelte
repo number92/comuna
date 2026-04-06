@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { PostView } from 'lemmy-js-client'
+  import { onDestroy, onMount } from 'svelte'
   import { isImage, isVideo } from '$lib/ui/image.js'
   import { getInstance } from '$lib/lemmy.js'
   import PostActions from '$lib/components/lemmy/post/PostActions.svelte'
@@ -100,6 +101,18 @@
 
   let readOverride: boolean | null = null
   let removedByAdmin = false
+  let postElement: HTMLDivElement | null = null
+  let visibilityObserver: IntersectionObserver | null = null
+  let readTimer: ReturnType<typeof setTimeout> | null = null
+
+  const READ_VISIBILITY_DELAY_MS = 2000
+  const READ_VISIBILITY_THRESHOLD = 0.6
+
+  const clearReadTimer = () => {
+    if (!readTimer) return
+    clearTimeout(readTimer)
+    readTimer = null
+  }
 
   const markBackendPostRead = async () => {
     if (!isBackendPost) return
@@ -116,6 +129,40 @@
       console.error('Failed to mark post as read:', error)
     }
   }
+
+  const queueVisibleRead = () => {
+    if (!isBackendPost) return
+    if (readOverride ?? post.read) return
+    if (readTimer) return
+    readTimer = setTimeout(async () => {
+      readTimer = null
+      await markBackendPostRead()
+    }, READ_VISIBILITY_DELAY_MS)
+  }
+
+  onMount(() => {
+    if (typeof IntersectionObserver === 'undefined') return
+    if (!postElement) return
+    visibilityObserver = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry) return
+        if (entry.isIntersecting && entry.intersectionRatio >= READ_VISIBILITY_THRESHOLD) {
+          queueVisibleRead()
+          return
+        }
+        clearReadTimer()
+      },
+      {
+        threshold: [READ_VISIBILITY_THRESHOLD],
+      }
+    )
+    visibilityObserver.observe(postElement)
+  })
+
+  onDestroy(() => {
+    clearReadTimer()
+    visibilityObserver?.disconnect()
+  })
 
   function getTagRule(tags: { content: string }[]): 'blur' | 'hide' | undefined {
     const tagContent = tags.map((t) => t.content.toLowerCase())
@@ -142,6 +189,7 @@
 <!-- svelte-ignore a11y-click-events-have-key-events -->
 <!-- svelte-ignore a11y-no-noninteractive-tabindex -->
 <div
+  bind:this={postElement}
   class="post post-preview relative max-w-full min-w-0 w-full
   group
   {$userSettings.leftAlign ? 'left-align' : ''}

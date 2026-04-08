@@ -1,0 +1,12 @@
+from django.contrib import admin
+
+from ratings.models import AuthorRatingEvent
+
+
+@admin.register(AuthorRatingEvent)
+class AuthorRatingEventAdmin(admin.ModelAdmin):
+    list_display = ("author", "event_type", "delta", "actor", "post", "comment", "created_at")
+    list_filter = ("event_type", "created_at")
+    search_fields = ("author__username", "actor__username", "post__title", "comment__body")
+    raw_id_fields = ("author", "actor", "post", "comment")
+

@@ -32,6 +32,13 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "corsheaders",
     "feeds.apps.FeedsConfig",
+    "my_feed.apps.MyFeedConfig",
+    "communities.apps.CommunitiesConfig",
+    "users.apps.UsersConfig",
+    "notifications.apps.NotificationsConfig",
+    "ratings.apps.RatingsConfig",
+    "editor.apps.EditorConfig",
+    "telegram_integration.apps.TelegramIntegrationConfig",
 ]
 
 MIDDLEWARE = [

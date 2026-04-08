@@ -7,7 +7,7 @@ from typing import Any
 
 from django.conf import settings
 
-from .views import (
+from telegram_integration.bot import (
     _fetch_telegram_json,
     _handle_callback_query,
     _handle_channel_post,
@@ -71,3 +71,7 @@ def start_polling_thread() -> None:
     print("Starting Telegram polling thread")
     thread = threading.Thread(target=_polling_loop, args=(token,), daemon=True)
     thread.start()
+
+
+__all__ = ["start_polling_thread"]
+

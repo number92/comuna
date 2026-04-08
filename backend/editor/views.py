@@ -1,0 +1,708 @@
+from __future__ import annotations
+
+import json
+import os
+import secrets
+from datetime import timedelta
+
+from communities import views as community_views
+from communities.models import Comun, ComunPostCategoryAssignment
+from django.conf import settings
+from django.core.files.storage import default_storage
+from django.http import HttpRequest, HttpResponse, JsonResponse
+from django.utils import timezone
+from django.utils.text import get_valid_filename
+from django.views.decorators.csrf import csrf_exempt
+from PIL import Image, UnidentifiedImageError
+
+from editor.models import (
+    POST_TEMPLATE_TYPE_MOVIE_REVIEW,
+    PostPollVote,
+    PostRatingVote,
+)
+from editor.serializers import (
+    _serialize_post_for_user,
+    _serialize_post_rating_block,
+    _serialize_post_ratings,
+)
+from editor.service import (
+    _allowed_templates_for_rubric,
+    _canonical_imdb_url,
+    _extract_imdb_id,
+    _extract_inline_post_rating_blocks,
+    _get_or_create_personal_author,
+    _is_post_draft,
+    _normalize_editor_block_identifier,
+    _normalize_movie_review_template_data,
+    _normalize_post_template_payload,
+    _requested_template_type,
+    _resolve_manual_post_author,
+    _resolve_manual_post_rubric,
+    _resolve_site_post_author_context,
+    _set_post_draft_state,
+    _sync_template_derived_raw_data,
+    _template_not_allowed_error,
+)
+from editor import service as editor_service
+from feeds.models import Post
+from users.models import AuthorAdmin
+
+
+def _fv():
+    from feeds import views as feed_views
+
+    return feed_views
+
+
+@csrf_exempt
+def auth_movie_review_autofill(request: HttpRequest) -> HttpResponse:
+    user = _fv()._get_user_from_request(request)
+    if not user:
+        return JsonResponse({"ok": False, "error": "unauthorized"}, status=401)
+    if request.method != "POST":
+        return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)
+
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"ok": False, "error": "invalid json"}, status=400)
+
+    imdb_input = payload.get("imdb_url") or payload.get("imdb") or payload.get("url") or ""
+    imdb_id = _extract_imdb_id(imdb_input)
+    if not imdb_id:
+        return JsonResponse({"ok": False, "error": "invalid imdb url"}, status=400)
+
+    autofill_data: dict[str, object] = {"imdb_url": _canonical_imdb_url(imdb_id)}
+    sources: list[str] = []
+    warnings: list[str] = []
+
+    cinemeta_data = editor_service._movie_review_autofill_from_cinemeta(imdb_id)
+    if cinemeta_data:
+        sources.append("cinemeta")
+        for key, value in cinemeta_data.items():
+            if isinstance(value, str) and value.strip():
+                autofill_data[key] = value.strip()
+
+    wikidata_data = editor_service._movie_review_autofill_from_wikidata(imdb_id)
+    if wikidata_data:
+        sources.append("wikidata")
+        for key in ("title", "original_title", "genre", "release_date", "content_kind", "poster_url"):
+            value = wikidata_data.get(key)
+            if isinstance(value, str) and value.strip() and not autofill_data.get(key):
+                autofill_data[key] = value.strip()
+
+    justwatch_data = editor_service._movie_review_autofill_from_justwatch(
+        imdb_id,
+        title=str(autofill_data.get("title") or ""),
+        original_title=str(autofill_data.get("original_title") or ""),
+        content_kind=str(autofill_data.get("content_kind") or ""),
+    )
+    if justwatch_data:
+        sources.append("justwatch")
+        watch_where = justwatch_data.get("watch_where")
+        if isinstance(watch_where, list) and watch_where:
+            autofill_data["watch_where"] = watch_where
+    else:
+        warnings.append("Не удалось определить площадки для просмотра")
+
+    normalized_data, template_error = _normalize_movie_review_template_data(autofill_data)
+    if template_error:
+        return JsonResponse({"ok": False, "error": template_error}, status=400)
+    if not normalized_data:
+        return JsonResponse({"ok": False, "error": "could not fetch movie data"}, status=404)
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "imdb_id": imdb_id,
+            "sources": sources,
+            "warnings": warnings,
+            "template": {
+                "type": POST_TEMPLATE_TYPE_MOVIE_REVIEW,
+                "version": 1,
+                "data": normalized_data,
+            },
+        }
+    )
+
+
+@csrf_exempt
+def shared_draft_detail(request: HttpRequest, share_token: str) -> HttpResponse:
+    user = _fv()._get_user_from_request(request)
+    if not user:
+        return JsonResponse({"ok": False, "error": "unauthorized"}, status=401)
+    if request.method != "GET":
+        return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)
+
+    token = str(share_token or "").strip()
+    if not token:
+        return JsonResponse({"ok": False, "error": "draft not found"}, status=404)
+
+    try:
+        post = (
+            Post.objects.select_related("author", "rubric")
+            .prefetch_related("tags")
+            .filter(is_blocked=False, is_pending=True, author__is_blocked=False)
+            .get(raw_data__draft=True, raw_data__draft_share_token=token)
+        )
+    except Post.DoesNotExist:
+        return JsonResponse({"ok": False, "error": "draft not found"}, status=404)
+
+    return JsonResponse({"ok": True, "post": _serialize_post_for_user(request, post, user)})
+
+
+@csrf_exempt
+def user_posts(request: HttpRequest) -> HttpResponse:
+    user = _fv()._get_user_from_request(request)
+    if not user:
+        return JsonResponse({"ok": False, "error": "unauthorized"}, status=401)
+
+    author_links, author_ids, _personal_author = _resolve_site_post_author_context(user)
+
+    if request.method == "POST":
+        try:
+            payload = json.loads(request.body.decode("utf-8"))
+        except json.JSONDecodeError:
+            return JsonResponse({"ok": False, "error": "invalid json"}, status=400)
+
+        title = (payload.get("title") or "").strip()
+        content = (payload.get("content") or "").strip()
+        author_source = (payload.get("author_source") or "").strip().lower()
+        author_username = (payload.get("author_username") or "").strip()
+        rubric_slug = (payload.get("rubric_slug") or "").strip()
+        is_draft = bool(payload.get("is_draft"))
+        explicit_tags = _fv()._parse_tag_payload(payload.get("tags"))
+        template_payload, template_error = _normalize_post_template_payload(
+            payload.get("template"),
+            resolve_post_refs=True,
+        )
+        if template_error:
+            return JsonResponse({"ok": False, "error": template_error}, status=400)
+
+        if not is_draft and not title:
+            return JsonResponse({"ok": False, "error": "title is required"}, status=400)
+        if not is_draft and not content:
+            return JsonResponse({"ok": False, "error": "content is required"}, status=400)
+
+        author, author_error = _resolve_manual_post_author(
+            user,
+            author_links=author_links,
+            author_ids=author_ids,
+            author_source=author_source,
+            author_username=author_username,
+            allow_default=is_draft,
+        )
+        if author_error:
+            status_code = 404 if author_error == "author not found" else 400
+            return JsonResponse({"ok": False, "error": author_error}, status=status_code)
+
+        rubric, rubric_error = _resolve_manual_post_rubric(
+            user,
+            author=author,
+            rubric_slug=rubric_slug,
+            allow_empty=is_draft,
+        )
+        if rubric_error:
+            status_code = 404 if rubric_error == "rubric not found" else 400
+            return JsonResponse({"ok": False, "error": rubric_error}, status=status_code)
+        requested_template_type = _requested_template_type(template_payload)
+        if rubric:
+            template_access_error = _template_not_allowed_error(
+                requested_template_type,
+                _allowed_templates_for_rubric(rubric),
+                scope="rubric",
+            )
+            if template_access_error:
+                return JsonResponse({"ok": False, "error": template_access_error}, status=400)
+        if rubric and _fv()._is_comuna_rubric(rubric):
+            personal_author, personal_author_error = _get_or_create_personal_author(user)
+            if personal_author_error:
+                return JsonResponse({"ok": False, "error": personal_author_error}, status=400)
+            if personal_author:
+                author = personal_author
+
+        channel_url = author.invite_url or author.channel_url
+        try:
+            message_id = _fv()._generate_manual_message_id(author)
+        except ValueError:
+            return JsonResponse({"ok": False, "error": "unable to create post"}, status=500)
+        delay_days = max(int(author.publish_delay_days or 0), 0)
+        publish_at = timezone.now() + timedelta(days=delay_days) if (delay_days and not is_draft) else None
+
+        raw_data = {
+            "source": "manual",
+            **({"template": template_payload} if template_payload else {}),
+        }
+        _sync_template_derived_raw_data(raw_data, template_payload, content)
+        raw_data = _set_post_draft_state(raw_data, is_draft)
+
+        post = Post.objects.create(
+            author=author,
+            message_id=message_id,
+            title=title,
+            content=content,
+            rubric=rubric,
+            channel_url=channel_url,
+            source_url=channel_url,
+            raw_data=raw_data,
+            is_pending=is_draft,
+            is_blocked=False,
+            publish_at=publish_at,
+        )
+        _fv()._apply_post_tags(post, explicit_tags)
+        if not is_draft:
+            _fv()._maybe_notify_new_author(author, post)
+        return JsonResponse({"ok": True, "post": _serialize_post_for_user(request, post, user)})
+
+    if request.method != "GET":
+        return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)
+
+    limit_raw = request.GET.get("limit", "20")
+    offset_raw = request.GET.get("offset", "0")
+    try:
+        limit = min(max(int(limit_raw), 1), 50)
+    except ValueError:
+        limit = 20
+    try:
+        offset = max(int(offset_raw), 0)
+    except ValueError:
+        offset = 0
+
+    if not author_ids:
+        return JsonResponse({"ok": True, "posts": [], "total": 0})
+
+    posts_qs = (
+        Post.objects.filter(author_id__in=author_ids, is_blocked=False, author__is_blocked=False)
+        .select_related("author", "rubric")
+        .prefetch_related("tags")
+        .order_by("-created_at")
+    )
+
+    total = posts_qs.count()
+    posts = posts_qs[offset : offset + limit]
+    serialized = [_serialize_post_for_user(request, post, user) for post in posts]
+    return JsonResponse({"ok": True, "posts": serialized, "total": total})
+
+
+@csrf_exempt
+def user_upload(request: HttpRequest) -> HttpResponse:
+    user = _fv()._get_user_from_request(request)
+    if not user:
+        return JsonResponse({"ok": False, "error": "unauthorized"}, status=401)
+    if request.method != "POST":
+        return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)
+
+    upload = request.FILES.get("image") or request.FILES.get("file") or request.FILES.get("images[]")
+    if not upload:
+        return JsonResponse({"ok": False, "error": "image is required"}, status=400)
+
+    content_type = (getattr(upload, "content_type", "") or "").lower()
+    if not content_type.startswith("image/"):
+        return JsonResponse({"ok": False, "error": "unsupported file type"}, status=400)
+
+    max_bytes = getattr(settings, "USER_UPLOAD_MAX_BYTES", 10 * 1024 * 1024)
+    if upload.size and upload.size > max_bytes:
+        return JsonResponse({"ok": False, "error": "file is too large"}, status=400)
+
+    try:
+        upload.seek(0)
+        with Image.open(upload) as image:
+            image.verify()
+        upload.seek(0)
+    except (UnidentifiedImageError, OSError, ValueError):
+        return JsonResponse({"ok": False, "error": "invalid image file"}, status=400)
+
+    base_name = get_valid_filename(os.path.splitext(upload.name or "image")[0])
+    ext = os.path.splitext(upload.name or "")[1].lower()
+    if ext not in {".jpg", ".jpeg", ".png", ".webp", ".gif"}:
+        ext = ".jpg"
+    filename = f"uploads/manual/{base_name}-{secrets.token_hex(8)}{ext}"
+    saved_path = default_storage.save(filename, upload)
+    relative_url = default_storage.url(saved_path)
+    site_base = (getattr(settings, "SITE_BASE_URL", "") or "").rstrip("/")
+    if site_base:
+        url = f"{site_base}{relative_url}"
+    else:
+        url = request.build_absolute_uri(relative_url)
+
+    return JsonResponse({"ok": True, "url": url})
+
+
+@csrf_exempt
+def user_post_update(request: HttpRequest, post_id: int) -> HttpResponse:
+    user = _fv()._get_user_from_request(request)
+    if not user:
+        return JsonResponse({"ok": False, "error": "unauthorized"}, status=401)
+    if request.method not in {"GET", "PATCH", "PUT", "DELETE"}:
+        return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)
+
+    try:
+        post = Post.objects.select_related("author", "rubric").get(
+            id=post_id, is_blocked=False, author__is_blocked=False
+        )
+    except Post.DoesNotExist:
+        return JsonResponse({"ok": False, "error": "post not found"}, status=404)
+
+    author_links, author_ids, personal_author = _resolve_site_post_author_context(user)
+    is_linked = AuthorAdmin.objects.filter(
+        user=user, author=post.author, verified_at__isnull=False
+    ).exists()
+    is_personal_author_owner = bool(personal_author and personal_author.id == post.author_id)
+    can_staff_delete = bool(user.is_staff and request.method == "DELETE")
+    if not is_linked and not is_personal_author_owner and not can_staff_delete:
+        return JsonResponse({"ok": False, "error": "forbidden"}, status=403)
+
+    if request.method == "GET":
+        if not is_linked and not is_personal_author_owner and not user.is_staff:
+            return JsonResponse({"ok": False, "error": "forbidden"}, status=403)
+        return JsonResponse({"ok": True, "post": _serialize_post_for_user(request, post, user)})
+
+    if request.method == "DELETE":
+        raw_data = dict(post.raw_data or {})
+        raw_data["manual_deleted"] = True
+        raw_data["manual_deleted_at"] = timezone.now().isoformat()
+        if user.is_staff and not is_linked:
+            raw_data["manual_deleted_by_staff"] = True
+            raw_data["manual_deleted_by_staff_user_id"] = user.id
+            raw_data["manual_deleted_by_staff_username"] = user.username
+        post.is_blocked = True
+        post.raw_data = raw_data
+        post.save(update_fields=["is_blocked", "raw_data", "updated_at"])
+        return JsonResponse({"ok": True, "deleted": True, "post_id": post.id})
+
+    try:
+        payload = json.loads(request.body.decode("utf-8"))
+    except json.JSONDecodeError:
+        return JsonResponse({"ok": False, "error": "invalid json"}, status=400)
+
+    title = payload.get("title") if "title" in payload else None
+    content = payload.get("content") if "content" in payload else None
+    tags_payload = payload.get("tags") if "tags" in payload else None
+    author_in_payload = "author_username" in payload or "author_source" in payload
+    rubric_in_payload = "rubric_slug" in payload
+    template_in_payload = "template" in payload
+    draft_in_payload = "is_draft" in payload
+
+    current_is_draft = _is_post_draft(post)
+    target_is_draft = bool(payload.get("is_draft")) if draft_in_payload else current_is_draft
+
+    template_payload = None
+    if template_in_payload:
+        template_payload, template_error = _normalize_post_template_payload(
+            payload.get("template"),
+            resolve_post_refs=True,
+        )
+        if template_error:
+            return JsonResponse({"ok": False, "error": template_error}, status=400)
+
+    next_author = post.author
+    if author_in_payload:
+        author_source = str(payload.get("author_source") or "").strip().lower()
+        author_username = str(payload.get("author_username") or "").strip()
+        next_author, author_error = _resolve_manual_post_author(
+            user,
+            author_links=author_links,
+            author_ids=author_ids,
+            author_source=author_source,
+            author_username=author_username,
+            allow_default=target_is_draft,
+        )
+        if author_error:
+            status_code = 404 if author_error == "author not found" else 400
+            return JsonResponse({"ok": False, "error": author_error}, status=status_code)
+
+    next_rubric = post.rubric
+    if rubric_in_payload or author_in_payload:
+        rubric_slug = str(payload.get("rubric_slug") or "").strip() if rubric_in_payload else ""
+        next_rubric, rubric_error = _resolve_manual_post_rubric(
+            user,
+            author=next_author,
+            rubric_slug=rubric_slug,
+            allow_empty=target_is_draft,
+        )
+        if rubric_error:
+            status_code = 404 if rubric_error == "rubric not found" else 400
+            return JsonResponse({"ok": False, "error": rubric_error}, status=status_code)
+
+    if next_rubric and _fv()._is_comuna_rubric(next_rubric):
+        personal_author, personal_author_error = _get_or_create_personal_author(user)
+        if personal_author_error:
+            return JsonResponse({"ok": False, "error": personal_author_error}, status=400)
+        if personal_author:
+            next_author = personal_author
+
+    raw_data = dict(post.raw_data or {})
+    raw_data_changed = False
+
+    if content is not None:
+        post.content = str(content).strip()
+
+    if template_in_payload:
+        requested_template_type = _requested_template_type(template_payload)
+        comun_for_template = None
+        comun_category_for_template = None
+        comun_slug = community_views._post_comun_slug(post)
+        if comun_slug:
+            comun_for_template = Comun.objects.filter(slug=comun_slug).first()
+        if comun_for_template:
+            assignment = (
+                ComunPostCategoryAssignment.objects.select_related("category")
+                .filter(comun=comun_for_template, post=post)
+                .first()
+            )
+            if assignment and assignment.category_id:
+                comun_category_for_template = assignment.category
+            template_access_error = _template_not_allowed_error(
+                requested_template_type,
+                community_views._allowed_templates_for_comun_category(
+                    comun_for_template, comun_category_for_template
+                ),
+                scope="comun category" if comun_category_for_template else "comun",
+            )
+        else:
+            template_access_error = None
+            if next_rubric:
+                template_access_error = _template_not_allowed_error(
+                    requested_template_type,
+                    _allowed_templates_for_rubric(next_rubric),
+                    scope="rubric",
+                )
+        if template_access_error:
+            return JsonResponse({"ok": False, "error": template_access_error}, status=400)
+        if template_payload:
+            raw_data["template"] = template_payload
+        else:
+            raw_data.pop("template", None)
+        _sync_template_derived_raw_data(raw_data, template_payload, post.content)
+        raw_data["manual_edit"] = True
+        raw_data["manual_updated_at"] = timezone.now().isoformat()
+        raw_data_changed = True
+
+    if content is not None or template_in_payload:
+        effective_template_payload = raw_data.get("template") if isinstance(raw_data.get("template"), dict) else None
+        _sync_template_derived_raw_data(raw_data, effective_template_payload, post.content)
+        raw_data_changed = True
+
+    if title is not None:
+        title = str(title).strip()
+        if target_is_draft:
+            post.title = title[:255]
+        elif title:
+            post.title = title[:255]
+        else:
+            source_text = _fv()._strip_html(post.content)
+            post.title = _fv()._build_title(source_text)
+
+    if not target_is_draft and not next_rubric:
+        return JsonResponse({"ok": False, "error": "rubric required"}, status=400)
+
+    if author_in_payload or next_author.id != post.author_id:
+        post.author = next_author
+        channel_url = next_author.invite_url or next_author.channel_url
+        post.channel_url = channel_url
+        post.source_url = channel_url
+
+    if rubric_in_payload or author_in_payload:
+        post.rubric = next_rubric
+
+    if target_is_draft:
+        raw_data_changed = True
+    if current_is_draft != target_is_draft:
+        raw_data_changed = True
+    raw_data = _set_post_draft_state(raw_data, target_is_draft)
+
+    if raw_data_changed:
+        post.raw_data = raw_data
+
+    post.is_pending = target_is_draft
+    if target_is_draft:
+        post.publish_at = None
+    elif current_is_draft and not target_is_draft:
+        delay_days = max(int(post.author.publish_delay_days or 0), 0)
+        post.publish_at = timezone.now() + timedelta(days=delay_days) if delay_days else None
+
+    post.save(
+        update_fields=[
+            "author",
+            "title",
+            "rubric",
+            "content",
+            "channel_url",
+            "source_url",
+            "is_pending",
+            "publish_at",
+            "raw_data",
+            "updated_at",
+        ]
+    )
+    if tags_payload is not None:
+        explicit_tags = _fv()._parse_tag_payload(tags_payload)
+    else:
+        explicit_tags = [tag.name for tag in post.tags.all()]
+    _fv()._apply_post_tags(post, explicit_tags)
+    if current_is_draft and not target_is_draft:
+        _fv()._maybe_notify_new_author(post.author, post)
+    return JsonResponse({"ok": True, "post": _serialize_post_for_user(request, post, user)})
+
+
+@csrf_exempt
+def post_poll_vote(request: HttpRequest, post_id: int) -> HttpResponse:
+    if request.method != "POST":
+        return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)
+
+    user = _fv()._get_user_from_request(request)
+    if not user:
+        return JsonResponse({"ok": False, "error": "unauthorized"}, status=401)
+
+    try:
+        now = timezone.now()
+        post = (
+            Post.objects.filter(is_blocked=False, is_pending=False, author__is_blocked=False)
+            .filter(_fv()._publish_ready_filter(now))
+            .get(id=post_id)
+        )
+    except Post.DoesNotExist:
+        return JsonResponse({"ok": False, "error": "post not found"}, status=404)
+
+    raw_data = post.raw_data if isinstance(post.raw_data, dict) else {}
+    raw_poll = raw_data.get("poll")
+    poll_payload = _fv()._build_poll_payload(raw_poll)
+    if not poll_payload:
+        return JsonResponse({"ok": False, "error": "poll not found"}, status=404)
+    if poll_payload.get("is_closed"):
+        return JsonResponse({"ok": False, "error": "poll is closed"}, status=400)
+
+    try:
+        payload = json.loads(request.body.decode("utf-8")) if request.body else {}
+    except json.JSONDecodeError:
+        return JsonResponse({"ok": False, "error": "invalid json"}, status=400)
+    if not isinstance(payload, dict):
+        return JsonResponse({"ok": False, "error": "invalid payload"}, status=400)
+
+    submitted_options = payload.get("options")
+    if submitted_options is None and "option" in payload:
+        submitted_options = [payload.get("option")]
+    if submitted_options is None:
+        return JsonResponse({"ok": False, "error": "options are required"}, status=400)
+
+    options_count = len(poll_payload.get("options") or [])
+    normalized = _fv()._parse_poll_selection_payload(submitted_options, options_count)
+    if normalized is None:
+        return JsonResponse({"ok": False, "error": "invalid poll options"}, status=400)
+
+    allows_multiple = bool(poll_payload.get("allows_multiple_answers"))
+    if not allows_multiple and len(normalized) > 1:
+        return JsonResponse({"ok": False, "error": "multiple options are not allowed"}, status=400)
+
+    existing = PostPollVote.objects.filter(post=post, user=user).first()
+    existing_selection = (
+        _fv()._normalize_poll_selection(existing.selected_options, options_count) if existing else []
+    )
+    if existing_selection:
+        live_poll = _fv()._live_poll_for_post(post, user)
+        if not live_poll:
+            return JsonResponse({"ok": False, "error": "poll not found"}, status=404)
+        if normalized == existing_selection:
+            return JsonResponse({"ok": True, "poll": live_poll["poll"], "poll_html": live_poll["html"]})
+        return JsonResponse(
+            {
+                "ok": False,
+                "error": "Вы уже проголосовали в этом опросе",
+                "poll": live_poll["poll"],
+                "poll_html": live_poll["html"],
+            },
+            status=400,
+        )
+
+    if not normalized:
+        return JsonResponse({"ok": False, "error": "options are required"}, status=400)
+
+    PostPollVote.objects.create(post=post, user=user, selected_options=normalized)
+
+    live_poll = _fv()._live_poll_for_post(post, user)
+    if not live_poll:
+        return JsonResponse({"ok": False, "error": "poll not found"}, status=404)
+    return JsonResponse({"ok": True, "poll": live_poll["poll"], "poll_html": live_poll["html"]})
+
+
+@csrf_exempt
+def post_rating_vote(request: HttpRequest, post_id: int) -> HttpResponse:
+    if request.method != "POST":
+        return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)
+
+    user = _fv()._get_user_from_request(request)
+    if not user:
+        return JsonResponse({"ok": False, "error": "unauthorized"}, status=401)
+
+    try:
+        now = timezone.now()
+        post = (
+            Post.objects.filter(is_blocked=False, is_pending=False, author__is_blocked=False)
+            .filter(_fv()._publish_ready_filter(now))
+            .get(id=post_id)
+        )
+    except Post.DoesNotExist:
+        return JsonResponse({"ok": False, "error": "post not found"}, status=404)
+
+    try:
+        payload = json.loads(request.body.decode("utf-8")) if request.body else {}
+    except json.JSONDecodeError:
+        return JsonResponse({"ok": False, "error": "invalid json"}, status=400)
+    if not isinstance(payload, dict):
+        return JsonResponse({"ok": False, "error": "invalid payload"}, status=400)
+
+    raw_value = payload.get("value", payload.get("rating", payload.get("score")))
+    try:
+        rating_value = int(raw_value)
+    except (TypeError, ValueError):
+        return JsonResponse({"ok": False, "error": "invalid rating value"}, status=400)
+
+    if rating_value < 1 or rating_value > 10:
+        return JsonResponse({"ok": False, "error": "invalid rating value"}, status=400)
+
+    available_block_ids = _extract_inline_post_rating_blocks(post.content or "")
+    if not available_block_ids:
+        return JsonResponse({"ok": False, "error": "rating is not available"}, status=400)
+
+    raw_block_id = str(payload.get("block_id") or payload.get("rating_block_id") or "").strip()
+    if raw_block_id:
+        block_id = _normalize_editor_block_identifier(
+            raw_block_id,
+            fallback_prefix="post-rating",
+            fallback_index=0,
+        )
+    elif len(available_block_ids) == 1:
+        block_id = available_block_ids[0]
+    else:
+        return JsonResponse({"ok": False, "error": "block_id is required"}, status=400)
+
+    if block_id not in available_block_ids:
+        return JsonResponse({"ok": False, "error": "rating block not found"}, status=404)
+
+    PostRatingVote.objects.update_or_create(
+        post=post,
+        user=user,
+        block_id=block_id,
+        defaults={"value": rating_value},
+    )
+
+    rating_payload = _serialize_post_rating_block(post, user, block_id)
+    return JsonResponse(
+        {
+            "ok": True,
+            "block_id": block_id,
+            "post_rating": rating_payload,
+            "post_ratings": _serialize_post_ratings(post, user),
+        }
+    )
+
+
+__all__ = [
+    "auth_movie_review_autofill",
+    "post_poll_vote",
+    "post_rating_vote",
+    "shared_draft_detail",
+    "user_post_update",
+    "user_posts",
+    "user_upload",
+]

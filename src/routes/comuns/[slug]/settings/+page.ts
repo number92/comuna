@@ -1,20 +1,7 @@
-import { buildComunUrl } from '$lib/api/backend'
-import { error } from '@sveltejs/kit'
-
-export const load = async ({ fetch, params, url }) => {
-  const comunUrl = new URL(buildComunUrl(params.slug), url.origin)
-  comunUrl.searchParams.set('_', String(Date.now()))
-  const response = await fetch(comunUrl.toString(), { cache: 'no-store' })
-  if (!response.ok) {
-    if (response.status === 404) {
-      throw error(404, 'Сообщество не найдено')
-    }
-    throw error(response.status, 'Не удалось загрузить сообщество')
-  }
-
-  const payload = await response.json()
+export const load = async ({ parent, params }) => {
+  const parentData = await parent()
   return {
-    comun: payload?.comun ?? null,
+    comun: parentData.comun ?? null,
     slug: params.slug,
   }
 }

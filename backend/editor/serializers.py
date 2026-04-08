@@ -1,0 +1,211 @@
+from __future__ import annotations
+
+from django.contrib.auth import get_user_model
+from django.db.models import Avg, Count
+from django.http import HttpRequest
+
+from editor import service as editor_service
+from editor.models import (
+    POST_TEMPLATE_TYPE_POST_VOTE_POLL,
+    PostRatingVote,
+    PostTemplateConfig,
+    default_enabled_template_editor_blocks,
+    normalize_template_editor_blocks_for_template,
+)
+from feeds.models import Post, PostFavorite
+
+User = get_user_model()
+
+
+def _fv():
+    from feeds import views as feed_views
+
+    return feed_views
+
+
+def _serialize_post_template(post: Post) -> dict | None:
+    raw_data = post.raw_data if isinstance(post.raw_data, dict) else {}
+    normalized_template, _template_error = editor_service._normalize_post_template_payload(
+        raw_data.get("template")
+    )
+    return normalized_template
+
+
+def _content_with_live_poll(post: Post, user: User | None = None) -> tuple[str, dict | None]:
+    content = post.content or ""
+    content = _fv()._replace_legacy_audio_embed(post, content)
+    live_poll = _fv()._live_poll_for_post(post, user)
+    if not live_poll:
+        return content, None
+
+    raw_data = post.raw_data if isinstance(post.raw_data, dict) else {}
+    template_payload = raw_data.get("template") if isinstance(raw_data, dict) else None
+    template_type = (
+        str(template_payload.get("type") or "").strip().lower()
+        if isinstance(template_payload, dict)
+        else ""
+    )
+    if template_type == POST_TEMPLATE_TYPE_POST_VOTE_POLL:
+        return content, live_poll["poll"]
+
+    if _fv()._content_contains_inline_poll(content):
+        return content, live_poll["poll"]
+
+    poll_html = live_poll["html"]
+    stored_poll_html = raw_data.get("poll_html")
+    if isinstance(stored_poll_html, str) and stored_poll_html and stored_poll_html in content:
+        return content.replace(stored_poll_html, poll_html, 1), live_poll["poll"]
+    if not content:
+        return poll_html, live_poll["poll"]
+    if '<div class="post-poll"' not in content and poll_html not in content:
+        return f"{content}<br><br>{poll_html}", live_poll["poll"]
+    return content, live_poll["poll"]
+
+
+def _serialize_post_rating_block(
+    post: Post,
+    user: User | None,
+    block_id: str,
+    *,
+    include_legacy_votes: bool = False,
+) -> dict:
+    current_votes = PostRatingVote.objects.filter(post=post, block_id=block_id)
+    current_aggregate = current_votes.aggregate(
+        average_value=Avg("value"),
+        votes_count=Count("id"),
+    )
+
+    votes_count = max(int(current_aggregate.get("votes_count") or 0), 0)
+    average_raw = current_aggregate.get("average_value")
+    weighted_sum = float(average_raw) * votes_count if average_raw is not None else 0.0
+
+    user_vote = None
+    if user:
+        user_vote = current_votes.filter(user=user).values_list("value", flat=True).first()
+        if user_vote is not None:
+            user_vote = int(user_vote)
+
+    if include_legacy_votes:
+        legacy_votes = PostRatingVote.objects.filter(post=post, block_id="")
+        legacy_aggregate = legacy_votes.aggregate(
+            average_value=Avg("value"),
+            votes_count=Count("id"),
+        )
+        legacy_votes_count = max(int(legacy_aggregate.get("votes_count") or 0), 0)
+        legacy_average_raw = legacy_aggregate.get("average_value")
+        if legacy_average_raw is not None and legacy_votes_count > 0:
+            weighted_sum += float(legacy_average_raw) * legacy_votes_count
+            votes_count += legacy_votes_count
+        if user and user_vote is None:
+            legacy_user_vote = legacy_votes.filter(user=user).values_list("value", flat=True).first()
+            if legacy_user_vote is not None:
+                user_vote = int(legacy_user_vote)
+
+    average_value = round(weighted_sum / votes_count, 1) if votes_count > 0 else None
+    return {
+        "block_id": block_id,
+        "scale_min": 1,
+        "scale_max": 10,
+        "average_value": average_value,
+        "votes_count": votes_count,
+        "user_vote": user_vote,
+    }
+
+
+def _serialize_post_ratings(post: Post, user: User | None = None) -> dict[str, dict]:
+    block_ids = editor_service._extract_inline_post_rating_blocks(post.content or "")
+    if not block_ids:
+        return {}
+
+    include_legacy_votes = len(block_ids) == 1
+    return {
+        block_id: _serialize_post_rating_block(
+            post,
+            user,
+            block_id,
+            include_legacy_votes=include_legacy_votes and index == 0,
+        )
+        for index, block_id in enumerate(block_ids)
+    }
+
+
+def _serialize_post_rating(
+    post: Post,
+    user: User | None = None,
+    *,
+    template_payload: dict | None = None,
+) -> dict | None:
+    del template_payload
+    ratings = _serialize_post_ratings(post, user)
+    if not ratings:
+        return None
+    first_key = next(iter(ratings.keys()), "")
+    return ratings.get(first_key)
+
+
+def _serialize_enabled_template_editor_blocks(
+    template_payload: dict | None = None,
+) -> list[str]:
+    template_type = editor_service._template_type_from_payload(template_payload)
+    config = PostTemplateConfig.objects.filter(template_type=template_type).first()
+    if not config:
+        return default_enabled_template_editor_blocks(template_type)
+    return normalize_template_editor_blocks_for_template(
+        template_type, config.enabled_editor_blocks
+    )
+
+
+def _serialize_post_for_user(request: HttpRequest, post: Post, user: User | None = None) -> dict:
+    rubric = post.rubric
+    author_channel_url, author_title = _fv()._author_display_fields(
+        request, post.author, rubric, post.channel_url
+    )
+    content, poll_payload = _content_with_live_poll(post, user)
+    template_payload = _serialize_post_template(post)
+    is_favorite = PostFavorite.objects.filter(post=post, user=user).exists() if user else False
+    is_draft = editor_service._is_post_draft(post)
+    payload = {
+        "id": post.id,
+        "title": _fv()._post_display_title(post),
+        "template": template_payload,
+        "enabled_template_editor_blocks": _serialize_enabled_template_editor_blocks(template_payload),
+        "content": content,
+        "poll": poll_payload,
+        "post_ratings": _serialize_post_ratings(post, user),
+        "post_rating": _serialize_post_rating(post, user, template_payload=template_payload),
+        "created_at": post.created_at.isoformat(),
+        "updated_at": post.updated_at.isoformat(),
+        "is_pending": post.is_pending,
+        "is_draft": is_draft,
+        "publish_at": post.publish_at.isoformat() if post.publish_at else None,
+        "rubric": rubric.name if rubric else None,
+        "rubric_slug": rubric.slug if rubric else None,
+        "rubric_icon_url": _fv()._rubric_icon_url(request, rubric),
+        "comments_count": post.comments_count,
+        "likes_count": post.rating,
+        "views_count": _fv()._post_total_views(post),
+        "tags": _fv()._serialize_tags(post.tags.all()),
+        "is_favorite": is_favorite,
+        "can_manage": editor_service._user_can_manage_site_post(user, post),
+        "author": {
+            "username": post.author.username,
+            "title": author_title,
+            "channel_url": author_channel_url,
+            "avatar_url": _fv()._author_avatar_for_rubric(request, post.author, rubric),
+            **_fv()._author_admin_fields_for_user(user, post.author, rubric),
+        },
+    }
+    if is_draft and editor_service._user_can_manage_site_post(user, post):
+        payload["draft_share_token"] = editor_service._post_draft_share_token(post)
+    return payload
+
+
+__all__ = [
+    "_content_with_live_poll",
+    "_serialize_enabled_template_editor_blocks",
+    "_serialize_post_for_user",
+    "_serialize_post_rating",
+    "_serialize_post_rating_block",
+    "_serialize_post_ratings",
+    "_serialize_post_template",
+]

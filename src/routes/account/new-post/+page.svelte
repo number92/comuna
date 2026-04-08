@@ -3,6 +3,7 @@
   import { goto } from '$app/navigation'
   import { page } from '$app/stores'
   import Header from '$lib/components/ui/layout/pages/Header.svelte'
+  import EditorAutosaveNotice from '$lib/components/editor/EditorAutosaveNotice.svelte'
   import { Button, Spinner, TextInput, toast } from 'mono-svelte'
   import EditorJS from '$lib/components/editor/EditorJS.svelte'
   import { onDestroy, onMount, tick } from 'svelte'
@@ -734,12 +735,7 @@
       Войдите, чтобы создавать посты.
     </p>
   {:else}
-    {#if draftSavedNoticeVisible && draftId}
-      <div class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-900/20 dark:text-emerald-200">
-        Материал сохранен как черновик, дальнейшее сохранение идет автоматически.
-        Все черновики <a href={profileDraftsPath} class="underline decoration-emerald-500/70 underline-offset-2 hover:text-emerald-700 dark:hover:text-emerald-100">в профиле</a>.
-      </div>
-    {/if}
+    <EditorAutosaveNotice visible={draftSavedNoticeVisible && !!draftId} href={profileDraftsPath} />
     <div class="rounded-xl border border-slate-200 dark:border-zinc-800 p-6">
       <div class="flex flex-col gap-4">
         <div class="rounded-2xl bg-slate-100 px-4 py-4 dark:bg-zinc-900/80">

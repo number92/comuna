@@ -3,14 +3,15 @@
   import { Button, TextInput, Modal } from 'mono-svelte'
   import ErrorContainer, { clearErrorScope, pushError } from '$lib/components/error/ErrorContainer.svelte'
   import { page } from '$app/stores'
-  import TelegramLoginButton from './TelegramLoginButton.svelte'
   import VkLoginButton from './VkLoginButton.svelte'
   import { login } from '$lib/siteAuth'
+  import type { ComponentType } from 'svelte'
 
   export let open = false
   export let initialMode: 'login' | 'signup' = 'login'
   let authMode: 'login' | 'signup' = initialMode
   let wasOpen = false
+  let telegramButtonModulePromise: Promise<{ default: ComponentType }> | null = null
 
   let loginData = {
     username: '',
@@ -58,6 +59,7 @@
   $: if (open && !wasOpen) {
     authMode = initialMode
     wasOpen = true
+    telegramButtonModulePromise ??= import('$lib/components/telegram/TelegramLoginButton.svelte')
   }
 
   $: if (!open && wasOpen) {
@@ -100,11 +102,16 @@
     </div>
 
     <div class="mt-4 flex flex-col gap-3">
-      <TelegramLoginButton
-        onSuccess={handleSuccessfulAuth}
-        active={open}
-        label={authMode === 'signup' ? 'Зарегистрироваться через Telegram' : 'Войти через Telegram'}
-      />
+      {#if telegramButtonModulePromise}
+        {#await telegramButtonModulePromise then module}
+          <svelte:component
+            this={module.default}
+            onSuccess={handleSuccessfulAuth}
+            active={open}
+            label={authMode === 'signup' ? 'Зарегистрироваться через Telegram' : 'Войти через Telegram'}
+          />
+        {/await}
+      {/if}
       <VkLoginButton
         onSuccess={handleSuccessfulAuth}
         label={authMode === 'signup' ? 'Зарегистрироваться через VK' : 'Войти через VK'}

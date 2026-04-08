@@ -1,9 +1,12 @@
 <script lang="ts">
   import { goto } from '$app/navigation'
+  import NotificationSettingsPanel from '$lib/components/notifications/NotificationSettingsPanel.svelte'
   import { subscribeToComunBySlug } from '$lib/settings'
   import { defaultSettings, userSettings } from '$lib/settings'
   import Setting from './Setting.svelte'
   import { toast, Modal, TextArea, TextInput } from 'mono-svelte'
+  import SiteProfileSettingsSection from '$lib/components/users/SiteProfileSettingsSection.svelte'
+  import TelegramChannelsSection from '$lib/components/users/TelegramChannelsSection.svelte'
   import {
     ArrowDownTray,
     ArrowPath,
@@ -26,12 +29,9 @@
   import { normalizeTag } from '$lib/tags'
   import {
     fetchVerificationCode,
-    fetchSiteNotificationSettings,
     refreshSiteUser,
     siteToken,
     siteUser,
-    type SiteNotificationEventSetting,
-    updateSiteNotificationSettings,
     updateSiteProfile,
     uploadSiteImage,
   } from '$lib/siteAuth'
@@ -47,22 +47,11 @@
   let siteProfileAvatarUrl = ''
   let siteProfileSaving = false
   let siteProfileAvatarUploading = false
-  let siteProfileFileInput: HTMLInputElement | null = null
   let lastSiteUserSnapshot: string | null = null
   let channelVerificationCode = ''
   let channelVerificationCodeLoading = false
   let channelVerificationCodeError = ''
   let creatingComunByAuthorId: number | null = null
-  let notificationEvents: SiteNotificationEventSetting[] = []
-  let notificationSettingsLoading = false
-  let notificationSettingsSaving = false
-  let notificationSettingsLoaded = false
-  let notificationSettingsLoadAttempted = false
-  let notificationTelegramLinked = false
-  let notificationTelegramUsername = ''
-  let notificationTelegramFirstName = ''
-  let notificationSettingsSnapshot = '[]'
-  let notificationSettingsDirty = false
   $: myFeedAuthors = $userSettings.myFeedAuthors ?? []
   $: hiddenAuthors = $userSettings.hiddenAuthors ?? []
   $: blacklistedTags = Object.entries($userSettings.tagRules ?? {})
@@ -187,22 +176,8 @@
   }
 
   $: syncSiteProfileForm()
-  $: notificationSettingsDirty =
-    JSON.stringify(
-      notificationEvents.map((event) => ({
-        key: event.key,
-        site_enabled: event.site_enabled,
-        telegram_enabled: event.telegram_enabled,
-      }))
-    ) !== notificationSettingsSnapshot
 
-  const pickSiteProfileAvatar = () => {
-    siteProfileFileInput?.click()
-  }
-
-  const onSiteProfileAvatarSelected = async (event: Event) => {
-    const input = event.currentTarget as HTMLInputElement | null
-    const file = input?.files?.[0]
+  const onSiteProfileAvatarSelected = async (file: File) => {
     if (!file) return
     siteProfileAvatarUploading = true
     try {
@@ -216,7 +191,6 @@
       })
     } finally {
       siteProfileAvatarUploading = false
-      if (input) input.value = ''
     }
   }
 
@@ -297,138 +271,16 @@
     }
   }
 
-  const resetNotificationSettingsState = () => {
-    notificationEvents = []
-    notificationSettingsLoading = false
-    notificationSettingsSaving = false
-    notificationSettingsLoaded = false
-    notificationSettingsLoadAttempted = false
-    notificationTelegramLinked = false
-    notificationTelegramUsername = ''
-    notificationTelegramFirstName = ''
-    notificationSettingsSnapshot = '[]'
-  }
-
-  const loadSiteNotificationSettings = async () => {
-    if (notificationSettingsLoading || !$siteToken) return
-    notificationSettingsLoadAttempted = true
-    notificationSettingsLoading = true
-    try {
-      const data = await fetchSiteNotificationSettings()
-      notificationEvents = data.events ?? []
-      notificationTelegramLinked = Boolean(data.telegram?.linked)
-      notificationTelegramUsername = data.telegram?.username ?? ''
-      notificationTelegramFirstName = data.telegram?.first_name ?? ''
-      notificationSettingsSnapshot = JSON.stringify(
-        (data.events ?? []).map((event) => ({
-          key: event.key,
-          site_enabled: event.site_enabled,
-          telegram_enabled: event.telegram_enabled,
-        }))
-      )
-      notificationSettingsLoaded = true
-    } catch (error) {
-      toast({
-        content:
-          (error as Error)?.message ?? 'Не удалось загрузить настройки оповещений',
-        type: 'error',
-      })
-    } finally {
-      notificationSettingsLoading = false
-    }
-  }
-
-  const toggleNotificationEventChannel = (
-    index: number,
-    channel: 'site' | 'telegram',
-    value: boolean
-  ) => {
-    const next = [...notificationEvents]
-    const item = next[index]
-    if (!item) return
-    next[index] = {
-      ...item,
-      site_enabled: channel === 'site' ? value : item.site_enabled,
-      telegram_enabled: channel === 'telegram' ? value : item.telegram_enabled,
-    }
-    notificationEvents = next
-  }
-
-  const onNotificationCheckboxChange = (
-    event: Event,
-    index: number,
-    channel: 'site' | 'telegram'
-  ) => {
-    const target = event.currentTarget as HTMLInputElement | null
-    toggleNotificationEventChannel(index, channel, Boolean(target?.checked))
-  }
-
-  const saveNotificationSettings = async () => {
-    if (!$siteUser) {
-      toast({ content: 'Нужна авторизация', type: 'error' })
-      return
-    }
-    notificationSettingsSaving = true
-    try {
-      const data = await updateSiteNotificationSettings(
-        notificationEvents.map((event) => ({
-          key: event.key,
-          site_enabled: event.site_enabled,
-          telegram_enabled: event.telegram_enabled,
-        }))
-      )
-      notificationEvents = data.events ?? []
-      notificationTelegramLinked = Boolean(data.telegram?.linked)
-      notificationTelegramUsername = data.telegram?.username ?? ''
-      notificationTelegramFirstName = data.telegram?.first_name ?? ''
-      notificationSettingsSnapshot = JSON.stringify(
-        (data.events ?? []).map((event) => ({
-          key: event.key,
-          site_enabled: event.site_enabled,
-          telegram_enabled: event.telegram_enabled,
-        }))
-      )
-      toast({ content: 'Настройки оповещений сохранены', type: 'success' })
-    } catch (error) {
-      toast({
-        content:
-          (error as Error)?.message ?? 'Не удалось сохранить настройки оповещений',
-        type: 'error',
-      })
-    } finally {
-      notificationSettingsSaving = false
-    }
-  }
-
   onMount(() => {
     loadMyFeedRubrics()
     loadTagLemmas()
     if ($siteToken) {
       refreshSiteUser().catch(() => {})
-      loadSiteNotificationSettings().catch(() => {})
     }
     if ($colorScheme === 'system') {
       $colorScheme = inDarkColorScheme() ? 'dark' : 'light'
     }
   })
-
-  $: if (
-    $siteToken &&
-    !notificationSettingsLoaded &&
-    !notificationSettingsLoading &&
-    !notificationSettingsLoadAttempted
-  ) {
-    loadSiteNotificationSettings().catch(() => {})
-  }
-
-  $: if (
-    !$siteToken &&
-    (notificationSettingsLoaded ||
-      notificationSettingsLoadAttempted ||
-      notificationEvents.length > 0)
-  ) {
-    resetNotificationSettingsState()
-  }
 
 </script>
 
@@ -542,272 +394,34 @@
   {/if}
   {#if $siteUser}
     <Section id="comuna-profile" title="Профиль Comuna">
-      <div class="flex flex-col gap-4">
-        <div class="text-sm text-slate-500 dark:text-zinc-400">
-          Это профиль, который отображается на сайте в комментариях и на странице пользователя.
-        </div>
-
-        <div class="flex flex-col sm:flex-row gap-4 items-start">
-          <div class="w-20 h-20 rounded-full overflow-hidden border border-slate-200 dark:border-zinc-800 bg-slate-100 dark:bg-zinc-800 shrink-0">
-            {#if siteProfileAvatarUrl}
-              <img src={siteProfileAvatarUrl} alt="Аватар профиля" class="w-full h-full object-cover" />
-            {:else}
-              <div class="w-full h-full grid place-items-center text-lg font-semibold text-slate-500 dark:text-zinc-400">
-                {($siteUser.display_name || $siteUser.username || '?').slice(0, 1).toUpperCase()}
-              </div>
-            {/if}
-          </div>
-
-          <div class="flex-1 min-w-0 flex flex-col gap-3">
-            <input
-              bind:this={siteProfileFileInput}
-              type="file"
-              accept="image/*"
-              class="hidden"
-              on:change={onSiteProfileAvatarSelected}
-            />
-
-            <TextInput
-              bind:value={siteProfileDisplayName}
-              label="Имя отображаемое на сайте"
-              placeholder={`Например: ${$siteUser.username}`}
-              maxLength={120}
-            />
-
-            <div class="flex flex-wrap items-center gap-2">
-              <Button
-                size="sm"
-                on:click={pickSiteProfileAvatar}
-                disabled={siteProfileSaving || siteProfileAvatarUploading}
-              >
-                {siteProfileAvatarUrl ? 'Заменить аватарку' : 'Загрузить аватарку'}
-              </Button>
-              {#if siteProfileAvatarUrl}
-                <Button
-                  size="sm"
-                  color="ghost"
-                  on:click={() => (siteProfileAvatarUrl = '')}
-                  disabled={siteProfileSaving || siteProfileAvatarUploading}
-                >
-                  Убрать аватарку
-                </Button>
-              {/if}
-              {#if siteProfileAvatarUploading}
-                <span class="text-xs text-slate-500 dark:text-zinc-400">Загрузка...</span>
-              {/if}
-            </div>
-
-            <div class="flex flex-wrap items-center gap-2">
-              <Button
-                on:click={saveSiteProfileSettings}
-                disabled={siteProfileSaving || siteProfileAvatarUploading}
-              >
-                {siteProfileSaving ? 'Сохраняем...' : 'Сохранить'}
-              </Button>
-              <div class="text-xs text-slate-500 dark:text-zinc-400">
-                Логин @{ $siteUser.username } не меняется и используется для входа.
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <SiteProfileSettingsSection
+        siteUser={$siteUser}
+        bind:displayName={siteProfileDisplayName}
+        bind:avatarUrl={siteProfileAvatarUrl}
+        saving={siteProfileSaving}
+        uploading={siteProfileAvatarUploading}
+        on:avatarSelected={(event) => onSiteProfileAvatarSelected(event.detail)}
+        on:clearAvatar={() => (siteProfileAvatarUrl = '')}
+        on:save={saveSiteProfileSettings}
+      />
     </Section>
   {/if}
   {#if $siteUser}
     <Section id="linked-channels" title="Привязка Telegram-каналов">
-      <div class="flex flex-col gap-4">
-        <div class="rounded-xl border border-slate-200 dark:border-zinc-800 p-4">
-          <h3 class="text-base font-semibold mb-2">Подтверждение админа канала</h3>
-          <p class="text-sm text-slate-500 dark:text-zinc-400">
-            Получите код и отправьте его в бота. Бот подтвердит, что вы администратор канала.
-          </p>
-          <div class="mt-4 flex flex-wrap items-center gap-3">
-            <Button
-              size="sm"
-              color="primary"
-              on:click={loadChannelVerificationCode}
-              loading={channelVerificationCodeLoading}
-              disabled={channelVerificationCodeLoading}
-            >
-              Получить код
-            </Button>
-            {#if channelVerificationCode}
-              <div class="rounded-lg bg-slate-100 dark:bg-zinc-900 px-4 py-2 text-sm font-mono">
-                {channelVerificationCode}
-              </div>
-            {/if}
-          </div>
-          {#if channelVerificationCodeError}
-            <p class="text-sm text-red-600 mt-3">{channelVerificationCodeError}</p>
-          {/if}
-          <p class="text-sm text-slate-500 dark:text-zinc-400 mt-4">
-            Отправьте код боту в Telegram — @comuna_tg_bot.
-          </p>
-        </div>
-
-        <div class="rounded-xl border border-slate-200 dark:border-zinc-800 p-4">
-          <h3 class="text-base font-semibold mb-2">Ваши подтвержденные каналы</h3>
-          {#if $siteUser.is_author && $siteUser.authors.length}
-            <ul class="flex flex-col gap-3 text-sm">
-              {#each $siteUser.authors as author}
-                <li class="flex flex-col gap-1">
-                  <div>
-                    @{author.username}
-                    {#if author.title}
-                      <span class="text-slate-500 dark:text-zinc-400">— {author.title}</span>
-                    {/if}
-                  </div>
-                  <div class="text-xs text-slate-500 dark:text-zinc-400">
-                    Режим: {author.auto_publish === false ? 'Согласование' : 'Автопубликация'}
-                    <span class="mx-1">•</span>
-                    Тематика: {author.rubric ?? 'не выбрана'}
-                    <span class="mx-1">•</span>
-                    Задержка: {author.publish_delay_days ? `${author.publish_delay_days} дн.` : 'без задержки'}
-                    <span class="mx-1">•</span>
-                    Комментарии: {author.notify_comments ? 'оповещать' : 'не оповещать'}
-                    {#if author.author_rating !== undefined}
-                      <span class="mx-1">•</span>
-                      Рейтинг: {author.author_rating}
-                    {/if}
-                  </div>
-                  {#if author.invite_url}
-                    <a
-                      class="text-xs text-blue-600 hover:underline dark:text-blue-400"
-                      href={author.invite_url}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Ссылка приглашения
-                    </a>
-                  {/if}
-                  <div class="mt-2 flex flex-wrap items-center gap-2">
-                    {#if author.linked_comun_slug}
-                      <a
-                        class="inline-flex items-center rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                        href={`/comuns/${author.linked_comun_slug}`}
-                      >
-                        {author.linked_comun_name ? `Открыть сообщество ${author.linked_comun_name}` : 'Открыть сообщество'}
-                      </a>
-                      <a
-                        class="inline-flex items-center rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-                        href={`/comuns/${author.linked_comun_slug}/settings`}
-                      >
-                        Настройки сообщества
-                      </a>
-                    {:else}
-                      <Button
-                        size="sm"
-                        on:click={() => createComunFromAuthor(author)}
-                        loading={creatingComunByAuthorId === author.id}
-                        disabled={creatingComunByAuthorId !== null}
-                      >
-                        Создать сообщество из канала
-                      </Button>
-                    {/if}
-                  </div>
-                </li>
-              {/each}
-            </ul>
-          {:else}
-            <p class="text-sm text-slate-500 dark:text-zinc-400">Пока нет подтвержденных каналов.</p>
-          {/if}
-        </div>
-      </div>
+      <TelegramChannelsSection
+        siteUser={$siteUser}
+        verificationCode={channelVerificationCode}
+        verificationCodeLoading={channelVerificationCodeLoading}
+        verificationCodeError={channelVerificationCodeError}
+        {creatingComunByAuthorId}
+        on:loadCode={loadChannelVerificationCode}
+        on:createComun={(event) => createComunFromAuthor(event.detail)}
+      />
     </Section>
   {/if}
   {#if $siteUser}
     <Section id="notifications" title="Оповещения">
-      <div class="flex flex-col gap-4">
-        <div class="text-sm text-slate-500 dark:text-zinc-400">
-          Выберите, для каких событий показывать уведомления в колокольчике на сайте и
-          отправлять сообщения в Telegram-бот.
-        </div>
-
-        <div class="rounded-xl border border-slate-200 dark:border-zinc-800 p-3 bg-slate-50/60 dark:bg-zinc-900/40">
-          <div class="text-sm font-medium text-slate-900 dark:text-zinc-100">
-            Telegram: {notificationTelegramLinked ? 'подключен' : 'не подключен'}
-          </div>
-          <div class="text-xs text-slate-500 dark:text-zinc-400 mt-1">
-            {#if notificationTelegramLinked}
-              {#if notificationTelegramUsername}
-                Аккаунт: @{notificationTelegramUsername}
-              {:else if notificationTelegramFirstName}
-                Аккаунт: {notificationTelegramFirstName}
-              {:else}
-                Telegram-аккаунт привязан к профилю.
-              {/if}
-            {:else}
-              Привяжите Telegram через вход/авторизацию Telegram, чтобы бот мог присылать оповещения.
-            {/if}
-          </div>
-        </div>
-
-        {#if notificationSettingsLoading && !notificationEvents.length}
-          <div class="text-sm text-slate-500 dark:text-zinc-400">
-            Загружаем настройки оповещений...
-          </div>
-        {:else if notificationEvents.length}
-          <div class="overflow-x-auto rounded-xl border border-slate-200 dark:border-zinc-800">
-            <table class="w-full min-w-[680px] text-sm">
-              <thead class="bg-slate-50 dark:bg-zinc-900/70">
-                <tr class="text-left">
-                  <th class="px-4 py-3 font-medium text-slate-700 dark:text-zinc-200">Событие</th>
-                  <th class="px-4 py-3 font-medium text-center text-slate-700 dark:text-zinc-200 w-28">На сайте</th>
-                  <th class="px-4 py-3 font-medium text-center text-slate-700 dark:text-zinc-200 w-28">Telegram</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-slate-200 dark:divide-zinc-800">
-                {#each notificationEvents as event, index}
-                  <tr class="align-top">
-                    <td class="px-4 py-3">
-                      <div class="font-medium text-slate-900 dark:text-zinc-100">
-                        {event.title}
-                      </div>
-                      {#if event.description}
-                        <div class="mt-1 text-xs text-slate-500 dark:text-zinc-400">
-                          {event.description}
-                        </div>
-                      {/if}
-                    </td>
-                    <td class="px-4 py-3 text-center">
-                      <input
-                        type="checkbox"
-                        class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-900"
-                        checked={event.site_enabled}
-                        on:change={(e) => onNotificationCheckboxChange(e, index, 'site')}
-                      />
-                    </td>
-                    <td class="px-4 py-3 text-center">
-                      <input
-                        type="checkbox"
-                        class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-900"
-                        checked={event.telegram_enabled}
-                        on:change={(e) => onNotificationCheckboxChange(e, index, 'telegram')}
-                      />
-                    </td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-          </div>
-
-          <div class="flex flex-wrap items-center gap-2">
-            <Button
-              on:click={saveNotificationSettings}
-              disabled={notificationSettingsSaving || !notificationSettingsDirty}
-            >
-              {notificationSettingsSaving ? 'Сохраняем...' : 'Сохранить настройки'}
-            </Button>
-            <div class="text-xs text-slate-500 dark:text-zinc-400">
-              Изменения применяются ко всем будущим уведомлениям.
-            </div>
-          </div>
-        {:else}
-          <div class="text-sm text-slate-500 dark:text-zinc-400">
-            Список событий уведомлений пока пуст.
-          </div>
-        {/if}
-      </div>
+      <NotificationSettingsPanel />
     </Section>
   {/if}
   <Section id="app" title={$t('settings.app.title')}>

@@ -1,20 +1,12 @@
-import { buildComunPostsUrl, buildComunUrl } from '$lib/api/backend'
+import { buildComunPostsUrl } from '$lib/api/backend'
 import { error } from '@sveltejs/kit'
 
 const PREVIEW_LIMIT = 12
 
-export const load = async ({ fetch, params, url }) => {
+export const load = async ({ fetch, params, url, parent }) => {
   const slug = params.slug
-
-  const comunResponse = await fetch(new URL(buildComunUrl(slug), url.origin).toString())
-  if (!comunResponse.ok) {
-    if (comunResponse.status === 404) {
-      throw error(404, 'Сообщество не найдено')
-    }
-    throw error(comunResponse.status, 'Не удалось загрузить сообщество')
-  }
-  const comunPayload = await comunResponse.json()
-  const comun = comunPayload?.comun ?? null
+  const parentData = await parent()
+  const comun = parentData.comun ?? null
   if (comun && comun.roadmap_enabled === false) {
     throw error(404, 'Дорожная карта отключена')
   }

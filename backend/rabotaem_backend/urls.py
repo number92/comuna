@@ -3,63 +3,71 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import path
 
-from feeds.views import (
-    auth_me,
-    auth_movie_review_autofill,
-    auth_notification_read,
-    auth_notification_settings,
-    auth_notifications,
-    auth_notifications_read_all,
-    author_verification_code,
-    author_posts,
-    comment_detail,
-    comment_like,
-    content_page_manage,
-    comun_detail_manage,
+from communities.views import (
     comun_create_from_telegram_channel,
+    comun_detail_manage,
     comun_post_category_update,
     comun_posts,
     comun_vote,
     comuns_list_create,
+)
+from editor.views import (
+    auth_movie_review_autofill,
+    post_poll_vote,
+    post_rating_vote,
+    shared_draft_detail,
+    user_post_update,
+    user_posts,
+    user_upload,
+)
+from feeds.views import (
+    author_posts,
+    comment_detail,
+    comment_like,
+    content_page_manage,
     fresh_feed,
     favorites_feed,
     home_feed,
-    login_user,
-    my_feed,
     post_detail,
     post_comments,
     post_favorite,
     post_like,
-    post_poll_vote,
-    post_rating_vote,
     post_read,
     post_view,
-    public_user_profile,
     recent_comments,
-    register_user,
     rubric_posts,
     rubrics_list,
     search_content,
-    shared_draft_detail,
     sitemap_authors_xml,
     sitemap_posts_xml,
     sitemap_rubrics_xml,
     sitemap_static_xml,
     sitemap_xml,
-    thematic_feed_posts,
-    thematic_feeds_list,
-    thematic_feeds_manage,
-    thematic_feed_manage_detail,
     tags_ensure,
     tags_list,
     tag_posts,
-    telegram_auth,
-    telegram_webhook,
-    top_authors,
-    top_authors_month,
-    user_post_update,
-    user_posts,
-    user_upload,
+)
+from my_feed.views import (
+    my_feed,
+    thematic_feed_manage_detail,
+    thematic_feed_posts,
+    thematic_feeds_list,
+    thematic_feeds_manage,
+)
+from notifications.views import (
+    auth_notification_read,
+    auth_notification_settings,
+    auth_notifications,
+    auth_notifications_read_all,
+)
+from ratings.views import top_authors, top_authors_month
+from telegram_integration.views import telegram_auth, telegram_webhook
+from users.views import (
+    auth_me,
+    author_verification_code,
+    login_user,
+    public_user_profile,
+    register_user,
     vk_auth,
 )
 

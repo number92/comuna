@@ -198,10 +198,6 @@
     thematicFeedsOpen = true;
   }
 
-  // Проверяем, находимся ли мы на странице создания/редактирования поста
-  $: isPostFormRoute = $page.url.pathname.includes('/create/post') || 
-                       $page.url.pathname.includes('/edit/post')
-
 </script>
 
 <style>
@@ -230,7 +226,7 @@
 </style>
 
 <nav
-  class="flex flex-col p-4 overflow-auto gap-2 h-auto min-h-0 sticky top-20 bg-slate-50 dark:bg-zinc-950 z-40 {isPostFormRoute ? $$props.class?.replace('md:flex', '') : $$props.class}"
+  class="flex flex-col p-4 overflow-auto gap-2 h-auto min-h-0 sticky top-20 bg-slate-50 dark:bg-zinc-950 z-40 {$$props.class}"
   style={$$props.style}
 >
   <div class="flex flex-col gap-1">

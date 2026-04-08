@@ -83,3 +83,13 @@ def _fetch_telegram_json(method: str, token: str, payload: dict) -> dict | None:
             return json.loads(response.read().decode("utf-8"))
     except (URLError, json.JSONDecodeError):
         return None
+
+
+__all__ = [
+    "build_public_media_url",
+    "download_telegram_file_by_id",
+    "download_telegram_file_by_path",
+    "download_telegram_file_by_url",
+    "extract_telegram_file_path",
+]
+

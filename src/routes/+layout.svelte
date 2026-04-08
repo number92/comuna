@@ -5,7 +5,6 @@
   import nProgress from 'nprogress'
   import 'nprogress/nprogress.css'
   import Moderation from '$lib/components/lemmy/moderation/Moderation.svelte'
-  import Sidebar from '$lib/components/ui/sidebar/Sidebar.svelte'
   import {
     colorScheme,
     inDarkColorScheme,
@@ -32,12 +31,8 @@
   import { locale } from '$lib/translations'
   import { getDefaultColors } from '$lib/ui/presets'
   import { env } from '$env/dynamic/public'
-import YandexMetrika from '$lib/components/YandexMetrika.svelte'
-import GoogleAnalytics from '$lib/components/GoogleAnalytics.svelte'
-import PopularPosts from '$lib/components/ui/sidebar/PopularPosts.svelte'
-import RecentComments from '$lib/components/ui/sidebar/RecentComments.svelte'
-import KeyboardShortcutsHint from '$lib/components/ui/sidebar/KeyboardShortcutsHint.svelte'
-import ComunSidebarInfo from '$lib/components/ui/sidebar/ComunSidebarInfo.svelte'
+  import YandexMetrika from '$lib/components/YandexMetrika.svelte'
+  import GoogleAnalytics from '$lib/components/GoogleAnalytics.svelte'
 
   nProgress.configure({
     minimum: 0.4,
@@ -70,13 +65,8 @@ import ComunSidebarInfo from '$lib/components/ui/sidebar/ComunSidebarInfo.svelte
     }
   }
 
-  // Исправляем условие проверки маршрута
-  $: isPostFormRoute = $page.url.pathname.includes('/create/post') || $page.url.pathname.includes('/edit/post')
   $: isLandingRoute =
     $page.url.pathname === '/lp' || $page.url.pathname.startsWith('/lp/')
-  $: isComunRoute = ($page.route.id ?? '').startsWith('/comuns/[slug]')
-  $: sidebarComun = isComunRoute ? ($page.data.comun ?? null) : null
-
   // Получаем текущий URL для канонической ссылки
   $: siteBaseUrl = (env.PUBLIC_SITE_URL || $page.url.origin).replace(/\/+$/, '')
   $: canonicalUrl = (() => {
@@ -218,11 +208,13 @@ import ComunSidebarInfo from '$lib/components/ui/sidebar/ComunSidebarInfo.svelte
 
   <svelte:fragment slot="sidebar" let:style={s} let:class={c}>
     {#if !isLandingRoute}
-      <Sidebar
-        route={$page.route.id ?? ''}
-        class="xl:pt-0 pt-20 {c}"
-        style={s}
-      />
+      {#await import('$lib/components/ui/sidebar/Sidebar.svelte') then { default: Sidebar }}
+        <Sidebar
+          route={$page.route.id ?? ''}
+          class="xl:pt-0 pt-20 {c}"
+          style={s}
+        />
+      {/await}
     {/if}
   </svelte:fragment>
   <main
@@ -242,33 +234,26 @@ import ComunSidebarInfo from '$lib/components/ui/sidebar/ComunSidebarInfo.svelte
   <svelte:fragment slot="suffix" let:class={c} let:style={s}>
     {#if !isLandingRoute}
       <div 
-        class="{c} {isPostFormRoute ? 'hidden' : ''}"
+        class={c}
         style={s}
       >
         <div class="flex flex-col gap-4 h-[calc(100vh-4rem)] sticky top-16 p-4">
           <!-- Прокручиваемый контент сайдбара -->
           <div class="flex flex-col gap-4 flex-1 min-h-0 overflow-auto hover:scrollbar scrollbar-hidden">
             <!-- CommunityCard или SiteCard -->
-            {#if $page.route.id?.startsWith('/c/') || $page.route.id?.startsWith('/post/')}
+            {#if $page.data.slots?.sidebar?.component}
               <div class="flex-shrink-0">
-                {#if $page.data.slots?.sidebar?.component}
-                  <svelte:component
-                    this={$page.data.slots.sidebar.component}
-                    {...$page.data.slots.sidebar.props}
-                  />
-                {/if}
+                <svelte:component
+                  this={$page.data.slots.sidebar.component}
+                  {...$page.data.slots.sidebar.props}
+                />
               </div>
             {/if}
             
-            {#if isComunRoute && sidebarComun}
-              <ComunSidebarInfo comun={sidebarComun} />
-            {:else}
-              <div class="flex flex-col gap-4">
-                <KeyboardShortcutsHint enabled={keyboardShortcutsHintEnabled} />
-                <PopularPosts />
-                <div class="h-px bg-slate-200 dark:bg-zinc-800"></div>
-                <RecentComments />
-              </div>
+            {#if !$page.data.slots?.sidebar?.component}
+              {#await import('$lib/components/ui/sidebar/DefaultSidebarWidgets.svelte') then { default: DefaultSidebarWidgets }}
+                <DefaultSidebarWidgets {keyboardShortcutsHintEnabled} />
+              {/await}
             {/if}
           </div>
         </div>

@@ -1,23 +1,18 @@
 from __future__ import annotations
 
-import json
-import urllib.error
-import urllib.parse
-import urllib.request
 from typing import Any
 
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.utils import timezone
 
-from .models import SiteNotification, SiteNotificationPreference, TelegramAccount
+from notifications.models import SiteNotification, SiteNotificationPreference
+from telegram_integration.models import TelegramAccount
+from telegram_integration.service import send_site_notification_to_telegram
 
 User = get_user_model()
 
 
-# Add new events here: they will automatically appear in the user's
-# notification settings page and will use these channel defaults.
 NOTIFICATION_EVENT_DEFINITIONS: list[dict[str, Any]] = [
     {
         "key": "post_comment",
@@ -184,114 +179,108 @@ def update_notification_settings_for_user(
     return serialize_notification_settings_for_user(user)
 
 
-def _notification_link_absolute(link_url: str) -> str:
-    value = (link_url or "").strip()
-    if not value:
-        return ""
-    if value.startswith("http://") or value.startswith("https://"):
-        return value
-    base = (getattr(settings, "SITE_BASE_URL", "") or "").rstrip("/")
-    if not base:
-        return value
-    if not value.startswith("/"):
-        value = f"/{value}"
-    return f"{base}{value}"
-
-
-def _send_telegram_notification(notification: SiteNotification) -> None:
-    if not notification.is_telegram:
-        return
-    token = (getattr(settings, "TELEGRAM_BOT_TOKEN", "") or "").strip()
-    if not token:
-        return
-
-    account = TelegramAccount.objects.filter(user=notification.user).first()
-    if not account:
-        return
-
-    parts = [notification.title.strip()]
-    if notification.message.strip():
-        parts.append(notification.message.strip())
-    link = _notification_link_absolute(notification.link_url)
-    if link:
-        parts.append(link)
-    text = "\n\n".join([part for part in parts if part]).strip()
-    if not text:
-        return
-
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
-    payload = urllib.parse.urlencode(
-        {
-            "chat_id": str(account.telegram_id),
-            "text": text[:4096],
-            "disable_web_page_preview": "1",
-        }
-    ).encode("utf-8")
-
-    try:
-        request = urllib.request.Request(url, data=payload, method="POST")
-        with urllib.request.urlopen(request, timeout=5) as response:
-            data = json.loads(response.read().decode("utf-8") or "{}")
-        if data.get("ok"):
-            notification.telegram_sent_at = timezone.now()
-            notification.telegram_error = ""
-            notification.save(update_fields=["telegram_sent_at", "telegram_error", "updated_at"])
-            return
-        error_message = str(data.get("description") or "telegram send failed")
-    except (urllib.error.URLError, TimeoutError, ValueError) as exc:
-        error_message = str(exc)
-    except Exception as exc:  # keep notification creation resilient
-        error_message = str(exc)
-
-    notification.telegram_error = error_message[:1000]
-    notification.save(update_fields=["telegram_error", "updated_at"])
-
-
 def create_user_notification(
     *,
-    user: User,
+    user: User | None,
     event_key: str,
-    title: str | None = None,
+    title: str,
     message: str = "",
     link_url: str = "",
     payload: dict[str, Any] | None = None,
-    site_enabled: bool | None = None,
-    telegram_enabled: bool | None = None,
+    force_site: bool | None = None,
+    force_telegram: bool | None = None,
 ) -> SiteNotification | None:
-    definition = get_notification_event_definition(event_key)
-    if not definition:
-        raise ValueError(f"unknown notification event: {event_key}")
+    if user is None:
+        return None
 
+    definition = get_notification_event_definition(event_key) or {}
     preferences = _ensure_user_notification_preferences(user)
+
     pref = preferences.get(event_key)
-    site_channel_enabled = (
-        bool(site_enabled)
-        if site_enabled is not None
-        else bool(pref.site_enabled if pref else definition.get("default_site_enabled", True))
+    is_site = bool(force_site) if force_site is not None else bool(
+        pref.site_enabled if pref else definition.get("default_site_enabled", True)
     )
-    telegram_channel_enabled = (
-        bool(telegram_enabled)
-        if telegram_enabled is not None
-        else bool(
-            pref.telegram_enabled
-            if pref
-            else definition.get("default_telegram_enabled", False)
-        )
+    is_telegram = bool(force_telegram) if force_telegram is not None else bool(
+        pref.telegram_enabled if pref else definition.get("default_telegram_enabled", False)
     )
 
-    if not site_channel_enabled and not telegram_channel_enabled:
+    if not is_site and not is_telegram:
         return None
 
     notification = SiteNotification.objects.create(
         user=user,
         event_key=event_key,
-        title=(title or str(definition.get("title") or event_key)).strip()[:255],
-        message=(message or "").strip(),
-        link_url=(link_url or "").strip()[:500],
+        title=str(title or "").strip()[:255],
+        message=str(message or "").strip(),
+        link_url=str(link_url or "").strip()[:500],
         payload=payload or {},
-        is_site=site_channel_enabled,
-        is_telegram=telegram_channel_enabled,
+        is_site=is_site,
+        is_telegram=is_telegram,
     )
-    if telegram_channel_enabled:
-        _send_telegram_notification(notification)
+    if is_telegram:
+        send_site_notification_to_telegram(notification)
     return notification
+
+
+def list_site_notifications_for_user(
+    user: User,
+    *,
+    limit: int = 10,
+    unread_only: bool = False,
+) -> tuple[list[SiteNotification], int]:
+    safe_limit = min(max(int(limit or 10), 1), 50)
+    base_qs = SiteNotification.objects.filter(user=user, is_site=True)
+    list_qs = base_qs.filter(read_at__isnull=True) if unread_only else base_qs
+    items = list(list_qs.order_by("-created_at", "-id")[:safe_limit])
+    unread_count = base_qs.filter(read_at__isnull=True).count()
+    return items, unread_count
+
+
+def mark_site_notification_read_for_user(
+    user: User,
+    notification_id: int,
+) -> tuple[SiteNotification | None, int]:
+    notification = SiteNotification.objects.filter(
+        id=notification_id,
+        user=user,
+        is_site=True,
+    ).first()
+    if not notification:
+        return None, SiteNotification.objects.filter(
+            user=user,
+            is_site=True,
+            read_at__isnull=True,
+        ).count()
+
+    if notification.read_at is None:
+        notification.read_at = timezone.now()
+        notification.save(update_fields=["read_at", "updated_at"])
+
+    unread_count = SiteNotification.objects.filter(
+        user=user,
+        is_site=True,
+        read_at__isnull=True,
+    ).count()
+    return notification, unread_count
+
+
+def mark_all_site_notifications_read_for_user(user: User) -> int:
+    now = timezone.now()
+    return SiteNotification.objects.filter(
+        user=user,
+        is_site=True,
+        read_at__isnull=True,
+    ).update(read_at=now, updated_at=now)
+
+
+__all__ = [
+    "NOTIFICATION_EVENT_DEFINITIONS",
+    "create_user_notification",
+    "get_notification_event_catalog",
+    "get_notification_event_definition",
+    "list_site_notifications_for_user",
+    "mark_all_site_notifications_read_for_user",
+    "mark_site_notification_read_for_user",
+    "serialize_notification_settings_for_user",
+    "update_notification_settings_for_user",
+]

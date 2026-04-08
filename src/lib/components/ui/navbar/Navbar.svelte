@@ -40,7 +40,6 @@
   import { page } from '$app/stores'
   import { env } from '$env/dynamic/public';
   import SidebarButton from '$lib/components/ui/sidebar/SidebarButton.svelte'
-  import SiteNotificationBell from './SiteNotificationBell.svelte'
   import { userSettings } from '$lib/settings'
   import { Badge } from 'mono-svelte'
   import { onMount } from 'svelte';
@@ -305,7 +304,9 @@
             >
               Написать
             </Button>
-            <SiteNotificationBell />
+            {#await import('$lib/components/notifications/NotificationBellMenu.svelte') then { default: NotificationBellMenu }}
+              <NotificationBellMenu />
+            {/await}
             <Menu placement="bottom-end">
               <button
                 slot="target"

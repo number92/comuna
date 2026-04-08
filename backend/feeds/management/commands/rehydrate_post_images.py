@@ -10,7 +10,7 @@ from django.utils import timezone
 from django.db.models import Q
 
 from feeds.models import Post
-from feeds.telegram_media import (
+from telegram_integration.media import (
     download_telegram_file_by_id,
     download_telegram_file_by_path,
     download_telegram_file_by_url,

@@ -1,0 +1,93 @@
+from __future__ import annotations
+
+import json
+
+from django.conf import settings
+from django.contrib.auth import get_user_model
+from django.http import HttpRequest, HttpResponse, JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+
+from telegram_integration import serializers as telegram_serializers
+from telegram_integration.bot import (
+    _handle_callback_query,
+    _handle_channel_post,
+    _handle_my_chat_member,
+    _handle_private_message,
+)
+from telegram_integration.service import (
+    build_telegram_login_redirect_html,
+    upsert_telegram_account,
+    validate_telegram_login,
+)
+
+User = get_user_model()
+
+
+def _user_service():
+    from users import service as user_service
+
+    return user_service
+
+
+@csrf_exempt
+def telegram_auth(request: HttpRequest) -> HttpResponse:
+    if request.method == "GET":
+        payload = dict(request.GET.items())
+    elif request.method == "POST":
+        try:
+            payload = json.loads(request.body.decode("utf-8"))
+        except json.JSONDecodeError:
+            return JsonResponse({"ok": False, "error": "invalid json"}, status=400)
+    else:
+        return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)
+
+    try:
+        validate_telegram_login(payload)
+        user = upsert_telegram_account(payload)
+    except ValueError as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+
+    token = _user_service()._issue_token(user)
+    if request.method == "GET":
+        next_url = request.GET.get("next") or "/"
+        html = build_telegram_login_redirect_html(token, next_url)
+        return HttpResponse(html, content_type="text/html")
+    return JsonResponse(telegram_serializers._serialize_telegram_auth_response(user, token))
+
+
+@csrf_exempt
+def telegram_webhook(request: HttpRequest, token: str) -> HttpResponse:
+    expected_secret = settings.TELEGRAM_WEBHOOK_SECRET
+    if not expected_secret:
+        return JsonResponse({"ok": False, "error": "TELEGRAM_WEBHOOK_SECRET not set"}, status=500)
+
+    if token != expected_secret:
+        return JsonResponse({"ok": False, "error": "invalid token"}, status=403)
+
+    header_secret = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+    if header_secret != expected_secret:
+        return JsonResponse({"ok": False, "error": "invalid secret"}, status=403)
+
+    if request.method != "POST":
+        return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)
+
+    try:
+        payload = json.loads(request.body.decode("utf-8"))
+    except json.JSONDecodeError:
+        return JsonResponse({"ok": False, "error": "invalid json"}, status=400)
+
+    if "channel_post" in payload:
+        _handle_channel_post(payload["channel_post"])
+    elif "edited_channel_post" in payload:
+        _handle_channel_post(payload["edited_channel_post"])
+    elif "my_chat_member" in payload:
+        _handle_my_chat_member(payload["my_chat_member"])
+    elif "message" in payload:
+        _handle_private_message(payload["message"])
+    elif "callback_query" in payload:
+        _handle_callback_query(payload["callback_query"])
+
+    return JsonResponse({"ok": True})
+
+
+__all__ = ["telegram_auth", "telegram_webhook"]

@@ -5,6 +5,7 @@
   import { onMount } from 'svelte'
   import { Button, Modal, toast } from 'mono-svelte'
   import Header from '$lib/components/ui/layout/pages/Header.svelte'
+  import ComunSettingsTabs from '$lib/components/comuns/ComunSettingsTabs.svelte'
   import TemplateTypeDropdown from '$lib/components/comuns/TemplateTypeDropdown.svelte'
   import {
     buildComunUrl,
@@ -86,13 +87,6 @@
   let settingsTelegramChannelOptions: ComunTelegramChannelOption[] = []
   let settingsLogoInput: HTMLInputElement | null = null
   let settingsTab: ComunSettingsTabKey = 'description'
-
-  const settingsTabClass = (activeTab: ComunSettingsTabKey, tab: ComunSettingsTabKey) =>
-    `rounded-full px-3 py-2 text-sm font-medium transition-colors ${
-      activeTab === tab
-        ? 'bg-slate-900 text-white dark:bg-white dark:text-zinc-900'
-        : 'bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700'
-    }`
 
   const cloneComun = (value: BackendComun | null): BackendComun | null =>
     value ? JSON.parse(JSON.stringify(value)) : null
@@ -218,6 +212,9 @@
   const canModerate = () => Boolean(comun?.can_moderate && $siteToken)
   const canManageComunModerators = () => Boolean(comun?.can_manage_moderators && $siteToken)
   const canDeleteComun = () => Boolean(comun?.can_manage_moderators && $siteToken)
+  const onSettingsTabChange = (event: CustomEvent<string>) => {
+    settingsTab = event.detail as ComunSettingsTabKey
+  }
 
   const userDisplayName = (
     user?: { username?: string | null; display_name?: string | null } | null
@@ -956,17 +953,11 @@
     </div>
   {:else if settingsDraft}
     <section class="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white/95 dark:bg-zinc-900/85 p-5 sm:p-6">
-      <div class="mb-5 flex flex-wrap gap-2">
-        {#each comunSettingsTabs as tab}
-          <button
-            type="button"
-            class={settingsTabClass(settingsTab, tab.value)}
-            on:click={() => (settingsTab = tab.value)}
-          >
-            {tab.label}
-          </button>
-        {/each}
-      </div>
+      <ComunSettingsTabs
+        tabs={comunSettingsTabs}
+        value={settingsTab}
+        on:change={onSettingsTabChange}
+      />
 
       <div class="grid gap-4">
         {#if settingsTab === 'description'}

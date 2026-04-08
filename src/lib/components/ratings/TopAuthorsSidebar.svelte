@@ -4,8 +4,10 @@
   import { Button } from 'mono-svelte'
   import { Trophy, Icon } from 'svelte-hero-icons'
   import { buildTopAuthorsUrl, type BackendTopAuthor } from '$lib/api/backend'
-
-  const authorRatingHref = '/authors/rating'
+  import {
+    authorRatingHref,
+    formatTopAuthorNumber,
+  } from '$lib/ratings/topAuthors'
 
   let authors: BackendTopAuthor[] = []
   let loading = true
@@ -27,21 +29,12 @@
   }
 
   onMount(fetchTopAuthors)
-
-  const formatNumber = (value: number | undefined) => {
-    if (!value && value !== 0) return '0'
-    return value.toLocaleString('ru-RU')
-  }
-
-  const rankClassName = (_index: number) => 'rank-badge rank-badge--default'
-
-  const rowClassName = (_index: number) => 'author-row'
 </script>
 
-<div class="flex flex-col gap-2 bg-white dark:bg-zinc-900 rounded-xl p-4">
+<div class="flex flex-col gap-2 rounded-xl bg-white p-4 dark:bg-zinc-900">
   <a
     href={authorRatingHref}
-    class="text-base font-normal text-slate-900 dark:text-zinc-200 mb-2 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+    class="mb-2 text-base font-normal text-slate-900 transition-colors hover:text-blue-600 dark:text-zinc-200 dark:hover:text-blue-400"
   >
     Топ авторов за месяц
   </a>
@@ -49,7 +42,7 @@
   {#if loading}
     <div class="animate-pulse space-y-3">
       {#each Array(5) as _}
-        <div class="h-4 bg-slate-100 dark:bg-zinc-800 rounded"></div>
+        <div class="h-4 rounded bg-slate-100 dark:bg-zinc-800"></div>
       {/each}
     </div>
   {:else if error}
@@ -65,18 +58,18 @@
       {#each authors as author, index}
         <a
           href={`/${author.username}`}
-          class={`${rowClassName(index)} block group py-3 first:pt-1 last:pb-1`}
+          class="author-row block group py-3 first:pt-1 last:pb-1"
         >
           <div class="flex flex-col gap-2">
             <div class="flex min-w-0 items-center gap-2">
-              <div class={rankClassName(index)}>
+              <div class="rank-badge rank-badge--default">
                 {index + 1}
               </div>
               <Avatar
                 url={author.avatar_url || undefined}
                 alt={author.title || author.username}
                 width={32}
-                class_="w-8 h-8 rounded-full"
+                class_="h-8 w-8 rounded-full"
               />
               <span class="min-w-0 flex-1 truncate text-sm font-medium text-slate-900 dark:text-zinc-200">
                 {author.title || author.username}
@@ -85,10 +78,10 @@
             <div class="flex items-center gap-2 text-xs font-medium text-slate-600 dark:text-zinc-400">
               <span class="flex items-center gap-1">
                 <Icon src={Trophy} size="14" class="text-amber-500" />
-                {formatNumber(author.rating ?? author.score)}
+                {formatTopAuthorNumber(author.rating ?? author.score)}
               </span>
               <span class="flex items-center gap-1">
-                {formatNumber(author.posts_count)} постов
+                {formatTopAuthorNumber(author.posts_count)} постов
               </span>
             </div>
           </div>
@@ -104,7 +97,7 @@
       Весь рейтинг
     </Button>
   {/if}
-</div> 
+</div>
 
 <style>
   .author-row {

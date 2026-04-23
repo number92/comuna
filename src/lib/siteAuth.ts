@@ -87,8 +87,10 @@ export type SiteNotificationEventSetting = {
   description?: string
   site_enabled: boolean
   telegram_enabled: boolean
+  push_enabled: boolean
   default_site_enabled: boolean
   default_telegram_enabled: boolean
+  default_push_enabled: boolean
 }
 
 export type SiteNotificationSettingsResponse = {
@@ -97,6 +99,11 @@ export type SiteNotificationSettingsResponse = {
     linked: boolean
     username?: string | null
     first_name?: string | null
+  }
+  push: {
+    configured: boolean
+    registered_devices_count: number
+    active_platforms: string[]
   }
 }
 
@@ -122,6 +129,24 @@ export const siteToken = writable<string | null>(initialToken)
 export const siteUser = writable<SiteUser | null>(null)
 
 const buildUrl = (path: string) => `${getBackendBaseUrl()}${path}`
+
+const normalizeSiteNotificationEventSetting = (value: any): SiteNotificationEventSetting => ({
+  key: String(value?.key || ''),
+  title: String(value?.title || value?.key || ''),
+  description: value?.description ? String(value.description) : '',
+  site_enabled: Boolean(value?.site_enabled),
+  telegram_enabled: Boolean(value?.telegram_enabled),
+  push_enabled:
+    typeof value?.push_enabled === 'boolean'
+      ? value.push_enabled
+      : Boolean(value?.default_push_enabled),
+  default_site_enabled: Boolean(value?.default_site_enabled),
+  default_telegram_enabled: Boolean(value?.default_telegram_enabled),
+  default_push_enabled:
+    typeof value?.default_push_enabled === 'boolean'
+      ? value.default_push_enabled
+      : true,
+})
 
 const normalizeSiteAuthError = (message?: string | null, fallback = 'Не удалось выполнить вход') => {
   const value = String(message || '').trim().toLowerCase()
@@ -845,11 +870,20 @@ export const fetchSiteNotificationSettings = async (): Promise<SiteNotificationS
   }
 
   return {
-    events: (data?.events || []) as SiteNotificationEventSetting[],
+    events: Array.isArray(data?.events)
+      ? data.events.map(normalizeSiteNotificationEventSetting)
+      : [],
     telegram: {
       linked: Boolean(data?.telegram?.linked),
       username: data?.telegram?.username ?? '',
       first_name: data?.telegram?.first_name ?? '',
+    },
+    push: {
+      configured: Boolean(data?.push?.configured),
+      registered_devices_count: Number(data?.push?.registered_devices_count || 0),
+      active_platforms: Array.isArray(data?.push?.active_platforms)
+        ? (data.push.active_platforms as string[])
+        : [],
     },
   }
 }
@@ -859,6 +893,7 @@ export const updateSiteNotificationSettings = async (
     key: string
     site_enabled: boolean
     telegram_enabled: boolean
+    push_enabled: boolean
   }>
 ): Promise<SiteNotificationSettingsResponse> => {
   const token = get(siteToken)
@@ -881,11 +916,20 @@ export const updateSiteNotificationSettings = async (
   }
 
   return {
-    events: (data?.events || []) as SiteNotificationEventSetting[],
+    events: Array.isArray(data?.events)
+      ? data.events.map(normalizeSiteNotificationEventSetting)
+      : [],
     telegram: {
       linked: Boolean(data?.telegram?.linked),
       username: data?.telegram?.username ?? '',
       first_name: data?.telegram?.first_name ?? '',
+    },
+    push: {
+      configured: Boolean(data?.push?.configured),
+      registered_devices_count: Number(data?.push?.registered_devices_count || 0),
+      active_platforms: Array.isArray(data?.push?.active_platforms)
+        ? (data.push.active_platforms as string[])
+        : [],
     },
   }
 }

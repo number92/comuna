@@ -3,6 +3,7 @@ from django.urls import resolve
 
 from notifications.views import (
     auth_notification_read,
+    auth_notification_push_devices,
     auth_notification_settings,
     auth_notifications,
     auth_notifications_read_all,
@@ -15,6 +16,10 @@ class NotificationsViewsApiTests(SimpleTestCase):
         self.assertIs(
             resolve("/api/auth/notifications/settings/").func,
             auth_notification_settings,
+        )
+        self.assertIs(
+            resolve("/api/auth/notifications/push-devices/").func,
+            auth_notification_push_devices,
         )
         self.assertIs(
             resolve("/api/auth/notifications/read-all/").func,

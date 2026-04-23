@@ -18,6 +18,9 @@
   let notificationTelegramLinked = false
   let notificationTelegramUsername = ''
   let notificationTelegramFirstName = ''
+  let notificationPushConfigured = false
+  let notificationPushRegisteredDevicesCount = 0
+  let notificationPushPlatforms: string[] = []
   let notificationSettingsSnapshot = '[]'
 
   $: notificationSettingsDirty =
@@ -26,6 +29,7 @@
         key: event.key,
         site_enabled: event.site_enabled,
         telegram_enabled: event.telegram_enabled,
+        push_enabled: event.push_enabled,
       }))
     ) !== notificationSettingsSnapshot
 
@@ -38,6 +42,9 @@
     notificationTelegramLinked = false
     notificationTelegramUsername = ''
     notificationTelegramFirstName = ''
+    notificationPushConfigured = false
+    notificationPushRegisteredDevicesCount = 0
+    notificationPushPlatforms = []
     notificationSettingsSnapshot = '[]'
   }
 
@@ -51,11 +58,15 @@
       notificationTelegramLinked = Boolean(data.telegram?.linked)
       notificationTelegramUsername = data.telegram?.username ?? ''
       notificationTelegramFirstName = data.telegram?.first_name ?? ''
+      notificationPushConfigured = Boolean(data.push?.configured)
+      notificationPushRegisteredDevicesCount = Number(data.push?.registered_devices_count || 0)
+      notificationPushPlatforms = data.push?.active_platforms ?? []
       notificationSettingsSnapshot = JSON.stringify(
         (data.events ?? []).map((event) => ({
           key: event.key,
           site_enabled: event.site_enabled,
           telegram_enabled: event.telegram_enabled,
+          push_enabled: event.push_enabled,
         }))
       )
       notificationSettingsLoaded = true
@@ -72,7 +83,7 @@
 
   const toggleNotificationEventChannel = (
     index: number,
-    channel: 'site' | 'telegram',
+    channel: 'site' | 'telegram' | 'push',
     value: boolean
   ) => {
     const next = [...notificationEvents]
@@ -82,6 +93,7 @@
       ...item,
       site_enabled: channel === 'site' ? value : item.site_enabled,
       telegram_enabled: channel === 'telegram' ? value : item.telegram_enabled,
+      push_enabled: channel === 'push' ? value : item.push_enabled,
     }
     notificationEvents = next
   }
@@ -98,17 +110,22 @@
           key: event.key,
           site_enabled: event.site_enabled,
           telegram_enabled: event.telegram_enabled,
+          push_enabled: event.push_enabled,
         }))
       )
       notificationEvents = data.events ?? []
       notificationTelegramLinked = Boolean(data.telegram?.linked)
       notificationTelegramUsername = data.telegram?.username ?? ''
       notificationTelegramFirstName = data.telegram?.first_name ?? ''
+      notificationPushConfigured = Boolean(data.push?.configured)
+      notificationPushRegisteredDevicesCount = Number(data.push?.registered_devices_count || 0)
+      notificationPushPlatforms = data.push?.active_platforms ?? []
       notificationSettingsSnapshot = JSON.stringify(
         (data.events ?? []).map((event) => ({
           key: event.key,
           site_enabled: event.site_enabled,
           telegram_enabled: event.telegram_enabled,
+          push_enabled: event.push_enabled,
         }))
       )
       toast({ content: 'Настройки оповещений сохранены', type: 'success' })
@@ -156,6 +173,9 @@
   telegramLinked={notificationTelegramLinked}
   telegramUsername={notificationTelegramUsername}
   telegramFirstName={notificationTelegramFirstName}
+  pushConfigured={notificationPushConfigured}
+  pushRegisteredDevicesCount={notificationPushRegisteredDevicesCount}
+  pushPlatforms={notificationPushPlatforms}
   on:save={saveNotificationSettings}
   on:toggle={(event) =>
     toggleNotificationEventChannel(

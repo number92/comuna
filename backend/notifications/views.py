@@ -6,6 +6,12 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
 from notifications import serializers as notification_serializers
+from notifications.push_service import (
+    _serialize_push_device_item,
+    deactivate_push_devices_for_user,
+    register_push_device_for_user,
+    summarize_push_devices_for_user,
+)
 from notifications.service import (
     list_site_notifications_for_user,
     mark_all_site_notifications_read_for_user,
@@ -17,6 +23,16 @@ from users.views import _get_user_from_request
 
 
 _serialize_site_notification_item = notification_serializers._serialize_site_notification_item
+
+
+def _parse_json_body(request: HttpRequest) -> dict:
+    try:
+        body = json.loads(request.body.decode("utf-8") or "{}")
+    except json.JSONDecodeError:
+        raise ValueError("invalid json") from None
+    if not isinstance(body, dict):
+        raise ValueError("invalid json")
+    return body
 
 
 @csrf_exempt
@@ -33,9 +49,9 @@ def auth_notification_settings(request: HttpRequest) -> HttpResponse:
         return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)
 
     try:
-        body = json.loads(request.body.decode("utf-8") or "{}")
-    except json.JSONDecodeError:
-        return JsonResponse({"ok": False, "error": "invalid json"}, status=400)
+        body = _parse_json_body(request)
+    except ValueError as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=400)
 
     raw_settings = body.get("events")
     if raw_settings is None:
@@ -49,6 +65,57 @@ def auth_notification_settings(request: HttpRequest) -> HttpResponse:
         return JsonResponse({"ok": False, "error": str(exc)}, status=400)
 
     return JsonResponse({"ok": True, **payload})
+
+
+@csrf_exempt
+def auth_notification_push_devices(request: HttpRequest) -> HttpResponse:
+    user = _get_user_from_request(request)
+    if not user:
+        return JsonResponse({"ok": False, "error": "unauthorized"}, status=401)
+
+    if request.method == "GET":
+        return JsonResponse({"ok": True, **summarize_push_devices_for_user(user)})
+
+    if request.method not in ("POST", "PATCH", "DELETE"):
+        return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)
+
+    try:
+        body = _parse_json_body(request)
+    except ValueError as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+
+    if request.method in ("POST", "PATCH"):
+        try:
+            device = register_push_device_for_user(
+                user,
+                token=body.get("token") or "",
+                platform=body.get("platform") or "",
+                device_id=body.get("device_id") or body.get("installation_id") or "",
+                device_name=body.get("device_name") or "",
+                app_version=body.get("app_version") or "",
+            )
+        except ValueError as exc:
+            return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+
+        return JsonResponse(
+            {
+                "ok": True,
+                "device": _serialize_push_device_item(device),
+                **summarize_push_devices_for_user(user),
+            }
+        )
+
+    try:
+        updated = deactivate_push_devices_for_user(
+            user,
+            token=body.get("token") or "",
+            device_id=body.get("device_id") or body.get("installation_id") or "",
+            platform=body.get("platform") or "",
+        )
+    except ValueError as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+
+    return JsonResponse({"ok": True, "updated": updated, **summarize_push_devices_for_user(user)})
 
 
 def auth_notifications(request: HttpRequest) -> HttpResponse:
@@ -126,6 +193,7 @@ def auth_notifications_read_all(request: HttpRequest) -> HttpResponse:
 
 __all__ = [
     "auth_notification_read",
+    "auth_notification_push_devices",
     "auth_notification_settings",
     "auth_notifications",
     "auth_notifications_read_all",

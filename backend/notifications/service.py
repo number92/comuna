@@ -7,6 +7,10 @@ from django.db import transaction
 from django.utils import timezone
 
 from notifications.models import SiteNotification, SiteNotificationPreference
+from notifications.push_service import (
+    send_site_notification_to_push,
+    summarize_push_devices_for_user,
+)
 from telegram_integration.models import TelegramAccount
 from telegram_integration.service import send_site_notification_to_telegram
 
@@ -20,6 +24,7 @@ NOTIFICATION_EVENT_DEFINITIONS: list[dict[str, Any]] = [
         "description": "Кто-то оставил комментарий под вашим постом.",
         "default_site_enabled": True,
         "default_telegram_enabled": True,
+        "default_push_enabled": True,
     },
     {
         "key": "comment_reply",
@@ -27,6 +32,7 @@ NOTIFICATION_EVENT_DEFINITIONS: list[dict[str, Any]] = [
         "description": "Кто-то ответил на ваш комментарий.",
         "default_site_enabled": True,
         "default_telegram_enabled": True,
+        "default_push_enabled": True,
     },
     {
         "key": "post_published",
@@ -34,6 +40,7 @@ NOTIFICATION_EVENT_DEFINITIONS: list[dict[str, Any]] = [
         "description": "Ваш пост был опубликован и стал доступен на сайте.",
         "default_site_enabled": True,
         "default_telegram_enabled": False,
+        "default_push_enabled": True,
     },
     {
         "key": "comun_invite",
@@ -41,6 +48,7 @@ NOTIFICATION_EVENT_DEFINITIONS: list[dict[str, Any]] = [
         "description": "Вас пригласили в коммуну или назначили модератором.",
         "default_site_enabled": True,
         "default_telegram_enabled": True,
+        "default_push_enabled": True,
     },
     {
         "key": "post_added_to_voting",
@@ -48,6 +56,7 @@ NOTIFICATION_EVENT_DEFINITIONS: list[dict[str, Any]] = [
         "description": "Пост вашей авторской ленты попал в этап голосования в комуне.",
         "default_site_enabled": True,
         "default_telegram_enabled": True,
+        "default_push_enabled": True,
     },
     {
         "key": "system_announcement",
@@ -55,6 +64,7 @@ NOTIFICATION_EVENT_DEFINITIONS: list[dict[str, Any]] = [
         "description": "Важные новости и сообщения от команды проекта.",
         "default_site_enabled": True,
         "default_telegram_enabled": False,
+        "default_push_enabled": True,
     },
 ]
 
@@ -87,6 +97,7 @@ def _ensure_user_notification_preferences(user: User) -> dict[str, SiteNotificat
                 event_key=key,
                 site_enabled=bool(definition.get("default_site_enabled", True)),
                 telegram_enabled=bool(definition.get("default_telegram_enabled", False)),
+                push_enabled=bool(definition.get("default_push_enabled", True)),
             )
         )
     if missing:
@@ -107,6 +118,7 @@ def serialize_notification_settings_for_user(user: User) -> dict[str, Any]:
         pref = preferences.get(key)
         default_site_enabled = bool(definition.get("default_site_enabled", True))
         default_telegram_enabled = bool(definition.get("default_telegram_enabled", False))
+        default_push_enabled = bool(definition.get("default_push_enabled", True))
         events.append(
             {
                 "key": key,
@@ -114,18 +126,26 @@ def serialize_notification_settings_for_user(user: User) -> dict[str, Any]:
                 "description": str(definition.get("description") or ""),
                 "site_enabled": pref.site_enabled if pref else default_site_enabled,
                 "telegram_enabled": pref.telegram_enabled if pref else default_telegram_enabled,
+                "push_enabled": pref.push_enabled if pref else default_push_enabled,
                 "default_site_enabled": default_site_enabled,
                 "default_telegram_enabled": default_telegram_enabled,
+                "default_push_enabled": default_push_enabled,
             }
         )
 
     telegram_account = TelegramAccount.objects.filter(user=user).first()
+    push_summary = summarize_push_devices_for_user(user)
     return {
         "events": events,
         "telegram": {
             "linked": bool(telegram_account),
             "username": telegram_account.username if telegram_account else "",
             "first_name": telegram_account.first_name if telegram_account else "",
+        },
+        "push": {
+            "configured": bool(push_summary.get("configured")),
+            "registered_devices_count": int(push_summary.get("registered_devices_count", 0)),
+            "active_platforms": list(push_summary.get("active_platforms") or []),
         },
     }
 
@@ -152,16 +172,34 @@ def update_notification_settings_for_user(
                 continue
             seen_keys.add(key)
 
-            site_enabled = bool(item.get("site_enabled", True))
-            telegram_enabled = bool(item.get("telegram_enabled", False))
-
             pref = preferences.get(key)
+            default_site_enabled = bool(
+                (_NOTIFICATION_EVENT_MAP.get(key) or {}).get("default_site_enabled", True)
+            )
+            default_telegram_enabled = bool(
+                (_NOTIFICATION_EVENT_MAP.get(key) or {}).get("default_telegram_enabled", False)
+            )
+            default_push_enabled = bool(
+                (_NOTIFICATION_EVENT_MAP.get(key) or {}).get("default_push_enabled", True)
+            )
+            site_enabled = pref.site_enabled if pref is not None else default_site_enabled
+            telegram_enabled = (
+                pref.telegram_enabled if pref is not None else default_telegram_enabled
+            )
+            push_enabled = pref.push_enabled if pref is not None else default_push_enabled
+            if "site_enabled" in item:
+                site_enabled = bool(item.get("site_enabled"))
+            if "telegram_enabled" in item:
+                telegram_enabled = bool(item.get("telegram_enabled"))
+            if "push_enabled" in item:
+                push_enabled = bool(item.get("push_enabled"))
             if pref is None:
                 pref = SiteNotificationPreference.objects.create(
                     user=user,
                     event_key=key,
                     site_enabled=site_enabled,
                     telegram_enabled=telegram_enabled,
+                    push_enabled=push_enabled,
                 )
                 preferences[key] = pref
                 continue
@@ -173,8 +211,18 @@ def update_notification_settings_for_user(
             if pref.telegram_enabled != telegram_enabled:
                 pref.telegram_enabled = telegram_enabled
                 changed = True
+            if pref.push_enabled != push_enabled:
+                pref.push_enabled = push_enabled
+                changed = True
             if changed:
-                pref.save(update_fields=["site_enabled", "telegram_enabled", "updated_at"])
+                pref.save(
+                    update_fields=[
+                        "site_enabled",
+                        "telegram_enabled",
+                        "push_enabled",
+                        "updated_at",
+                    ]
+                )
 
     return serialize_notification_settings_for_user(user)
 
@@ -189,6 +237,7 @@ def create_user_notification(
     payload: dict[str, Any] | None = None,
     force_site: bool | None = None,
     force_telegram: bool | None = None,
+    force_push: bool | None = None,
 ) -> SiteNotification | None:
     if user is None:
         return None
@@ -203,8 +252,11 @@ def create_user_notification(
     is_telegram = bool(force_telegram) if force_telegram is not None else bool(
         pref.telegram_enabled if pref else definition.get("default_telegram_enabled", False)
     )
+    is_push = bool(force_push) if force_push is not None else bool(
+        pref.push_enabled if pref else definition.get("default_push_enabled", True)
+    )
 
-    if not is_site and not is_telegram:
+    if not is_site and not is_telegram and not is_push:
         return None
 
     notification = SiteNotification.objects.create(
@@ -216,9 +268,12 @@ def create_user_notification(
         payload=payload or {},
         is_site=is_site,
         is_telegram=is_telegram,
+        is_push=is_push,
     )
     if is_telegram:
         send_site_notification_to_telegram(notification)
+    if is_push:
+        send_site_notification_to_push(notification)
     return notification
 
 

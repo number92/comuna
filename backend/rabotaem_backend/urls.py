@@ -56,6 +56,7 @@ from my_feed.views import (
 )
 from notifications.views import (
     auth_notification_read,
+    auth_notification_push_devices,
     auth_notification_settings,
     auth_notifications,
     auth_notifications_read_all,
@@ -139,6 +140,11 @@ urlpatterns = [
         "api/auth/notifications/settings/",
         auth_notification_settings,
         name="auth-notification-settings",
+    ),
+    path(
+        "api/auth/notifications/push-devices/",
+        auth_notification_push_devices,
+        name="auth-notification-push-devices",
     ),
     path(
         "api/auth/notifications/read-all/",

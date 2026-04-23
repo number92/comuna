@@ -23,6 +23,8 @@ export POSTGRES_PORT=5432
 export TELEGRAM_BOT_TOKEN=your-token
 export TELEGRAM_WEBHOOK_SECRET=your-secret
 export TELEGRAM_USE_POLLING=0
+export PUSH_FCM_PROJECT_ID=your-firebase-project-id
+export PUSH_FCM_SERVICE_ACCOUNT_FILE=/absolute/path/firebase-service-account.json
 ```
 
 3. Migrate and run:
@@ -61,8 +63,12 @@ To import history, forward channel posts to the bot in a private chat.
 ## API
 
 - `GET /api/authors/<username>/posts/?limit=20`
+- `GET|POST|PATCH|DELETE /api/auth/notifications/push-devices/`
 
 Returns the latest posts for a channel/author. Blocked authors or posts are hidden.
+
+`/api/auth/notifications/push-devices/` allows the mobile app to register or deactivate
+FCM device tokens for Android and iOS. The authenticated user is taken from the Bearer token.
 
 ## Admin
 

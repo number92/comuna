@@ -102,6 +102,13 @@ export const buildComunUrl = (slug: string): string => {
   return `${getBackendBaseUrl()}/api/comuns/${encodeURIComponent(slug)}/`
 }
 
+export const buildComunCustomTemplateEditorPath = (
+  slug: string,
+  templateRef: string | number
+): string => {
+  return `/comuns/${encodeURIComponent(slug)}/settings/templates/${encodeURIComponent(String(templateRef))}`
+}
+
 export const buildComunGlossaryPath = (slug: string): string => {
   return `/comuns/${encodeURIComponent(slug)}/glossary`
 }
@@ -428,6 +435,34 @@ export type BackendComunRating = {
   user_vote?: number
 }
 
+export type BackendComunCustomTemplateBlock = {
+  id?: number
+  block_type: string
+  placement: 'available' | 'header' | 'footer'
+  is_required?: boolean
+  sort_order?: number
+}
+
+export type BackendComunCustomTemplateField = {
+  id?: number
+  key?: string
+  label: string
+  field_type: 'text' | 'file' | 'select'
+  placement: 'header' | 'footer'
+  is_required?: boolean
+  options?: string[]
+  sort_order?: number
+}
+
+export type BackendComunCustomTemplate = {
+  id?: number
+  name: string
+  slug?: string
+  sort_order?: number
+  blocks?: BackendComunCustomTemplateBlock[]
+  fields?: BackendComunCustomTemplateField[]
+}
+
 export type BackendComun = {
   id: number
   name: string
@@ -452,6 +487,7 @@ export type BackendComun = {
   allowed_template_types?: string[]
   allowed_post_templates?: string[]
   template_editor_blocks_by_template?: Record<string, string[]>
+  custom_templates?: BackendComunCustomTemplate[]
   is_active?: boolean
   sort_order?: number
   can_moderate?: boolean
@@ -503,6 +539,12 @@ export type BackendComun = {
     template_types?: Array<{ value: string; label: string }>
     template_editor_block_options_by_template?: Record<string, Array<{ value: string; label: string }>>
     template_editor_blocks_by_template?: Record<string, string[]>
+    custom_template_editor?: {
+      block_options?: Array<{ value: string; label: string }>
+      block_placement_options?: Array<{ value: string; label: string }>
+      field_type_options?: Array<{ value: string; label: string }>
+      field_placement_options?: Array<{ value: string; label: string }>
+    }
   }
 }
 

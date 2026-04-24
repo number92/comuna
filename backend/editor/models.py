@@ -20,6 +20,7 @@ POST_TEMPLATE_TYPE_VALUES = {value for value, _label in POST_TEMPLATE_TYPE_CHOIC
 POST_TEMPLATE_EDITOR_BLOCK_HEADER = "header"
 POST_TEMPLATE_EDITOR_BLOCK_TOC = "toc"
 POST_TEMPLATE_EDITOR_BLOCK_LIST = "list"
+POST_TEMPLATE_EDITOR_BLOCK_TABLE = "table"
 POST_TEMPLATE_EDITOR_BLOCK_IMAGE = "image"
 POST_TEMPLATE_EDITOR_BLOCK_QUOTE = "quote"
 POST_TEMPLATE_EDITOR_BLOCK_CALLOUT = "callout"
@@ -42,6 +43,7 @@ POST_TEMPLATE_EDITOR_BLOCK_CHOICES = (
     (POST_TEMPLATE_EDITOR_BLOCK_TOC, "Оглавление"),
     (POST_TEMPLATE_EDITOR_BLOCK_HEADER, "Заголовок"),
     (POST_TEMPLATE_EDITOR_BLOCK_LIST, "Список"),
+    (POST_TEMPLATE_EDITOR_BLOCK_TABLE, "Таблица"),
     (POST_TEMPLATE_EDITOR_BLOCK_IMAGE, "Изображение"),
     (POST_TEMPLATE_EDITOR_BLOCK_QUOTE, "Цитата"),
     (POST_TEMPLATE_EDITOR_BLOCK_CALLOUT, "Врезка"),
@@ -64,6 +66,9 @@ POST_TEMPLATE_EDITOR_BLOCK_CHOICES = (
 POST_TEMPLATE_EDITOR_BLOCK_VALUES = {
     value for value, _label in POST_TEMPLATE_EDITOR_BLOCK_CHOICES
 }
+POST_TEMPLATE_EDITOR_BLOCK_OPTION_ITEMS = [
+    {"value": value, "label": label} for value, label in POST_TEMPLATE_EDITOR_BLOCK_CHOICES
+]
 POST_TEMPLATE_EDITOR_BLOCK_ALL_VALUES = tuple(
     value for value, _label in POST_TEMPLATE_EDITOR_BLOCK_CHOICES
 )
@@ -78,6 +83,52 @@ POST_TEMPLATE_EDITOR_BLOCKS_BY_TEMPLATE = {
     POST_TEMPLATE_TYPE_POST_VOTE_POLL: POST_TEMPLATE_EDITOR_BLOCK_BASIC_VALUES,
     POST_TEMPLATE_TYPE_MUSIC_RELEASE: POST_TEMPLATE_EDITOR_BLOCK_BASIC_VALUES,
 }
+
+COMUN_CUSTOM_TEMPLATE_BLOCK_PLACEMENT_AVAILABLE = "available"
+COMUN_CUSTOM_TEMPLATE_BLOCK_PLACEMENT_HEADER = "header"
+COMUN_CUSTOM_TEMPLATE_BLOCK_PLACEMENT_FOOTER = "footer"
+COMUN_CUSTOM_TEMPLATE_BLOCK_PLACEMENT_CHOICES = (
+    (COMUN_CUSTOM_TEMPLATE_BLOCK_PLACEMENT_AVAILABLE, "Доступен в шаблоне"),
+    (COMUN_CUSTOM_TEMPLATE_BLOCK_PLACEMENT_HEADER, "Хедер"),
+    (COMUN_CUSTOM_TEMPLATE_BLOCK_PLACEMENT_FOOTER, "Футер"),
+)
+COMUN_CUSTOM_TEMPLATE_BLOCK_PLACEMENT_VALUES = {
+    value for value, _label in COMUN_CUSTOM_TEMPLATE_BLOCK_PLACEMENT_CHOICES
+}
+COMUN_CUSTOM_TEMPLATE_BLOCK_PLACEMENT_OPTION_ITEMS = [
+    {"value": value, "label": label}
+    for value, label in COMUN_CUSTOM_TEMPLATE_BLOCK_PLACEMENT_CHOICES
+]
+
+COMUN_CUSTOM_TEMPLATE_FIELD_TYPE_TEXT = "text"
+COMUN_CUSTOM_TEMPLATE_FIELD_TYPE_FILE = "file"
+COMUN_CUSTOM_TEMPLATE_FIELD_TYPE_SELECT = "select"
+COMUN_CUSTOM_TEMPLATE_FIELD_TYPE_CHOICES = (
+    (COMUN_CUSTOM_TEMPLATE_FIELD_TYPE_TEXT, "Текст"),
+    (COMUN_CUSTOM_TEMPLATE_FIELD_TYPE_FILE, "Файл"),
+    (COMUN_CUSTOM_TEMPLATE_FIELD_TYPE_SELECT, "Выбор значений"),
+)
+COMUN_CUSTOM_TEMPLATE_FIELD_TYPE_VALUES = {
+    value for value, _label in COMUN_CUSTOM_TEMPLATE_FIELD_TYPE_CHOICES
+}
+COMUN_CUSTOM_TEMPLATE_FIELD_TYPE_OPTION_ITEMS = [
+    {"value": value, "label": label}
+    for value, label in COMUN_CUSTOM_TEMPLATE_FIELD_TYPE_CHOICES
+]
+
+COMUN_CUSTOM_TEMPLATE_FIELD_PLACEMENT_HEADER = "header"
+COMUN_CUSTOM_TEMPLATE_FIELD_PLACEMENT_FOOTER = "footer"
+COMUN_CUSTOM_TEMPLATE_FIELD_PLACEMENT_CHOICES = (
+    (COMUN_CUSTOM_TEMPLATE_FIELD_PLACEMENT_HEADER, "Хедер"),
+    (COMUN_CUSTOM_TEMPLATE_FIELD_PLACEMENT_FOOTER, "Футер"),
+)
+COMUN_CUSTOM_TEMPLATE_FIELD_PLACEMENT_VALUES = {
+    value for value, _label in COMUN_CUSTOM_TEMPLATE_FIELD_PLACEMENT_CHOICES
+}
+COMUN_CUSTOM_TEMPLATE_FIELD_PLACEMENT_OPTION_ITEMS = [
+    {"value": value, "label": label}
+    for value, label in COMUN_CUSTOM_TEMPLATE_FIELD_PLACEMENT_CHOICES
+]
 
 
 def default_allowed_post_templates() -> list[str]:
@@ -235,6 +286,99 @@ class PostTemplateConfig(models.Model):
         super().save(*args, **kwargs)
 
 
+class ComunCustomPostTemplate(models.Model):
+    comun = models.ForeignKey(
+        "feeds.Comun",
+        on_delete=models.CASCADE,
+        related_name="custom_post_templates",
+    )
+    name = models.CharField(max_length=120, verbose_name="Название шаблона")
+    slug = models.SlugField(max_length=160, verbose_name="Слаг шаблона")
+    sort_order = models.PositiveIntegerField(default=0, verbose_name="Порядок")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        app_label = "feeds"
+        ordering = ["sort_order", "name", "id"]
+        unique_together = (("comun", "slug"),)
+        verbose_name = "Пользовательский шаблон сообщества"
+        verbose_name_plural = "Пользовательские шаблоны сообществ"
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class ComunCustomPostTemplateBlock(models.Model):
+    template = models.ForeignKey(
+        ComunCustomPostTemplate,
+        on_delete=models.CASCADE,
+        related_name="block_rules",
+    )
+    block_type = models.CharField(
+        max_length=64,
+        choices=POST_TEMPLATE_EDITOR_BLOCK_CHOICES,
+        verbose_name="Блок редактора",
+    )
+    placement = models.CharField(
+        max_length=16,
+        choices=COMUN_CUSTOM_TEMPLATE_BLOCK_PLACEMENT_CHOICES,
+        default=COMUN_CUSTOM_TEMPLATE_BLOCK_PLACEMENT_AVAILABLE,
+        verbose_name="Расположение",
+    )
+    is_required = models.BooleanField(default=False, verbose_name="Обязательный")
+    sort_order = models.PositiveIntegerField(default=0, verbose_name="Порядок")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        app_label = "feeds"
+        ordering = ["sort_order", "id"]
+        unique_together = (("template", "block_type"),)
+        verbose_name = "Блок пользовательского шаблона сообщества"
+        verbose_name_plural = "Блоки пользовательских шаблонов сообществ"
+
+    def __str__(self) -> str:
+        return f"{self.template_id}:{self.block_type}"
+
+
+class ComunCustomPostTemplateField(models.Model):
+    template = models.ForeignKey(
+        ComunCustomPostTemplate,
+        on_delete=models.CASCADE,
+        related_name="fields",
+    )
+    key = models.SlugField(max_length=160, verbose_name="Ключ поля")
+    label = models.CharField(max_length=120, verbose_name="Название поля")
+    field_type = models.CharField(
+        max_length=16,
+        choices=COMUN_CUSTOM_TEMPLATE_FIELD_TYPE_CHOICES,
+        default=COMUN_CUSTOM_TEMPLATE_FIELD_TYPE_TEXT,
+        verbose_name="Тип поля",
+    )
+    placement = models.CharField(
+        max_length=16,
+        choices=COMUN_CUSTOM_TEMPLATE_FIELD_PLACEMENT_CHOICES,
+        default=COMUN_CUSTOM_TEMPLATE_FIELD_PLACEMENT_HEADER,
+        verbose_name="Расположение",
+    )
+    is_required = models.BooleanField(default=False, verbose_name="Обязательное")
+    options = models.JSONField(default=list, blank=True, verbose_name="Опции выбора")
+    sort_order = models.PositiveIntegerField(default=0, verbose_name="Порядок")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        app_label = "feeds"
+        ordering = ["sort_order", "id"]
+        unique_together = (("template", "key"),)
+        verbose_name = "Поле пользовательского шаблона сообщества"
+        verbose_name_plural = "Поля пользовательских шаблонов сообществ"
+
+    def __str__(self) -> str:
+        return f"{self.template_id}:{self.key}"
+
+
 class PostPollVote(models.Model):
     post = models.ForeignKey("feeds.Post", on_delete=models.CASCADE, related_name="poll_votes")
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="post_poll_votes")
@@ -269,6 +413,23 @@ class PostRatingVote(models.Model):
 
 
 __all__ = [
+    "COMUN_CUSTOM_TEMPLATE_BLOCK_PLACEMENT_AVAILABLE",
+    "COMUN_CUSTOM_TEMPLATE_BLOCK_PLACEMENT_HEADER",
+    "COMUN_CUSTOM_TEMPLATE_BLOCK_PLACEMENT_FOOTER",
+    "COMUN_CUSTOM_TEMPLATE_BLOCK_PLACEMENT_CHOICES",
+    "COMUN_CUSTOM_TEMPLATE_BLOCK_PLACEMENT_VALUES",
+    "COMUN_CUSTOM_TEMPLATE_BLOCK_PLACEMENT_OPTION_ITEMS",
+    "COMUN_CUSTOM_TEMPLATE_FIELD_PLACEMENT_HEADER",
+    "COMUN_CUSTOM_TEMPLATE_FIELD_PLACEMENT_FOOTER",
+    "COMUN_CUSTOM_TEMPLATE_FIELD_PLACEMENT_CHOICES",
+    "COMUN_CUSTOM_TEMPLATE_FIELD_PLACEMENT_VALUES",
+    "COMUN_CUSTOM_TEMPLATE_FIELD_PLACEMENT_OPTION_ITEMS",
+    "COMUN_CUSTOM_TEMPLATE_FIELD_TYPE_TEXT",
+    "COMUN_CUSTOM_TEMPLATE_FIELD_TYPE_FILE",
+    "COMUN_CUSTOM_TEMPLATE_FIELD_TYPE_SELECT",
+    "COMUN_CUSTOM_TEMPLATE_FIELD_TYPE_CHOICES",
+    "COMUN_CUSTOM_TEMPLATE_FIELD_TYPE_VALUES",
+    "COMUN_CUSTOM_TEMPLATE_FIELD_TYPE_OPTION_ITEMS",
     "POST_TEMPLATE_TYPE_BASIC",
     "POST_TEMPLATE_TYPE_MOVIE_REVIEW",
     "POST_TEMPLATE_TYPE_POST_VOTE_POLL",
@@ -276,10 +437,14 @@ __all__ = [
     "POST_TEMPLATE_TYPE_CHOICES",
     "POST_TEMPLATE_TYPE_VALUES",
     "POST_TEMPLATE_EDITOR_BLOCK_CHOICES",
+    "POST_TEMPLATE_EDITOR_BLOCK_OPTION_ITEMS",
     "POST_TEMPLATE_EDITOR_BLOCK_VALUES",
     "POST_TEMPLATE_EDITOR_BLOCK_ALL_VALUES",
     "POST_TEMPLATE_EDITOR_BLOCK_BASIC_VALUES",
     "POST_TEMPLATE_EDITOR_BLOCKS_BY_TEMPLATE",
+    "ComunCustomPostTemplate",
+    "ComunCustomPostTemplateBlock",
+    "ComunCustomPostTemplateField",
     "PostTemplateConfig",
     "PostPollVote",
     "PostRatingVote",

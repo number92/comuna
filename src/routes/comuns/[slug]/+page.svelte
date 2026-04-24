@@ -1313,7 +1313,14 @@
       {:else if comun?.source_rubric}
         В этом сообществе пока нет публикаций из рубрики {comun.source_rubric.name}.
       {:else}
-        У сообщества пока не настроен источник публикаций.
+        <div class="flex flex-col gap-4">
+          <div>В этом сообществе пока нет публикаций.</div>
+          {#if comun?.slug && canPostInComun()}
+            <div>
+              <Button size="sm" on:click={openComunPostEditor}>Написать</Button>
+            </div>
+          {/if}
+        </div>
       {/if}
     </div>
   {/if}

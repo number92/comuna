@@ -8,9 +8,11 @@
   import ComunSettingsTabs from '$lib/components/comuns/ComunSettingsTabs.svelte'
   import TemplateTypeDropdown from '$lib/components/comuns/TemplateTypeDropdown.svelte'
   import {
+    buildComunCustomTemplateEditorPath,
     buildComunUrl,
     buildTagsEnsureUrl,
     type BackendComun,
+    type BackendComunCustomTemplate,
     type BackendComunCategory,
     type BackendTag,
   } from '$lib/api/backend'
@@ -61,11 +63,29 @@
   }
   type TemplateTypeOption = { value: PostTemplateCode; label: string }
   type ComunSettingsTabKey = 'description' | 'availability' | 'moderation' | 'categories' | 'rules'
+  type CustomTemplateBlockOption = { value: string; label: string }
+  type CustomTemplatePlacement = '' | 'available' | 'header' | 'footer'
+  type CustomTemplateFieldType = 'text' | 'file' | 'select'
+  type CustomTemplateFieldPlacement = 'header' | 'footer'
   const fallbackTemplateTypeOptions: TemplateTypeOption[] = [
     { value: 'basic', label: 'Пост' },
     { value: 'movie_review', label: 'Кинообзор' },
     { value: 'post_vote_poll', label: 'Голосование за посты' },
     { value: 'music_release', label: 'Музыкальный релиз' },
+  ]
+  const fallbackCustomTemplateBlockPlacementOptions = [
+    { value: 'available', label: 'Доступен в шаблоне' },
+    { value: 'header', label: 'Хедер' },
+    { value: 'footer', label: 'Футер' },
+  ]
+  const fallbackCustomTemplateFieldTypeOptions = [
+    { value: 'text', label: 'Текст' },
+    { value: 'file', label: 'Файл' },
+    { value: 'select', label: 'Выбор значений' },
+  ]
+  const fallbackCustomTemplateFieldPlacementOptions = [
+    { value: 'header', label: 'Хедер' },
+    { value: 'footer', label: 'Футер' },
   ]
   const comunSettingsTabs: Array<{ value: ComunSettingsTabKey; label: string }> = [
     { value: 'description', label: 'Описание' },
@@ -173,6 +193,49 @@
     return normalized.length ? normalized : fallbackTemplateTypeOptions
   }
 
+  const comunCustomTemplates = (value: BackendComun | null): BackendComunCustomTemplate[] =>
+    Array.isArray(value?.custom_templates)
+      ? value.custom_templates.map((template, index) => ({
+          id: Number(template?.id) > 0 ? Number(template?.id) : undefined,
+          name: String(template?.name ?? '').trim(),
+          slug: String(template?.slug ?? '').trim() || undefined,
+          sort_order: Number(template?.sort_order ?? index),
+          blocks: Array.isArray(template?.blocks)
+            ? template.blocks.map((block, blockIndex) => ({
+                id: Number(block?.id) > 0 ? Number(block?.id) : undefined,
+                block_type: String(block?.block_type ?? '').trim(),
+                placement: (String(block?.placement ?? '').trim() || 'available') as
+                  | 'available'
+                  | 'header'
+                  | 'footer',
+                is_required: Boolean(block?.is_required),
+                sort_order: Number(block?.sort_order ?? blockIndex),
+              }))
+            : [],
+          fields: Array.isArray(template?.fields)
+            ? template.fields.map((field, fieldIndex) => ({
+                id: Number(field?.id) > 0 ? Number(field?.id) : undefined,
+                key: String(field?.key ?? '').trim() || undefined,
+                label: String(field?.label ?? '').trim(),
+                field_type: (String(field?.field_type ?? '').trim() || 'text') as
+                  | 'text'
+                  | 'file'
+                  | 'select',
+                placement: (String(field?.placement ?? '').trim() || 'header') as
+                  | 'header'
+                  | 'footer',
+                is_required: Boolean(field?.is_required),
+                options: Array.isArray(field?.options)
+                  ? field.options
+                      .map((option) => String(option ?? '').trim())
+                      .filter(Boolean)
+                  : [],
+                sort_order: Number(field?.sort_order ?? fieldIndex),
+              }))
+            : [],
+        }))
+      : []
+
   const settingsComparable = (value: BackendComun | null) =>
     JSON.stringify({
       name: (value?.name ?? '').trim(),
@@ -232,6 +295,9 @@
       Authorization: `Bearer ${$siteToken}`,
     }
   }
+
+  const customTemplateEditorPath = (templateRef = 'new') =>
+    buildComunCustomTemplateEditorPath(slug, templateRef)
 
   const refreshComunManage = async () => {
     if (!slug) return
@@ -520,6 +586,17 @@
         : category
     )
   }
+
+  const customTemplateManagementItems = (value: BackendComun | null) =>
+    comunCustomTemplates(value).map((template, index) => ({
+      id: String(template.slug ?? template.id ?? index),
+      label: String(template.name ?? '').trim() || `Шаблон ${index + 1}`,
+    }))
+
+  const openCreateCustomTemplateEditor = () => goto(customTemplateEditorPath('new'))
+
+  const openEditCustomTemplateEditor = (templateRef: string) =>
+    goto(customTemplateEditorPath(templateRef))
 
   const clearDraftLogo = () => {
     if (!settingsDraft) return
@@ -1484,7 +1561,12 @@
               options={settingsTemplateTypeOptions}
               selectedValues={comunAllowedTemplateTypes(settingsDraft)}
               disabled={settingsSaving}
+              actionLabel={canManageComunModerators() ? 'Создать шаблон' : ''}
+              customItems={canManageComunModerators() ? customTemplateManagementItems(settingsDraft) : []}
+              customItemsTitle="Пользовательские шаблоны"
               on:change={(event) => setDraftAllowedTemplateTypes(event.detail)}
+              on:action={openCreateCustomTemplateEditor}
+              on:customitemclick={(event) => openEditCustomTemplateEditor(Number(event.detail))}
             />
           </div>
 

@@ -32,7 +32,9 @@ import { t } from './translations'
 
 const getDefaultProfile = (): Profile => ({
   id: -1,
-  instance: get(profileData)?.defaultInstance ?? get(instance),
+  instance: browser
+    ? get(profileData)?.defaultInstance ?? get(instance)
+    : DEFAULT_INSTANCE_URL,
 })
 
 function getFromStorage<T>(key: string): T | undefined {
@@ -137,7 +139,9 @@ export let profile: Readable<Profile> & { set: (v: Profile) => void } =
     const profile =
       pd.profiles.find((p) => p.id == pd.profile) ?? getDefaultProfile()
 
-    instance.set(profile.instance)
+    if (browser) {
+      instance.set(profile.instance)
+    }
     set(profile)
 
     if (profile?.jwt) {

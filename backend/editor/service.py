@@ -15,13 +15,29 @@ from django.contrib.auth import get_user_model
 from django.db.models import Avg, Count
 from django.http import HttpRequest
 from django.utils import timezone
+from django.utils.text import slugify
 
 from editor.models import (
+    COMUN_CUSTOM_TEMPLATE_BLOCK_PLACEMENT_AVAILABLE,
+    COMUN_CUSTOM_TEMPLATE_BLOCK_PLACEMENT_OPTION_ITEMS,
+    COMUN_CUSTOM_TEMPLATE_BLOCK_PLACEMENT_VALUES,
+    COMUN_CUSTOM_TEMPLATE_FIELD_PLACEMENT_HEADER,
+    COMUN_CUSTOM_TEMPLATE_FIELD_PLACEMENT_OPTION_ITEMS,
+    COMUN_CUSTOM_TEMPLATE_FIELD_PLACEMENT_VALUES,
+    COMUN_CUSTOM_TEMPLATE_FIELD_TYPE_OPTION_ITEMS,
+    COMUN_CUSTOM_TEMPLATE_FIELD_TYPE_SELECT,
+    COMUN_CUSTOM_TEMPLATE_FIELD_TYPE_TEXT,
+    COMUN_CUSTOM_TEMPLATE_FIELD_TYPE_VALUES,
     POST_TEMPLATE_TYPE_BASIC,
     POST_TEMPLATE_TYPE_CHOICES,
+    POST_TEMPLATE_EDITOR_BLOCK_OPTION_ITEMS,
+    POST_TEMPLATE_EDITOR_BLOCK_VALUES,
     POST_TEMPLATE_TYPE_MOVIE_REVIEW,
     POST_TEMPLATE_TYPE_MUSIC_RELEASE,
     POST_TEMPLATE_TYPE_POST_VOTE_POLL,
+    ComunCustomPostTemplate,
+    ComunCustomPostTemplateBlock,
+    ComunCustomPostTemplateField,
     PostPollVote,
     PostRatingVote,
     PostTemplateConfig,
@@ -1264,6 +1280,291 @@ def _serialize_template_editor_block_options_by_template() -> dict[str, list[dic
     return payload
 
 
+def _serialize_comun_custom_template_editor_options() -> dict[str, list[dict]]:
+    return {
+        "block_options": list(POST_TEMPLATE_EDITOR_BLOCK_OPTION_ITEMS),
+        "block_placement_options": list(COMUN_CUSTOM_TEMPLATE_BLOCK_PLACEMENT_OPTION_ITEMS),
+        "field_type_options": list(COMUN_CUSTOM_TEMPLATE_FIELD_TYPE_OPTION_ITEMS),
+        "field_placement_options": list(COMUN_CUSTOM_TEMPLATE_FIELD_PLACEMENT_OPTION_ITEMS),
+    }
+
+
+def _normalize_comun_custom_template_name(raw_value: object) -> str:
+    return re.sub(r"\s+", " ", str(raw_value or "").strip())[:120]
+
+
+def _generate_comun_custom_template_slug(
+    comun: Comun,
+    name: str,
+    *,
+    exclude_template_id: int | None = None,
+) -> str:
+    normalized_name = str(name or "").strip()
+    base_slug = slugify(normalized_name)[:160]
+    if not base_slug:
+        base_slug = _fv()._slugify_title(normalized_name)[:160]
+    if not base_slug:
+        base_slug = f"template-{secrets.token_hex(4)}"
+    slug = base_slug
+    suffix = 2
+    queryset = ComunCustomPostTemplate.objects.filter(comun=comun)
+    if exclude_template_id:
+        queryset = queryset.exclude(id=exclude_template_id)
+    while queryset.filter(slug=slug).exists():
+        suffix_literal = f"-{suffix}"
+        max_base_length = max(160 - len(suffix_literal), 1)
+        slug = f"{base_slug[:max_base_length]}{suffix_literal}"
+        suffix += 1
+    return slug
+
+
+def _normalize_comun_custom_template_field_label(raw_value: object) -> str:
+    return re.sub(r"\s+", " ", str(raw_value or "").strip())[:120]
+
+
+def _generate_comun_custom_template_field_key(
+    label: str,
+    *,
+    existing_keys: set[str],
+    fallback_index: int,
+) -> str:
+    base_key = slugify(label)[:160]
+    if not base_key:
+        base_key = _fv()._slugify_title(label)[:160]
+    if not base_key:
+        base_key = f"field-{fallback_index}"
+    key = base_key
+    suffix = 2
+    while key in existing_keys:
+        suffix_literal = f"-{suffix}"
+        max_base_length = max(160 - len(suffix_literal), 1)
+        key = f"{base_key[:max_base_length]}{suffix_literal}"
+        suffix += 1
+    existing_keys.add(key)
+    return key
+
+
+def _normalize_comun_custom_template_field_options(raw_value: object) -> list[str]:
+    if isinstance(raw_value, str):
+        source = re.split(r"[\n,;]+", raw_value)
+    elif isinstance(raw_value, (list, tuple, set)):
+        source = list(raw_value)
+    else:
+        source = []
+
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for item in source:
+        value = re.sub(r"\s+", " ", str(item or "").strip())[:120]
+        if not value:
+            continue
+        value_key = value.casefold()
+        if value_key in seen:
+            continue
+        seen.add(value_key)
+        normalized.append(value)
+    return normalized[:50]
+
+
+def _normalize_comun_custom_template_blocks(raw_value: object) -> list[dict]:
+    if not isinstance(raw_value, list):
+        return []
+    normalized: list[dict] = []
+    seen_block_types: set[str] = set()
+    for index, item in enumerate(raw_value):
+        if not isinstance(item, dict):
+            continue
+        block_type = str(item.get("block_type") or item.get("type") or "").strip().lower()
+        if not block_type or block_type not in POST_TEMPLATE_EDITOR_BLOCK_VALUES:
+            continue
+        if block_type in seen_block_types:
+            continue
+        placement = str(item.get("placement") or "").strip().lower()
+        if placement not in COMUN_CUSTOM_TEMPLATE_BLOCK_PLACEMENT_VALUES:
+            placement = COMUN_CUSTOM_TEMPLATE_BLOCK_PLACEMENT_AVAILABLE
+        seen_block_types.add(block_type)
+        normalized.append(
+            {
+                "block_type": block_type,
+                "placement": placement,
+                "is_required": bool(item.get("is_required")),
+                "sort_order": index,
+            }
+        )
+    return normalized
+
+
+def _normalize_comun_custom_template_fields(
+    raw_value: object,
+) -> tuple[list[dict], str | None]:
+    if not isinstance(raw_value, list):
+        return [], None
+    normalized: list[dict] = []
+    seen_keys: set[str] = set()
+    for index, item in enumerate(raw_value):
+        if not isinstance(item, dict):
+            continue
+        label = _normalize_comun_custom_template_field_label(item.get("label") or item.get("name"))
+        if not label:
+            continue
+        field_type = str(item.get("field_type") or item.get("type") or "").strip().lower()
+        if field_type not in COMUN_CUSTOM_TEMPLATE_FIELD_TYPE_VALUES:
+            field_type = COMUN_CUSTOM_TEMPLATE_FIELD_TYPE_TEXT
+        placement = str(item.get("placement") or "").strip().lower()
+        if placement not in COMUN_CUSTOM_TEMPLATE_FIELD_PLACEMENT_VALUES:
+            placement = COMUN_CUSTOM_TEMPLATE_FIELD_PLACEMENT_HEADER
+        options = _normalize_comun_custom_template_field_options(item.get("options"))
+        if field_type == COMUN_CUSTOM_TEMPLATE_FIELD_TYPE_SELECT and not options:
+            return [], f"field '{label}' must have select options"
+        key = _generate_comun_custom_template_field_key(
+            label,
+            existing_keys=seen_keys,
+            fallback_index=index + 1,
+        )
+        normalized.append(
+            {
+                "key": key,
+                "label": label,
+                "field_type": field_type,
+                "placement": placement,
+                "is_required": bool(item.get("is_required")),
+                "options": options if field_type == COMUN_CUSTOM_TEMPLATE_FIELD_TYPE_SELECT else [],
+                "sort_order": index,
+            }
+        )
+    return normalized, None
+
+
+def _normalize_comun_custom_templates(
+    comun: Comun,
+    raw_value: object,
+) -> tuple[list[dict], str | None]:
+    if raw_value in (None, ""):
+        return [], None
+    if not isinstance(raw_value, list):
+        return [], "custom_templates must be a list"
+
+    normalized: list[dict] = []
+    seen_template_ids: set[int] = set()
+    for index, item in enumerate(raw_value[:50]):
+        if not isinstance(item, dict):
+            continue
+        template_id_raw = item.get("id")
+        template_id = int(template_id_raw) if str(template_id_raw or "").isdigit() else None
+        if template_id and template_id in seen_template_ids:
+            continue
+        name = _normalize_comun_custom_template_name(item.get("name") or item.get("title"))
+        if not name:
+            return [], "template name is required"
+        blocks = _normalize_comun_custom_template_blocks(item.get("blocks"))
+        fields, field_error = _normalize_comun_custom_template_fields(item.get("fields"))
+        if field_error:
+            return [], field_error
+        normalized.append(
+            {
+                "id": template_id,
+                "name": name,
+                "sort_order": index,
+                "blocks": blocks,
+                "fields": fields,
+            }
+        )
+        if template_id:
+            seen_template_ids.add(template_id)
+    return normalized, None
+
+
+def _serialize_comun_custom_post_template(template: ComunCustomPostTemplate) -> dict:
+    return {
+        "id": template.id,
+        "name": template.name,
+        "slug": template.slug,
+        "sort_order": template.sort_order,
+        "blocks": [
+            {
+                "id": block.id,
+                "block_type": block.block_type,
+                "placement": block.placement,
+                "is_required": bool(block.is_required),
+                "sort_order": block.sort_order,
+            }
+            for block in template.block_rules.all().order_by("sort_order", "id")
+        ],
+        "fields": [
+            {
+                "id": field.id,
+                "key": field.key,
+                "label": field.label,
+                "field_type": field.field_type,
+                "placement": field.placement,
+                "is_required": bool(field.is_required),
+                "options": list(field.options or []),
+                "sort_order": field.sort_order,
+            }
+            for field in template.fields.all().order_by("sort_order", "id")
+        ],
+    }
+
+
+def _serialize_comun_custom_post_templates(comun: Comun) -> list[dict]:
+    templates = (
+        ComunCustomPostTemplate.objects.filter(comun=comun)
+        .prefetch_related("block_rules", "fields")
+        .order_by("sort_order", "name", "id")
+    )
+    return [_serialize_comun_custom_post_template(template) for template in templates]
+
+
+def _sync_comun_custom_post_templates(
+    comun: Comun,
+    raw_value: object,
+) -> str | None:
+    normalized_templates, template_error = _normalize_comun_custom_templates(comun, raw_value)
+    if template_error:
+        return template_error
+
+    existing_templates = {
+        item.id: item
+        for item in ComunCustomPostTemplate.objects.filter(comun=comun)
+    }
+    kept_template_ids: list[int] = []
+
+    for index, item in enumerate(normalized_templates):
+        template_id = item.get("id")
+        template = existing_templates.get(template_id) if isinstance(template_id, int) else None
+        if template:
+            template.name = str(item["name"])
+            template.sort_order = index
+            template.save(update_fields=["name", "sort_order", "updated_at"])
+        else:
+            template = ComunCustomPostTemplate.objects.create(
+                comun=comun,
+                name=str(item["name"]),
+                slug=_generate_comun_custom_template_slug(comun, str(item["name"])),
+                sort_order=index,
+            )
+        kept_template_ids.append(template.id)
+
+        template.block_rules.all().delete()
+        ComunCustomPostTemplateBlock.objects.bulk_create(
+            [
+                ComunCustomPostTemplateBlock(template=template, **block)
+                for block in item["blocks"]
+            ]
+        )
+
+        template.fields.all().delete()
+        ComunCustomPostTemplateField.objects.bulk_create(
+            [
+                ComunCustomPostTemplateField(template=template, **field)
+                for field in item["fields"]
+            ]
+        )
+
+    ComunCustomPostTemplate.objects.filter(comun=comun).exclude(id__in=kept_template_ids).delete()
+    return None
+
+
 def _template_editor_blocks_by_template() -> dict[str, list[str]]:
     payload: dict[str, list[str]] = {
         template_type: default_enabled_template_editor_blocks(template_type)
@@ -1872,6 +2173,7 @@ __all__ = [
     "_is_post_draft",
     "_normalize_editor_block_identifier",
     "_normalize_movie_review_template_data",
+    "_normalize_comun_custom_templates",
     "_normalize_music_release_template_data",
     "_normalize_post_template_payload",
     "_normalize_post_vote_poll_template_data",
@@ -1885,6 +2187,8 @@ __all__ = [
     "_resolve_manual_post_rubric",
     "_resolve_site_post_author_context",
     "_serialize_enabled_template_editor_blocks",
+    "_serialize_comun_custom_post_templates",
+    "_serialize_comun_custom_template_editor_options",
     "_serialize_post_for_user",
     "_serialize_post_rating",
     "_serialize_post_rating_block",
@@ -1893,6 +2197,7 @@ __all__ = [
     "_serialize_post_template_type_options",
     "_serialize_template_editor_block_options_by_template",
     "_set_post_draft_state",
+    "_sync_comun_custom_post_templates",
     "_sync_template_derived_raw_data",
     "_template_editor_blocks_by_template",
     "_template_not_allowed_error",

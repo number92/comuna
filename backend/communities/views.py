@@ -730,6 +730,7 @@ def _serialize_comun(
         "sort_order": comun.sort_order,
         "allowed_template_types": _allowed_templates_for_comun(comun),
         "template_editor_blocks_by_template": editor_service._template_editor_blocks_by_template(),
+        "custom_templates": editor_service._serialize_comun_custom_post_templates(comun),
         "creator": {
             "id": comun.creator_id,
             "username": comun.creator.username if getattr(comun, "creator", None) else None,
@@ -875,6 +876,7 @@ def _serialize_comun(
                 editor_service._serialize_template_editor_block_options_by_template()
             ),
             "template_editor_blocks_by_template": editor_service._template_editor_blocks_by_template(),
+            "custom_template_editor": editor_service._serialize_comun_custom_template_editor_options(),
         }
         if _comun_can_manage_moderators(current_user, comun):
             payload["options"]["users"] = [
@@ -1786,6 +1788,16 @@ def comun_detail_manage(request: HttpRequest, slug: str) -> HttpResponse:
 
     if "glossary_terms" in body:
         _sync_comun_glossary_terms(comun, body.get("glossary_terms"))
+
+    if "custom_templates" in body:
+        if not _comun_can_manage_moderators(current_user, comun):
+            return JsonResponse({"ok": False, "error": "forbidden"}, status=403)
+        custom_templates_error = editor_service._sync_comun_custom_post_templates(
+            comun,
+            body.get("custom_templates"),
+        )
+        if custom_templates_error:
+            return JsonResponse({"ok": False, "error": custom_templates_error}, status=400)
 
     comun = (
         Comun.objects.filter(id=comun.id)

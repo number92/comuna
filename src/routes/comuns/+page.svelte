@@ -323,10 +323,6 @@
                   {/if}
                 </div>
               {/if}
-              <div class="mt-2 flex flex-wrap gap-2 text-xs text-slate-500 dark:text-zinc-400">
-                <span>{comun.categories_count ?? comun.categories?.length ?? 0} категорий</span>
-                <span>{comun.moderators_count ?? comun.moderators?.length ?? 0} модераторов</span>
-              </div>
             </div>
           </div>
         </a>

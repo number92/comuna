@@ -11,6 +11,8 @@ export type TemplateEditorDropRequest = {
   item: TemplateEditorDragPaletteItem
 }
 
+export const TEMPLATE_EDITOR_DROP_EVENT = 'comuna-template-editor-drop'
+
 export const templateEditorDraggedItem = writable<TemplateEditorDragPaletteItem | null>(null)
 export const templateEditorActiveDropZone = writable<TemplateEditorDropZone | null>(null)
 export const templateEditorDropRequest = writable<TemplateEditorDropRequest | null>(null)

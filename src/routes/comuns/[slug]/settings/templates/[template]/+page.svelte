@@ -10,6 +10,7 @@
     type BackendComunCustomTemplate,
   } from '$lib/api/backend'
   import {
+    TEMPLATE_EDITOR_DROP_EVENT,
     templateEditorActiveDropZone,
     templateEditorDraggedItem,
     templateEditorDropRequest,
@@ -190,16 +191,30 @@
   }
 
   onMount(() => {
+    const unsubscribeActiveDropZone = templateEditorActiveDropZone.subscribe((zone) => {
+      activeDropZone = zone
+    })
     const unsubscribeDropRequest = templateEditorDropRequest.subscribe((request) => {
       if (!request) return
       applyPaletteItemToZone(request.zone, request.item)
-      activeDropZone = null
-      templateEditorActiveDropZone.set(null)
+      setActiveDropZone(null)
       templateEditorDropRequest.set(null)
     })
+    const handleWindowDrop = (event: Event) => {
+      const detail = (event as CustomEvent).detail
+      const zone = detail?.zone
+      const item = detail?.item
+      if ((zone === 'header' || zone === 'available' || zone === 'footer') && item) {
+        applyPaletteItemToZone(zone, item)
+        setActiveDropZone(null)
+      }
+    }
+    window.addEventListener(TEMPLATE_EDITOR_DROP_EVENT, handleWindowDrop)
     void refreshEditor()
     return () => {
+      unsubscribeActiveDropZone()
       unsubscribeDropRequest()
+      window.removeEventListener(TEMPLATE_EDITOR_DROP_EVENT, handleWindowDrop)
     }
   })
 
@@ -668,6 +683,7 @@
         />
 
         <section
+          data-template-drop-zone="header"
           role="group"
           class={`px-5 py-5 transition-shadow ${headerSectionClass} ${activeDropZone === 'header' ? 'ring-2 ring-amber-400 ring-offset-2 dark:ring-offset-zinc-950' : ''}`}
           on:dragover={(event) => handleDropZoneOver(event, 'header')}
@@ -835,6 +851,7 @@
         </section>
 
         <section
+          data-template-drop-zone="available"
           role="group"
           class={`px-5 py-5 transition-shadow ${bodySectionClass} ${activeDropZone === 'available' ? 'ring-2 ring-sky-400 ring-offset-2 dark:ring-offset-zinc-950' : ''}`}
           on:dragover={(event) => handleDropZoneOver(event, 'available')}
@@ -1002,6 +1019,7 @@
         </section>
 
         <section
+          data-template-drop-zone="footer"
           role="group"
           class={`px-5 py-5 transition-shadow ${footerSectionClass} ${activeDropZone === 'footer' ? 'ring-2 ring-emerald-400 ring-offset-2 dark:ring-offset-zinc-950' : ''}`}
           on:dragover={(event) => handleDropZoneOver(event, 'footer')}

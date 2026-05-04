@@ -1,19 +1,66 @@
 <script lang="ts">
-  import { get } from 'svelte/store'
   import {
+    TEMPLATE_EDITOR_DROP_EVENT,
     templateEditorActiveDropZone,
     templateEditorDraggedItem,
-    templateEditorDropRequest,
     type TemplateEditorDragPaletteItem,
+    type TemplateEditorDropZone,
   } from '$lib/components/comuns/templateEditorDnd'
 
   export let fieldOptions: Array<{ value: string; label: string }> = []
   export let blockOptions: Array<{ value: string; label: string }> = []
 
   const DRAG_TYPE = 'application/x-comuna-template-palette'
+  const DROP_ZONE_SELECTOR = '[data-template-drop-zone]'
+
+  let activeDragItem: TemplateEditorDragPaletteItem | null = null
+  let dragPreviewLabel = ''
+  let dragX = 0
+  let dragY = 0
 
   const createDragId = () =>
     globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
+
+  const readDropZoneFromPoint = (x: number, y: number): TemplateEditorDropZone | null => {
+    const element = document.elementFromPoint(x, y)
+    const dropZoneElement = element?.closest?.(DROP_ZONE_SELECTOR) as HTMLElement | null
+    const zone = dropZoneElement?.dataset?.templateDropZone
+    return zone === 'header' || zone === 'available' || zone === 'footer' ? zone : null
+  }
+
+  const clearPointerDrag = () => {
+    activeDragItem = null
+    dragPreviewLabel = ''
+    templateEditorDraggedItem.set(null)
+    templateEditorActiveDropZone.set(null)
+    window.removeEventListener('pointermove', handlePointerMove)
+    window.removeEventListener('pointerup', handlePointerUp)
+    window.removeEventListener('pointercancel', handlePointerCancel)
+  }
+
+  const handlePointerMove = (event: PointerEvent) => {
+    if (!activeDragItem) return
+    dragX = event.clientX
+    dragY = event.clientY
+    templateEditorActiveDropZone.set(readDropZoneFromPoint(event.clientX, event.clientY))
+  }
+
+  const handlePointerUp = (event: PointerEvent) => {
+    const item = activeDragItem
+    const zone = readDropZoneFromPoint(event.clientX, event.clientY)
+    if (item && zone) {
+      window.dispatchEvent(
+        new CustomEvent(TEMPLATE_EDITOR_DROP_EVENT, {
+          detail: { zone, item },
+        })
+      )
+    }
+    clearPointerDrag()
+  }
+
+  const handlePointerCancel = () => {
+    clearPointerDrag()
+  }
 
   const writeDragPayload = (
     event: DragEvent,
@@ -29,12 +76,26 @@
     }
   }
 
+  const startPointerDrag = (
+    event: PointerEvent,
+    payload: TemplateEditorDragPaletteItem,
+    label: string
+  ) => {
+    if (event.button !== 0) return
+    event.preventDefault()
+    const dragPayload = { ...payload, dragId: createDragId() }
+    activeDragItem = dragPayload
+    dragPreviewLabel = label
+    dragX = event.clientX
+    dragY = event.clientY
+    templateEditorDraggedItem.set(dragPayload)
+    templateEditorActiveDropZone.set(readDropZoneFromPoint(event.clientX, event.clientY))
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', handlePointerUp)
+    window.addEventListener('pointercancel', handlePointerCancel)
+  }
+
   const clearDragPayload = () => {
-    const item = get(templateEditorDraggedItem)
-    const zone = get(templateEditorActiveDropZone)
-    if (item && zone) {
-      templateEditorDropRequest.set({ zone, item })
-    }
     window.setTimeout(() => {
       templateEditorDraggedItem.set(null)
       templateEditorActiveDropZone.set(null)
@@ -52,8 +113,11 @@
       {#each fieldOptions as fieldOption}
         <button
           type="button"
-          draggable="true"
-          class="flex w-full cursor-grab items-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-sm font-medium text-slate-800 transition hover:border-slate-300 hover:bg-white active:cursor-grabbing dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-100 dark:hover:border-zinc-700 dark:hover:bg-zinc-900"
+          class="flex w-full touch-none select-none items-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-sm font-medium text-slate-800 transition hover:border-slate-300 hover:bg-white active:cursor-grabbing dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-100 dark:hover:border-zinc-700 dark:hover:bg-zinc-900"
+          class:cursor-grab={!activeDragItem}
+          class:cursor-grabbing={Boolean(activeDragItem)}
+          on:pointerdown={(event) =>
+            startPointerDrag(event, { kind: 'field', fieldType: fieldOption.value }, fieldOption.label)}
           on:dragstart={(event) => writeDragPayload(event, { kind: 'field', fieldType: fieldOption.value })}
           on:dragend={clearDragPayload}
         >
@@ -72,8 +136,11 @@
       {#each blockOptions as option}
         <button
           type="button"
-          draggable="true"
-          class="flex w-full cursor-grab items-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-sm font-medium text-slate-800 transition hover:border-slate-300 hover:bg-white active:cursor-grabbing dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-100 dark:hover:border-zinc-700 dark:hover:bg-zinc-900"
+          class="flex w-full touch-none select-none items-center rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-sm font-medium text-slate-800 transition hover:border-slate-300 hover:bg-white active:cursor-grabbing dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-100 dark:hover:border-zinc-700 dark:hover:bg-zinc-900"
+          class:cursor-grab={!activeDragItem}
+          class:cursor-grabbing={Boolean(activeDragItem)}
+          on:pointerdown={(event) =>
+            startPointerDrag(event, { kind: 'block', blockType: option.value }, option.label)}
           on:dragstart={(event) => writeDragPayload(event, { kind: 'block', blockType: option.value })}
           on:dragend={clearDragPayload}
         >
@@ -83,3 +150,12 @@
     </div>
   </section>
 </div>
+
+{#if activeDragItem}
+  <div
+    class="pointer-events-none fixed z-[9999] rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold text-slate-900 shadow-2xl dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+    style={`left: ${dragX}px; top: ${dragY}px; transform: translate(-50%, -50%);`}
+  >
+    {dragPreviewLabel}
+  </div>
+{/if}

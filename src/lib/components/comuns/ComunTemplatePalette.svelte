@@ -20,7 +20,9 @@
   }
 
   const clearDragPayload = () => {
-    templateEditorDraggedItem.set(null)
+    window.setTimeout(() => {
+      templateEditorDraggedItem.set(null)
+    }, 0)
   }
 </script>
 

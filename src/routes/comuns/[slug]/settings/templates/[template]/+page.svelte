@@ -404,6 +404,17 @@
     activeDropZone = zone
   }
 
+  const handleDropZoneOver = (
+    event: DragEvent,
+    zone: 'header' | 'available' | 'footer'
+  ) => {
+    event.preventDefault()
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'copy'
+    }
+    activeDropZone = zone
+  }
+
   const applyPaletteItemToZone = (
     zone: 'header' | 'available' | 'footer',
     item: TemplateEditorDragPaletteItem | null
@@ -611,7 +622,7 @@
         <section
           role="group"
           class={`px-5 py-5 transition-shadow ${headerSectionClass} ${activeDropZone === 'header' ? 'ring-2 ring-amber-400 ring-offset-2 dark:ring-offset-zinc-950' : ''}`}
-          on:dragover|preventDefault
+          on:dragover={(event) => handleDropZoneOver(event, 'header')}
           on:dragenter={() => handleDropZoneEnter('header')}
           on:dragleave={() => activeDropZone === 'header' && (activeDropZone = null)}
           on:drop|preventDefault={(event) => handlePaletteDrop(event, 'header')}
@@ -778,7 +789,7 @@
         <section
           role="group"
           class={`px-5 py-5 transition-shadow ${bodySectionClass} ${activeDropZone === 'available' ? 'ring-2 ring-sky-400 ring-offset-2 dark:ring-offset-zinc-950' : ''}`}
-          on:dragover|preventDefault
+          on:dragover={(event) => handleDropZoneOver(event, 'available')}
           on:dragenter={() => handleDropZoneEnter('available')}
           on:dragleave={() => activeDropZone === 'available' && (activeDropZone = null)}
           on:drop|preventDefault={(event) => handlePaletteDrop(event, 'available')}
@@ -854,7 +865,7 @@
         <section
           role="group"
           class={`px-5 py-5 transition-shadow ${footerSectionClass} ${activeDropZone === 'footer' ? 'ring-2 ring-emerald-400 ring-offset-2 dark:ring-offset-zinc-950' : ''}`}
-          on:dragover|preventDefault
+          on:dragover={(event) => handleDropZoneOver(event, 'footer')}
           on:dragenter={() => handleDropZoneEnter('footer')}
           on:dragleave={() => activeDropZone === 'footer' && (activeDropZone = null)}
           on:drop|preventDefault={(event) => handlePaletteDrop(event, 'footer')}

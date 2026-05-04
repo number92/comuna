@@ -523,8 +523,8 @@
       {errorMessage}
     </div>
   {:else if draft}
-    <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
-      <section class="flex flex-col gap-4">
+    <div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px] xl:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
+      <section class="min-w-0 flex flex-col gap-4">
         <div class="rounded-[28px] border border-slate-200 bg-white px-5 py-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/70">
           <div class="text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-zinc-400">Шаблон</div>
           <input
@@ -924,7 +924,7 @@
         </section>
       </section>
 
-      <aside class="flex flex-col gap-4 lg:sticky lg:top-24">
+      <aside class="min-w-0 lg:w-[300px] xl:w-[340px] lg:justify-self-end flex flex-col gap-4 lg:sticky lg:top-24">
         <section class="rounded-[28px] border border-slate-200 bg-white px-5 py-5 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/70">
           <div class="text-xs uppercase tracking-[0.2em] text-slate-500 dark:text-zinc-400">Доступные поля</div>
           <div class="mt-2 text-sm text-slate-600 dark:text-zinc-300">
@@ -939,8 +939,8 @@
                 on:dragstart={() => handlePaletteDragStart({ kind: 'field', fieldType: fieldOption.value })}
                 on:dragend={handlePaletteDragEnd}
               >
-                <span>{fieldOption.label}</span>
-                <span class="text-xs uppercase tracking-[0.14em] text-slate-400 dark:text-zinc-500">drag</span>
+                <span class="min-w-0 truncate">{fieldOption.label}</span>
+                <span class="shrink-0 text-xs uppercase tracking-[0.14em] text-slate-400 dark:text-zinc-500">drag</span>
               </button>
             {/each}
           </div>
@@ -960,8 +960,8 @@
                 on:dragstart={() => handlePaletteDragStart({ kind: 'block', blockType: option.value })}
                 on:dragend={handlePaletteDragEnd}
               >
-                <span>{option.label}</span>
-                <span class="text-xs uppercase tracking-[0.14em] text-slate-400 dark:text-zinc-500">drag</span>
+                <span class="min-w-0 truncate">{option.label}</span>
+                <span class="shrink-0 text-xs uppercase tracking-[0.14em] text-slate-400 dark:text-zinc-500">drag</span>
               </button>
             {/each}
           </div>

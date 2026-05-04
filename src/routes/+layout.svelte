@@ -232,7 +232,7 @@
   <Navbar slot="navbar" let:style={s} let:class={c} class={c} style={s} />
   
   <svelte:fragment slot="suffix" let:class={c} let:style={s}>
-    {#if !isLandingRoute}
+    {#if !isLandingRoute && !$page.data.hideSidebar}
       <div 
         class={c}
         style={s}

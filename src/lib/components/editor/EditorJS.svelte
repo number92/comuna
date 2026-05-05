@@ -3841,6 +3841,92 @@
   let editor: any
   let markdownOutput = ''
   let destroyBlockDragAndDrop: (() => void) | null = null
+  let isImageBlockEnabled = true
+  let isUploadingPastedImage = false
+
+  const getPastedImageFile = (event: ClipboardEvent): File | null => {
+    const clipboardData = event.clipboardData
+    if (!clipboardData) return null
+
+    const itemFile = Array.from(clipboardData.items || [])
+      .find((item) => item.kind === 'file' && item.type.startsWith('image/'))
+      ?.getAsFile()
+    if (itemFile) return itemFile
+
+    return Array.from(clipboardData.files || [])
+      .find((file) => file.type.startsWith('image/')) || null
+  }
+
+  const insertImageFromClipboard = async (file: File) => {
+    if (!editor) return
+
+    const uploaded = await uploadEditorImage(file)
+    if (!uploaded?.url) {
+      throw new Error('Не удалось загрузить изображение')
+    }
+
+    const imageUrl = uploaded.useWebp ? `${uploaded.url}?format=webp` : uploaded.url
+    const currentBlockIndex =
+      typeof editor.blocks?.getCurrentBlockIndex === 'function'
+        ? editor.blocks.getCurrentBlockIndex()
+        : -1
+    const blocksCount =
+      typeof editor.blocks?.getBlocksCount === 'function'
+        ? editor.blocks.getBlocksCount()
+        : 0
+    const insertIndex = currentBlockIndex >= 0
+      ? Math.min(currentBlockIndex + 1, blocksCount)
+      : blocksCount
+
+    await editor.blocks.insert(
+      'image',
+      {
+        file: {
+          url: imageUrl,
+          alt: '',
+          title: ''
+        },
+        caption: ''
+      },
+      {},
+      insertIndex,
+      true
+    )
+
+    const data = await editor.save()
+    updateMarkdown(data)
+  }
+
+  const handleEditorPaste = async (event: ClipboardEvent) => {
+    const imageFile = getPastedImageFile(event)
+    if (!imageFile) return
+
+    event.preventDefault()
+    event.stopPropagation()
+
+    if (!isImageBlockEnabled) {
+      toast({
+        content: 'В этом типе публикации блок изображения недоступен',
+        type: 'error'
+      })
+      return
+    }
+
+    if (isUploadingPastedImage) return
+    isUploadingPastedImage = true
+
+    try {
+      await insertImageFromClipboard(imageFile)
+    } catch (error) {
+      console.error('Ошибка при вставке изображения из буфера:', error)
+      toast({
+        content: humanizeUploadError(error),
+        type: 'error'
+      })
+    } finally {
+      isUploadingPastedImage = false
+    }
+  }
 
   const setupEditorBlockDragAndDrop = (editorInstance: any, rootElement: HTMLElement) => {
     const redactor = rootElement.querySelector('.codex-editor__redactor') as HTMLElement | null
@@ -4181,6 +4267,7 @@
         ? getTemplateEditorBlockTypes(postTemplateType)
         : normalizeTemplateEditorBlockTypes(enabledTemplateEditorBlockTypes)
     )
+    isImageBlockEnabled = enabledTemplateBlockTypes.has('image')
 
     // Инициализация Editor.js
     editor = new EditorJS({
@@ -4623,6 +4710,7 @@
 
         destroyBlockDragAndDrop?.()
         destroyBlockDragAndDrop = setupEditorBlockDragAndDrop(editor, element)
+        element.addEventListener('paste', handleEditorPaste, true)
         
         // Добавляем обработчик кликов по ссылкам для их редактирования
         const editorElement = element.querySelector('.codex-editor__redactor');
@@ -4722,6 +4810,7 @@
   }
 
   onDestroy(() => {
+    element?.removeEventListener('paste', handleEditorPaste, true)
     destroyBlockDragAndDrop?.()
     destroyBlockDragAndDrop = null
     if (editor) {

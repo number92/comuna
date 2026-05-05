@@ -1,6 +1,7 @@
 from django.apps import apps
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase, TestCase
 
+from editor import service as editor_service
 from editor.models import (
     ComunCustomPostTemplate,
     ComunCustomPostTemplateBlock,
@@ -9,6 +10,7 @@ from editor.models import (
     PostRatingVote,
     POST_TEMPLATE_EDITOR_BLOCK_OPTION_ITEMS,
     PostTemplateConfig,
+    normalize_allowed_post_templates,
 )
 
 
@@ -45,3 +47,18 @@ class EditorModelsApiTests(SimpleTestCase):
         self.assertIn("music", option_values)
         self.assertIn("movie_card", option_values)
         self.assertIn("post_rating", option_values)
+
+
+class DynamicPostTemplateConfigTests(TestCase):
+    def test_custom_template_config_is_available_as_post_template_type(self):
+        PostTemplateConfig.objects.create(
+            template_type="custom_123",
+            label="Отзыв",
+            enabled_editor_blocks=["header", "table"],
+        )
+
+        self.assertEqual(normalize_allowed_post_templates(["custom_123"]), ["custom_123"])
+        options = editor_service._serialize_post_template_type_options()
+        self.assertIn({"value": "custom_123", "label": "Отзыв"}, options)
+        blocks_by_template = editor_service._template_editor_blocks_by_template()
+        self.assertEqual(blocks_by_template["custom_123"], ["header", "table"])

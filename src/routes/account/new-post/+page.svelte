@@ -30,12 +30,14 @@
     createEmptyPostVotePollTemplateData,
     normalizeAllowedPostTemplateTypeOverrides,
     normalizeAllowedPostTemplateTypes,
+    normalizePostTemplateTypeOptions,
     normalizeTemplateEditorBlockSettings,
     resolveEnabledTemplateEditorBlockTypes,
     type MusicReleaseTemplateData,
     type MovieReviewTemplateData,
     type PostVotePollTemplateData,
     type PostTemplateType,
+    type PostTemplateTypeOption,
     type TemplateEditorBlockSettings,
   } from '$lib/postTemplates'
 
@@ -69,6 +71,7 @@
   let templateMenuRef: HTMLDivElement | null = null
   let hasTemplateTypeChoice = false
   let allowedTemplateTypeSet = new Set<string>()
+  let templateTypeOptions: PostTemplateTypeOption[] = POST_TEMPLATE_TYPE_OPTIONS
   let availableTemplateTypeOptions = POST_TEMPLATE_TYPE_OPTIONS
   let selectedTemplateOption = POST_TEMPLATE_TYPE_OPTIONS[0]
   let publishIdentityOptions: PublishIdentityOption[] = []
@@ -149,13 +152,14 @@
   })()
   $: selectedIdentity = publishIdentityOptions.find((item) => item.value === createAuthor)
   $: allowedTemplateTypeSet = new Set(selectedAllowedTemplateTypes)
-  $: availableTemplateTypeOptions = POST_TEMPLATE_TYPE_OPTIONS.filter((option) =>
+  $: availableTemplateTypeOptions = templateTypeOptions.filter((option) =>
     option.value ? allowedTemplateTypeSet.has(option.value) : allowedTemplateTypeSet.has('basic')
   )
   $: hasTemplateTypeChoice = availableTemplateTypeOptions.length > 1
   $: selectedTemplateOption =
     availableTemplateTypeOptions.find((option) => option.value === createTemplateType) ??
     availableTemplateTypeOptions[0] ??
+    templateTypeOptions[0] ??
     POST_TEMPLATE_TYPE_OPTIONS[0]
   $: profileDraftsPath = $siteUser?.id ? `/id${$siteUser.id}` : '/settings'
   $: draftSharePath = draftShareToken ? `/drafts/${encodeURIComponent(draftShareToken)}` : ''
@@ -431,6 +435,9 @@
         : []
       templateEditorBlockSettings = normalizeTemplateEditorBlockSettings(
         data?.template_editor_blocks_by_template
+      )
+      templateTypeOptions = normalizePostTemplateTypeOptions(
+        data?.template_type_options ?? data?.template_types
       )
     } catch {
       comuns = []
@@ -983,6 +990,7 @@
           bind:postVotePollData={createPostVotePollData}
           bind:musicReleaseData={createMusicReleaseData}
           allowedTemplateTypes={selectedAllowedTemplateTypes}
+          {templateTypeOptions}
           showTypeSelector={false}
         />
         {#key `editor-template-${editorTemplateBlocksKey}`}

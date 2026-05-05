@@ -1,9 +1,10 @@
 from django import forms
 from django.contrib import admin
 
+from editor.models import post_template_type_choices
+
 from .models import (
     Author,
-    POST_TEMPLATE_TYPE_CHOICES,
     Post,
     PostComment,
     PostCommentLike,
@@ -17,15 +18,10 @@ from .models import (
 )
 
 
-_POST_TEMPLATE_TYPE_FORM_CHOICES = tuple(
-    (str(value), str(label)) for value, label in POST_TEMPLATE_TYPE_CHOICES
-)
-
-
 class RubricAdminForm(forms.ModelForm):
     allowed_post_templates = forms.MultipleChoiceField(
         label="Доступные шаблоны поста",
-        choices=_POST_TEMPLATE_TYPE_FORM_CHOICES,
+        choices=(),
         required=False,
         widget=forms.CheckboxSelectMultiple,
         help_text="Разрешенные шаблоны для публикации в рубрике.",
@@ -37,6 +33,7 @@ class RubricAdminForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields["allowed_post_templates"].choices = post_template_type_choices()
         self.fields["allowed_post_templates"].initial = normalize_allowed_post_templates(
             getattr(self.instance, "allowed_post_templates", None)
         )

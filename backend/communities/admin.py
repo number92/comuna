@@ -2,21 +2,16 @@ from django import forms
 from django.contrib import admin
 
 from communities.models import Comun, ComunCategory, ComunPostCategoryAssignment
-from feeds.models import (
-    POST_TEMPLATE_TYPE_CHOICES,
+from editor.models import (
     normalize_allowed_post_templates,
-)
-
-
-_POST_TEMPLATE_TYPE_FORM_CHOICES = tuple(
-    (str(value), str(label)) for value, label in POST_TEMPLATE_TYPE_CHOICES
+    post_template_type_choices,
 )
 
 
 class ComunAdminForm(forms.ModelForm):
     allowed_post_templates = forms.MultipleChoiceField(
         label="Доступные шаблоны поста",
-        choices=_POST_TEMPLATE_TYPE_FORM_CHOICES,
+        choices=(),
         required=False,
         widget=forms.CheckboxSelectMultiple,
         help_text="Разрешенные шаблоны для публикации внутри комуны.",
@@ -28,6 +23,7 @@ class ComunAdminForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.fields["allowed_post_templates"].choices = post_template_type_choices()
         self.fields["allowed_post_templates"].initial = normalize_allowed_post_templates(
             getattr(self.instance, "allowed_post_templates", None)
         )
@@ -98,4 +94,3 @@ class ComunPostCategoryAssignmentAdmin(admin.ModelAdmin):
     list_filter = ("comun", "category")
     search_fields = ("comun__name", "post__title", "post__author__username")
     raw_id_fields = ("comun", "post", "category", "assigned_by")
-

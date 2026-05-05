@@ -28,6 +28,7 @@
     isPostVotePollTemplate,
     normalizeAllowedPostTemplateTypeOverrides,
     normalizeAllowedPostTemplateTypes,
+    normalizePostTemplateTypeOptions,
     normalizeMusicReleaseTemplateData,
     normalizeMovieReviewTemplateData,
     normalizePostVotePollTemplateData,
@@ -36,6 +37,7 @@
     type MusicReleaseTemplateData,
     type MovieReviewTemplateData,
     type PostTemplateType,
+    type PostTemplateTypeOption,
     type PostVotePollTemplateData,
     type TemplateEditorBlockSettings,
   } from '$lib/postTemplates'
@@ -74,6 +76,7 @@
   let publishIdentityOptions: PublishIdentityOption[] = []
   let selectedIdentity: PublishIdentityOption | undefined
   let templateEditorBlockSettings: TemplateEditorBlockSettings = {}
+  let templateTypeOptions: PostTemplateTypeOption[] = POST_TEMPLATE_TYPE_OPTIONS
   let availableTemplateTypeOptions = POST_TEMPLATE_TYPE_OPTIONS
   let selectedTemplateOption = POST_TEMPLATE_TYPE_OPTIONS[0]
   let hasTemplateTypeChoice = false
@@ -156,13 +159,14 @@
     if (editTemplateType) values.add(editTemplateType)
     return Array.from(values)
   })()
-  $: availableTemplateTypeOptions = POST_TEMPLATE_TYPE_OPTIONS.filter((option) =>
+  $: availableTemplateTypeOptions = templateTypeOptions.filter((option) =>
     option.value ? allowedTemplateTypes.includes(option.value) : allowedTemplateTypes.includes('basic')
   )
   $: hasTemplateTypeChoice = availableTemplateTypeOptions.length > 1
   $: selectedTemplateOption =
     availableTemplateTypeOptions.find((option) => option.value === editTemplateType) ??
     availableTemplateTypeOptions[0] ??
+    templateTypeOptions[0] ??
     POST_TEMPLATE_TYPE_OPTIONS[0]
   $: draftSharePath =
     post?.is_draft && post?.draft_share_token
@@ -381,6 +385,9 @@
         : []
       templateEditorBlockSettings = normalizeTemplateEditorBlockSettings(
         data?.template_editor_blocks_by_template
+      )
+      templateTypeOptions = normalizePostTemplateTypeOptions(
+        data?.template_type_options ?? data?.template_types
       )
     } catch {
       comuns = []
@@ -894,6 +901,7 @@
           bind:postVotePollData={editPostVotePollData}
           bind:musicReleaseData={editMusicReleaseData}
           {allowedTemplateTypes}
+          {templateTypeOptions}
           showTypeSelector={false}
         />
 

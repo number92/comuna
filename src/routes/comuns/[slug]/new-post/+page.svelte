@@ -22,12 +22,14 @@
     createEmptyPostVotePollTemplateData,
     normalizeAllowedPostTemplateTypeOverrides,
     normalizeAllowedPostTemplateTypes,
+    normalizePostTemplateTypeOptions,
     normalizeTemplateEditorBlockSettings,
     resolveEnabledTemplateEditorBlockTypes,
     type MusicReleaseTemplateData,
     type MovieReviewTemplateData,
     type PostVotePollTemplateData,
     type PostTemplateType,
+    type PostTemplateTypeOption,
     type TemplateEditorBlockSettings,
   } from '$lib/postTemplates'
 
@@ -51,6 +53,7 @@
   let createPostVotePollData: PostVotePollTemplateData = createEmptyPostVotePollTemplateData()
   let createMusicReleaseData: MusicReleaseTemplateData = createEmptyMusicReleaseTemplateData()
   let comunAllowedTemplateTypes: string[] = ['basic']
+  let templateTypeOptions: PostTemplateTypeOption[] = []
   let templateEditorBlockSettings: TemplateEditorBlockSettings = {}
   let customTemplatePreview: BackendComunCustomTemplate | null = null
   let editorEnabledTemplateBlockTypes: string[] = []
@@ -274,6 +277,9 @@
   )
   $: templateEditorBlockSettings = normalizeTemplateEditorBlockSettings(
     comun?.options?.template_editor_blocks_by_template ?? comun?.template_editor_blocks_by_template
+  )
+  $: templateTypeOptions = normalizePostTemplateTypeOptions(
+    comun?.options?.template_types ?? comun?.template_type_options
   )
   $: if (comun?.slug) {
     loadCustomTemplatePreview()
@@ -630,6 +636,7 @@
           bind:postVotePollData={createPostVotePollData}
           bind:musicReleaseData={createMusicReleaseData}
           allowedTemplateTypes={comunAllowedTemplateTypes}
+          {templateTypeOptions}
         />
 
         {#key `editor-template-${editorTemplateBlocksKey}`}

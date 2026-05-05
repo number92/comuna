@@ -19,6 +19,7 @@
     createEmptyPostVotePollTemplateData,
     formatPostVotePollDeadline,
     normalizeAllowedPostTemplateTypes,
+    normalizePostTemplateTypeOptions,
     normalizeMusicReleaseTemplateData,
     normalizeMovieReviewTemplateData,
     normalizePostVotePollTemplateData,
@@ -26,6 +27,7 @@
     type MusicReleaseTemplateData,
     type MovieReviewTemplateData,
     type PostTemplateType,
+    type PostTemplateTypeOption,
     type PostVotePollTemplateData,
     type PostVotePollTemplateItem,
   } from '$lib/postTemplates'
@@ -35,6 +37,7 @@
   export let postVotePollData: PostVotePollTemplateData = createEmptyPostVotePollTemplateData()
   export let musicReleaseData: MusicReleaseTemplateData = createEmptyMusicReleaseTemplateData()
   export let allowedTemplateTypes: string[] | undefined = undefined
+  export let templateTypeOptions: PostTemplateTypeOption[] = POST_TEMPLATE_TYPE_OPTIONS
   export let showTypeSelector = true
 
   let posterInput: HTMLInputElement | null = null
@@ -46,6 +49,7 @@
   let watchProviderSet = new Set<string>()
   let watchProviderLabels: string[] = []
   let allowedTemplateTypeSet = new Set<string>()
+  let normalizedTemplateTypeOptions = POST_TEMPLATE_TYPE_OPTIONS
   let availableTemplateTypeOptions = POST_TEMPLATE_TYPE_OPTIONS
 
   let votePollReference = ''
@@ -64,7 +68,8 @@
   let selectedTemplateOption = POST_TEMPLATE_TYPE_OPTIONS[0]
 
   $: allowedTemplateTypeSet = new Set(normalizeAllowedPostTemplateTypes(allowedTemplateTypes))
-  $: availableTemplateTypeOptions = POST_TEMPLATE_TYPE_OPTIONS.filter((option) =>
+  $: normalizedTemplateTypeOptions = normalizePostTemplateTypeOptions(templateTypeOptions)
+  $: availableTemplateTypeOptions = normalizedTemplateTypeOptions.filter((option) =>
     option.value ? allowedTemplateTypeSet.has(option.value) : allowedTemplateTypeSet.has('basic')
   )
   $: hasTemplateTypeChoice = availableTemplateTypeOptions.length > 1
@@ -72,6 +77,7 @@
   $: selectedTemplateOption =
     availableTemplateTypeOptions.find((option) => option.value === templateType) ??
     availableTemplateTypeOptions[0] ??
+    normalizedTemplateTypeOptions[0] ??
     POST_TEMPLATE_TYPE_OPTIONS[0]
   $: if (!availableTemplateTypeOptions.some((option) => option.value === templateType)) {
     templateType = availableTemplateTypeOptions[0]?.value ?? ''

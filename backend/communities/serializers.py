@@ -334,6 +334,7 @@ def _serialize_comun(
         "is_active": comun.is_active,
         "sort_order": comun.sort_order,
         "allowed_template_types": community_service._allowed_templates_for_comun(comun),
+        "template_type_options": editor_service._serialize_post_template_type_options(),
         "template_editor_blocks_by_template": editor_service._template_editor_blocks_by_template(),
         "creator": {
             "id": comun.creator_id,

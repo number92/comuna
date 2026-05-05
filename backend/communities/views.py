@@ -729,6 +729,7 @@ def _serialize_comun(
         "is_active": comun.is_active,
         "sort_order": comun.sort_order,
         "allowed_template_types": _allowed_templates_for_comun(comun),
+        "template_type_options": editor_service._serialize_post_template_type_options(),
         "template_editor_blocks_by_template": editor_service._template_editor_blocks_by_template(),
         "custom_templates": editor_service._serialize_comun_custom_post_templates(comun),
         "creator": {
@@ -1334,7 +1335,14 @@ def comuns_list_create(request: HttpRequest) -> HttpResponse:
             _serialize_comun(request, comun, current_user=current_user)
             for comun in comuns
         ]
-        return JsonResponse({"ok": True, "comuns": payload})
+        return JsonResponse(
+            {
+                "ok": True,
+                "comuns": payload,
+                "template_type_options": editor_service._serialize_post_template_type_options(),
+                "template_editor_blocks_by_template": editor_service._template_editor_blocks_by_template(),
+            }
+        )
 
     if request.method != "POST":
         return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)

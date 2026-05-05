@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import re
+
 from django.contrib.auth import get_user_model
+from django.db import OperationalError, ProgrammingError
 from django.db import models
 
 User = get_user_model()
@@ -16,6 +19,8 @@ POST_TEMPLATE_TYPE_CHOICES = (
     (POST_TEMPLATE_TYPE_MUSIC_RELEASE, "Музыкальный релиз"),
 )
 POST_TEMPLATE_TYPE_VALUES = {value for value, _label in POST_TEMPLATE_TYPE_CHOICES}
+POST_TEMPLATE_TYPE_LABELS = dict(POST_TEMPLATE_TYPE_CHOICES)
+POST_TEMPLATE_TYPE_CODE_RE = re.compile(r"^[a-z0-9][a-z0-9_-]{0,159}$")
 
 POST_TEMPLATE_EDITOR_BLOCK_HEADER = "header"
 POST_TEMPLATE_EDITOR_BLOCK_TOC = "toc"
@@ -139,6 +144,75 @@ def default_allowed_post_templates() -> list[str]:
     return [POST_TEMPLATE_TYPE_BASIC]
 
 
+def normalize_post_template_type_code(value: object) -> str:
+    code = str(value or "").strip().lower()
+    if not code or not POST_TEMPLATE_TYPE_CODE_RE.fullmatch(code):
+        return ""
+    return code
+
+
+def configured_post_template_type_values() -> set[str]:
+    values = set(POST_TEMPLATE_TYPE_VALUES)
+    try:
+        values.update(
+            code
+            for code in (
+                normalize_post_template_type_code(item)
+                for item in PostTemplateConfig.objects.values_list("template_type", flat=True)
+            )
+            if code
+        )
+    except (OperationalError, ProgrammingError):
+        return values
+    return values
+
+
+def is_post_template_type_configured(value: object) -> bool:
+    code = normalize_post_template_type_code(value)
+    return bool(code and code in configured_post_template_type_values())
+
+
+def post_template_type_label(template_type: object) -> str:
+    code = normalize_post_template_type_code(template_type)
+    if not code:
+        return ""
+    if code in POST_TEMPLATE_TYPE_LABELS:
+        return POST_TEMPLATE_TYPE_LABELS[code]
+    try:
+        config = (
+            PostTemplateConfig.objects.select_related("custom_template")
+            .filter(template_type=code)
+            .first()
+        )
+    except (OperationalError, ProgrammingError):
+        config = None
+    if config:
+        return config.display_label
+    return code
+
+
+def post_template_type_choices() -> tuple[tuple[str, str], ...]:
+    choices: list[tuple[str, str]] = [
+        (str(value), str(label)) for value, label in POST_TEMPLATE_TYPE_CHOICES
+    ]
+    seen = {value for value, _label in choices}
+    try:
+        configs = (
+            PostTemplateConfig.objects.select_related("custom_template")
+            .all()
+            .order_by("template_type")
+        )
+        for config in configs:
+            code = normalize_post_template_type_code(config.template_type)
+            if not code or code in seen:
+                continue
+            seen.add(code)
+            choices.append((code, config.display_label))
+    except (OperationalError, ProgrammingError):
+        pass
+    return tuple(choices)
+
+
 def normalize_allowed_post_templates(raw_value: object) -> list[str]:
     if isinstance(raw_value, str):
         candidates = [raw_value]
@@ -149,9 +223,10 @@ def normalize_allowed_post_templates(raw_value: object) -> list[str]:
 
     normalized: list[str] = []
     seen: set[str] = set()
+    available_values = configured_post_template_type_values()
     for candidate in candidates:
-        value = str(candidate or "").strip().lower()
-        if not value or value not in POST_TEMPLATE_TYPE_VALUES:
+        value = normalize_post_template_type_code(candidate)
+        if not value or value not in available_values:
             continue
         if value in seen:
             continue
@@ -172,9 +247,10 @@ def normalize_allowed_post_templates_override(raw_value: object) -> list[str]:
 
     normalized: list[str] = []
     seen: set[str] = set()
+    available_values = configured_post_template_type_values()
     for candidate in candidates:
-        value = str(candidate or "").strip().lower()
-        if not value or value not in POST_TEMPLATE_TYPE_VALUES:
+        value = normalize_post_template_type_code(candidate)
+        if not value or value not in available_values:
             continue
         if value in seen:
             continue
@@ -234,10 +310,23 @@ def normalize_template_editor_blocks_for_template(
 
 class PostTemplateConfig(models.Model):
     template_type = models.CharField(
-        max_length=32,
-        choices=POST_TEMPLATE_TYPE_CHOICES,
+        max_length=160,
         unique=True,
         verbose_name="Тип шаблона",
+    )
+    label = models.CharField(
+        max_length=120,
+        blank=True,
+        verbose_name="Название шаблона",
+        help_text="Название, которое пользователи видят в выборе типа публикации.",
+    )
+    custom_template = models.OneToOneField(
+        "feeds.ComunCustomPostTemplate",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="post_template_config",
+        verbose_name="Пользовательский шаблон сообщества",
     )
     enabled_editor_blocks = models.JSONField(
         default=list,
@@ -255,7 +344,17 @@ class PostTemplateConfig(models.Model):
         verbose_name_plural = "Настройки шаблонов постов"
 
     def __str__(self) -> str:
-        return self.get_template_type_display()
+        return self.display_label
+
+    @property
+    def display_label(self) -> str:
+        label = str(self.label or "").strip()
+        if label:
+            return label
+        custom_template = getattr(self, "custom_template", None)
+        if custom_template and getattr(custom_template, "name", ""):
+            return str(custom_template.name).strip()
+        return POST_TEMPLATE_TYPE_LABELS.get(self.template_type, self.template_type)
 
     @classmethod
     def ensure_defaults(cls) -> None:
@@ -271,16 +370,25 @@ class PostTemplateConfig(models.Model):
             [
                 cls(
                     template_type=template_type,
+                    label=str(label),
                     enabled_editor_blocks=default_enabled_template_editor_blocks(template_type),
                 )
-                for template_type in missing_types
+                for template_type, label in POST_TEMPLATE_TYPE_CHOICES
+                if template_type in missing_types
             ]
         )
 
     def clean(self) -> None:
         super().clean()
-        template_type = (self.template_type or "").strip().lower()
+        template_type = normalize_post_template_type_code(self.template_type)
         self.template_type = template_type
+        self.label = re.sub(r"\s+", " ", str(self.label or "").strip())[:120]
+        if not self.label:
+            custom_template = getattr(self, "custom_template", None)
+            self.label = (
+                str(getattr(custom_template, "name", "") or "").strip()
+                or POST_TEMPLATE_TYPE_LABELS.get(template_type, template_type)
+            )[:120]
         self.enabled_editor_blocks = normalize_template_editor_blocks_for_template(
             template_type, self.enabled_editor_blocks
         )
@@ -443,6 +551,7 @@ __all__ = [
     "POST_TEMPLATE_TYPE_MUSIC_RELEASE",
     "POST_TEMPLATE_TYPE_CHOICES",
     "POST_TEMPLATE_TYPE_VALUES",
+    "POST_TEMPLATE_TYPE_LABELS",
     "POST_TEMPLATE_EDITOR_BLOCK_CHOICES",
     "POST_TEMPLATE_EDITOR_BLOCK_OPTION_ITEMS",
     "POST_TEMPLATE_EDITOR_BLOCK_VALUES",
@@ -456,8 +565,13 @@ __all__ = [
     "PostPollVote",
     "PostRatingVote",
     "default_allowed_post_templates",
+    "configured_post_template_type_values",
+    "is_post_template_type_configured",
     "normalize_allowed_post_templates",
     "normalize_allowed_post_templates_override",
+    "normalize_post_template_type_code",
+    "post_template_type_choices",
+    "post_template_type_label",
     "template_editor_block_choices_for_template",
     "default_enabled_template_editor_blocks",
     "normalize_template_editor_blocks_for_template",

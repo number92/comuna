@@ -494,6 +494,7 @@ export type BackendComun = {
   hide_from_fresh?: boolean
   allowed_template_types?: string[]
   allowed_post_templates?: string[]
+  template_type_options?: Array<{ value: string; label: string }>
   template_editor_blocks_by_template?: Record<string, string[]>
   custom_templates?: BackendComunCustomTemplate[]
   is_active?: boolean

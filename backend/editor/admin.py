@@ -2,7 +2,6 @@ from django import forms
 from django.contrib import admin
 
 from editor.models import (
-    POST_TEMPLATE_TYPE_CHOICES,
     PostTemplateConfig,
     default_enabled_template_editor_blocks,
     normalize_template_editor_blocks_for_template,
@@ -37,10 +36,12 @@ class PostTemplateConfigAdminForm(forms.ModelForm):
         )
         choices = template_editor_block_choices_for_template(template_type)
         self.fields["enabled_editor_blocks"].choices = choices
+        current_blocks = getattr(self.instance, "enabled_editor_blocks", None)
+        if current_blocks is None:
+            current_blocks = default_enabled_template_editor_blocks(template_type)
         self.fields["enabled_editor_blocks"].initial = normalize_template_editor_blocks_for_template(
             template_type,
-            getattr(self.instance, "enabled_editor_blocks", None)
-            or default_enabled_template_editor_blocks(template_type),
+            current_blocks,
         )
 
     def clean_enabled_editor_blocks(self):
@@ -55,14 +56,20 @@ class PostTemplateConfigAdmin(admin.ModelAdmin):
     form = PostTemplateConfigAdminForm
     list_display = (
         "template_type",
+        "label",
+        "custom_template",
         "enabled_editor_blocks_display",
         "updated_at",
     )
+    list_filter = ("custom_template__comun",)
+    search_fields = ("template_type", "label", "custom_template__name", "custom_template__comun__name")
     fields = (
         "template_type",
+        "label",
+        "custom_template",
         "enabled_editor_blocks",
     )
-    readonly_fields = ("template_type",)
+    readonly_fields = ("template_type", "custom_template")
 
     def get_queryset(self, request):
         PostTemplateConfig.ensure_defaults()
@@ -83,4 +90,3 @@ class PostTemplateConfigAdmin(admin.ModelAdmin):
         return ", ".join(labels) if labels else "Без дополнительных блоков"
 
     enabled_editor_blocks_display.short_description = "Блоки редактора"
-

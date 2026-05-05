@@ -1,4 +1,5 @@
-export type PostTemplateType = 'movie_review' | 'post_vote_poll' | 'music_release'
+export type BuiltinPostTemplateType = 'movie_review' | 'post_vote_poll' | 'music_release'
+export type PostTemplateType = BuiltinPostTemplateType | string
 export type PostTemplateCode = 'basic' | PostTemplateType
 
 export type TemplateEditorBlockType =
@@ -89,7 +90,17 @@ export type MusicReleaseTemplate = {
   data: MusicReleaseTemplateData
 }
 
-export type SitePostTemplate = MovieReviewTemplate | PostVotePollTemplate | MusicReleaseTemplate
+export type CustomPostTemplate = {
+  type: string
+  version: 1
+  data: Record<string, never>
+}
+
+export type SitePostTemplate =
+  | MovieReviewTemplate
+  | PostVotePollTemplate
+  | MusicReleaseTemplate
+  | CustomPostTemplate
 
 export type PostTemplateTypeOption = {
   value: '' | PostTemplateType
@@ -103,12 +114,7 @@ export const POST_TEMPLATE_TYPE_OPTIONS: PostTemplateTypeOption[] = [
   { value: 'music_release', label: 'Музыкальный релиз' },
 ]
 
-const POST_TEMPLATE_CODE_VALUES = new Set<PostTemplateCode>([
-  'basic',
-  'movie_review',
-  'post_vote_poll',
-  'music_release',
-])
+const POST_TEMPLATE_CODE_RE = /^[a-z0-9][a-z0-9_-]{0,159}$/
 
 const TEMPLATE_EDITOR_BLOCK_TYPE_VALUES = new Set<TemplateEditorBlockType>([
   'toc',
@@ -164,11 +170,36 @@ const BLOCKS_WITHOUT_MOVIE_CARD = ALL_TEMPLATE_EDITOR_BLOCK_OPTIONS.filter(
   (option) => option.type !== 'movie_card'
 )
 
-const TEMPLATE_EDITOR_BLOCKS_BY_TEMPLATE: Record<PostTemplateCode, TemplateEditorBlockOption[]> = {
+const TEMPLATE_EDITOR_BLOCKS_BY_TEMPLATE: Record<string, TemplateEditorBlockOption[]> = {
   basic: BLOCKS_WITHOUT_MOVIE_CARD,
   movie_review: ALL_TEMPLATE_EDITOR_BLOCK_OPTIONS,
   post_vote_poll: BLOCKS_WITHOUT_MOVIE_CARD,
   music_release: BLOCKS_WITHOUT_MOVIE_CARD,
+}
+
+const normalizeTemplateCode = (value: unknown): PostTemplateCode | '' => {
+  const code = typeof value === 'string' ? value.trim().toLowerCase() : ''
+  if (!code || !POST_TEMPLATE_CODE_RE.test(code)) return ''
+  return code as PostTemplateCode
+}
+
+const templateOptionKey = (value: string) => (value ? value : 'basic')
+
+export const normalizePostTemplateTypeOptions = (value: unknown): PostTemplateTypeOption[] => {
+  const source = Array.isArray(value) ? value : []
+  const normalized: PostTemplateTypeOption[] = []
+  const seen = new Set<string>()
+  for (const item of source) {
+    const rawCode = normalizeTemplateCode((item as any)?.value)
+    const label = typeof (item as any)?.label === 'string' ? (item as any).label.trim() : ''
+    if (!rawCode || !label) continue
+    const optionValue = rawCode === 'basic' ? '' : rawCode
+    const key = templateOptionKey(optionValue)
+    if (seen.has(key)) continue
+    seen.add(key)
+    normalized.push({ value: optionValue, label })
+  }
+  return normalized.length ? normalized : POST_TEMPLATE_TYPE_OPTIONS
 }
 
 export const normalizeAllowedPostTemplateTypes = (value: unknown): PostTemplateCode[] => {
@@ -176,9 +207,8 @@ export const normalizeAllowedPostTemplateTypes = (value: unknown): PostTemplateC
   const seen = new Set<PostTemplateCode>()
   const normalized: PostTemplateCode[] = []
   for (const item of source) {
-    const code = typeof item === 'string' ? item.trim().toLowerCase() : ''
-    if (!POST_TEMPLATE_CODE_VALUES.has(code as PostTemplateCode)) continue
-    const typedCode = code as PostTemplateCode
+    const typedCode = normalizeTemplateCode(item)
+    if (!typedCode) continue
     if (seen.has(typedCode)) continue
     seen.add(typedCode)
     normalized.push(typedCode)
@@ -191,9 +221,8 @@ export const normalizeAllowedPostTemplateTypeOverrides = (value: unknown): PostT
   const seen = new Set<PostTemplateCode>()
   const normalized: PostTemplateCode[] = []
   for (const item of source) {
-    const code = typeof item === 'string' ? item.trim().toLowerCase() : ''
-    if (!POST_TEMPLATE_CODE_VALUES.has(code as PostTemplateCode)) continue
-    const typedCode = code as PostTemplateCode
+    const typedCode = normalizeTemplateCode(item)
+    if (!typedCode) continue
     if (seen.has(typedCode)) continue
     seen.add(typedCode)
     normalized.push(typedCode)
@@ -204,16 +233,18 @@ export const normalizeAllowedPostTemplateTypeOverrides = (value: unknown): PostT
 export const resolveTemplateCode = (
   templateType: '' | PostTemplateType | null | undefined
 ): PostTemplateCode => {
-  if (templateType === 'movie_review') return 'movie_review'
-  if (templateType === 'post_vote_poll') return 'post_vote_poll'
-  if (templateType === 'music_release') return 'music_release'
+  const code = normalizeTemplateCode(templateType)
+  if (code) return code
   return 'basic'
 }
 
 export const getTemplateEditorBlocks = (
   templateType: '' | PostTemplateType | null | undefined
 ): TemplateEditorBlockOption[] => {
-  return TEMPLATE_EDITOR_BLOCKS_BY_TEMPLATE[resolveTemplateCode(templateType)] ?? []
+  return (
+    TEMPLATE_EDITOR_BLOCKS_BY_TEMPLATE[resolveTemplateCode(templateType)] ??
+    ALL_TEMPLATE_EDITOR_BLOCK_OPTIONS
+  )
 }
 
 export const getTemplateEditorBlockTypes = (
@@ -245,9 +276,10 @@ export const normalizeTemplateEditorBlockSettings = (
   }
   const raw = value as Record<string, unknown>
   const normalized: TemplateEditorBlockSettings = {}
-  for (const templateCode of POST_TEMPLATE_CODE_VALUES) {
-    if (!(templateCode in raw)) continue
-    normalized[templateCode] = normalizeTemplateEditorBlockTypes(raw[templateCode])
+  for (const [rawTemplateCode, rawBlocks] of Object.entries(raw)) {
+    const templateCode = normalizeTemplateCode(rawTemplateCode)
+    if (!templateCode) continue
+    normalized[templateCode] = normalizeTemplateEditorBlockTypes(rawBlocks)
   }
   return normalized
 }
@@ -745,6 +777,15 @@ export const buildPostTemplatePayload = (
       type: 'music_release',
       version: 1,
       data: normalized,
+    }
+  }
+
+  const customTemplateType = normalizeTemplateCode(templateType)
+  if (customTemplateType && customTemplateType !== 'basic') {
+    return {
+      type: customTemplateType,
+      version: 1,
+      data: {},
     }
   }
 

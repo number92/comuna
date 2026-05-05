@@ -96,12 +96,7 @@
     { value: 'categories', label: 'Категории и шаблоны' },
     { value: 'rules', label: 'Правила' },
   ]
-  const allowedTemplateCodes = new Set<PostTemplateCode>([
-    'basic',
-    'movie_review',
-    'post_vote_poll',
-    'music_release',
-  ])
+  const templateCodePattern = /^[a-z0-9][a-z0-9_-]{0,159}$/
   let settingsTagOptions: ComunTagOption[] = []
   let settingsUserOptions: ComunUserOption[] = []
   let settingsAuthorOptions: ComunAuthorOption[] = []
@@ -185,7 +180,7 @@
         .trim()
         .toLowerCase()
       const templateLabel = String((item as any)?.label ?? '').trim()
-      const templateValue = allowedTemplateCodes.has(templateValueRaw as PostTemplateCode)
+      const templateValue = templateCodePattern.test(templateValueRaw)
         ? (templateValueRaw as PostTemplateCode)
         : null
       if (!templateValue || !templateLabel || seen.has(templateValue)) continue

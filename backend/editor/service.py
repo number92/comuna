@@ -42,9 +42,12 @@ from editor.models import (
     PostRatingVote,
     PostTemplateConfig,
     default_enabled_template_editor_blocks,
+    is_post_template_type_configured,
     normalize_allowed_post_templates,
     normalize_allowed_post_templates_override,
+    normalize_post_template_type_code,
     normalize_template_editor_blocks_for_template,
+    post_template_type_choices,
     template_editor_block_choices_for_template,
 )
 from feeds.models import Author, Post, PostFavorite, Rubric
@@ -1267,12 +1270,15 @@ def _sync_template_derived_raw_data(
 
 
 def _serialize_post_template_type_options() -> list[dict]:
-    return [{"value": value, "label": label} for value, label in _POST_TEMPLATE_TYPE_OPTIONS]
+    return [
+        {"value": value, "label": label}
+        for value, label in post_template_type_choices()
+    ]
 
 
 def _serialize_template_editor_block_options_by_template() -> dict[str, list[dict]]:
     payload: dict[str, list[dict]] = {}
-    for template_type, _template_label in _POST_TEMPLATE_TYPE_OPTIONS:
+    for template_type, _template_label in post_template_type_choices():
         payload[template_type] = [
             {"value": value, "label": label}
             for value, label in template_editor_block_choices_for_template(template_type)
@@ -1528,6 +1534,38 @@ def _serialize_comun_custom_post_templates(comun: Comun) -> list[dict]:
     return [_serialize_comun_custom_post_template(template) for template in templates]
 
 
+def _custom_post_template_config_type(template: ComunCustomPostTemplate) -> str:
+    return f"custom_{int(template.id)}"
+
+
+def _enabled_editor_blocks_for_custom_template(blocks: list[dict]) -> list[str]:
+    enabled_blocks = [
+        str(block.get("block_type") or "").strip().lower()
+        for block in blocks
+        if str(block.get("placement") or "").strip().lower()
+        == COMUN_CUSTOM_TEMPLATE_BLOCK_PLACEMENT_AVAILABLE
+    ]
+    return normalize_template_editor_blocks_for_template("custom_template", enabled_blocks)
+
+
+def _sync_post_template_config_for_custom_template(
+    template: ComunCustomPostTemplate,
+    blocks: list[dict],
+) -> str:
+    template_type = _custom_post_template_config_type(template)
+    config = PostTemplateConfig.objects.filter(custom_template=template).first()
+    if not config:
+        config = PostTemplateConfig.objects.filter(template_type=template_type).first()
+    if not config:
+        config = PostTemplateConfig(custom_template=template)
+    config.template_type = template_type
+    config.label = template.name
+    config.custom_template = template
+    config.enabled_editor_blocks = _enabled_editor_blocks_for_custom_template(blocks)
+    config.save()
+    return template_type
+
+
 def _sync_comun_custom_post_templates(
     comun: Comun,
     raw_value: object,
@@ -1541,6 +1579,7 @@ def _sync_comun_custom_post_templates(
         for item in ComunCustomPostTemplate.objects.filter(comun=comun)
     }
     kept_template_ids: list[int] = []
+    kept_template_types: list[str] = []
 
     for index, item in enumerate(normalized_templates):
         template_id = item.get("id")
@@ -1573,8 +1612,22 @@ def _sync_comun_custom_post_templates(
                 for field in item["fields"]
             ]
         )
+        kept_template_types.append(
+            _sync_post_template_config_for_custom_template(template, item["blocks"])
+        )
 
     ComunCustomPostTemplate.objects.filter(comun=comun).exclude(id__in=kept_template_ids).delete()
+    if kept_template_types:
+        allowed_templates = normalize_allowed_post_templates(comun.allowed_post_templates)
+        changed = False
+        for template_type in kept_template_types:
+            if template_type in allowed_templates:
+                continue
+            allowed_templates.append(template_type)
+            changed = True
+        if changed:
+            comun.allowed_post_templates = allowed_templates
+            comun.save(update_fields=["allowed_post_templates", "updated_at"])
     return None
 
 
@@ -1583,12 +1636,12 @@ def _template_editor_blocks_by_template() -> dict[str, list[str]]:
         template_type: default_enabled_template_editor_blocks(template_type)
         for template_type, _template_label in _POST_TEMPLATE_TYPE_OPTIONS
     }
-    for item in PostTemplateConfig.objects.all():
-        template_type = str(item.template_type or "").strip().lower()
-        if template_type not in payload:
+    for item in PostTemplateConfig.objects.values("template_type", "enabled_editor_blocks"):
+        template_type = normalize_post_template_type_code(item.get("template_type"))
+        if not template_type:
             continue
         payload[template_type] = normalize_template_editor_blocks_for_template(
-            template_type, item.enabled_editor_blocks
+            template_type, item.get("enabled_editor_blocks")
         )
     return payload
 
@@ -1624,8 +1677,8 @@ def _allowed_templates_for_comun_category(
 def _requested_template_type(template_payload: dict | None) -> str:
     if not template_payload:
         return POST_TEMPLATE_TYPE_BASIC
-    template_type = str(template_payload.get("type") or "").strip().lower()
-    if template_type and template_type in _POST_TEMPLATE_TYPES:
+    template_type = normalize_post_template_type_code(template_payload.get("type"))
+    if template_type and is_post_template_type_configured(template_type):
         return template_type
     return POST_TEMPLATE_TYPE_BASIC
 
@@ -1652,8 +1705,10 @@ def _normalize_post_template_payload(
     if not isinstance(raw_template, dict):
         return None, "invalid template payload"
 
-    template_type = str(raw_template.get("type") or "").strip().lower()
+    template_type = normalize_post_template_type_code(raw_template.get("type"))
     if not template_type:
+        return None, None
+    if template_type == POST_TEMPLATE_TYPE_BASIC:
         return None, None
     if template_type == POST_TEMPLATE_TYPE_MOVIE_REVIEW:
         template_data_input = raw_template.get("data")
@@ -1757,6 +1812,13 @@ def _normalize_post_template_payload(
             "data": normalized_data,
         }, None
 
+    if is_post_template_type_configured(template_type):
+        return {
+            "type": template_type,
+            "version": 1,
+            "data": {},
+        }, None
+
     return None, "unsupported template type"
 
 
@@ -1800,8 +1862,8 @@ def _content_with_live_poll(post: Post, user: User | None = None) -> tuple[str, 
 def _template_type_from_payload(template_payload: dict | None) -> str:
     if not isinstance(template_payload, dict):
         return POST_TEMPLATE_TYPE_BASIC
-    template_type = str(template_payload.get("type") or "").strip().lower()
-    if template_type in _POST_TEMPLATE_TYPES:
+    template_type = normalize_post_template_type_code(template_payload.get("type"))
+    if template_type and is_post_template_type_configured(template_type):
         return template_type
     return POST_TEMPLATE_TYPE_BASIC
 
@@ -1933,11 +1995,15 @@ def _serialize_enabled_template_editor_blocks(
     template_payload: dict | None = None,
 ) -> list[str]:
     template_type = _template_type_from_payload(template_payload)
-    config = PostTemplateConfig.objects.filter(template_type=template_type).first()
+    config = (
+        PostTemplateConfig.objects.filter(template_type=template_type)
+        .values("enabled_editor_blocks")
+        .first()
+    )
     if not config:
         return default_enabled_template_editor_blocks(template_type)
     return normalize_template_editor_blocks_for_template(
-        template_type, config.enabled_editor_blocks
+        template_type, config.get("enabled_editor_blocks")
     )
 
 

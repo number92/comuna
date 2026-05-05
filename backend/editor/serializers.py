@@ -148,11 +148,15 @@ def _serialize_enabled_template_editor_blocks(
     template_payload: dict | None = None,
 ) -> list[str]:
     template_type = editor_service._template_type_from_payload(template_payload)
-    config = PostTemplateConfig.objects.filter(template_type=template_type).first()
+    config = (
+        PostTemplateConfig.objects.filter(template_type=template_type)
+        .values("enabled_editor_blocks")
+        .first()
+    )
     if not config:
         return default_enabled_template_editor_blocks(template_type)
     return normalize_template_editor_blocks_for_template(
-        template_type, config.enabled_editor_blocks
+        template_type, config.get("enabled_editor_blocks")
     )
 
 

@@ -533,8 +533,6 @@ def _generate_unique_comun_slug(name: str) -> str:
 def _comun_is_moderator(user: User | None, comun: Comun) -> bool:
     if not user:
         return False
-    if user.is_staff:
-        return True
     if comun.creator_id == user.id:
         return True
     return comun.moderators.filter(id=user.id).exists()
@@ -543,8 +541,6 @@ def _comun_is_moderator(user: User | None, comun: Comun) -> bool:
 def _comun_can_manage_moderators(user: User | None, comun: Comun) -> bool:
     if not user:
         return False
-    if user.is_staff:
-        return True
     return comun.creator_id == user.id
 
 

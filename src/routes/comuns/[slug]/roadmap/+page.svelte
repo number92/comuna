@@ -1,5 +1,6 @@
 <script lang="ts">
   import { page } from '$app/stores'
+  import { tick } from 'svelte'
   import { Button, toast } from 'mono-svelte'
   import Header from '$lib/components/ui/layout/pages/Header.svelte'
   import {
@@ -11,6 +12,7 @@
     type BackendPost,
   } from '$lib/api/backend'
   import { siteToken, siteUser } from '$lib/siteAuth'
+  import { looksLikeSerializedEditorModel, parseSerializedEditorModel } from '$lib/util'
   import { env } from '$env/dynamic/public'
 
   export let data
@@ -110,6 +112,8 @@
     ? data.categoryPreviews
     : []
   let roadmapSettingsSaving = false
+  let roadmapSettingsOpen = false
+  let roadmapSettingsSection: HTMLElement | null = null
   let roadmapSettingsDraftIds = normalizeRoadmapCategoryIds(
     data?.roadmapCategoryIds ?? comun?.roadmap_category_ids
   )
@@ -158,11 +162,56 @@
       .replace(/\s+/g, ' ')
       .trim()
 
-  const snippet = (post: BackendPost, maxLength = 180) => {
-    const text = stripHtml(post.content)
+  const truncateText = (value: string, maxLength: number) => {
+    const text = value.replace(/\s+/g, ' ').trim()
     if (!text) return ''
     if (text.length <= maxLength) return text
     return `${text.slice(0, maxLength - 1).trimEnd()}…`
+  }
+
+  const textFromEditorBlock = (block: any) => {
+    const type = String(block?.type ?? '').toLowerCase()
+    const data = block?.data ?? {}
+    if (['paragraph', 'header', 'quote', 'warning'].includes(type)) {
+      return stripHtml(String(data?.text ?? data?.message ?? ''))
+    }
+    if (type === 'list' && Array.isArray(data?.items)) {
+      return data.items.map((item: unknown) => stripHtml(String(item ?? ''))).filter(Boolean).join(' ')
+    }
+    if (type === 'checklist' && Array.isArray(data?.items)) {
+      return data.items
+        .map((item: any) => stripHtml(String(item?.text ?? '')))
+        .filter(Boolean)
+        .join(' ')
+    }
+    return ''
+  }
+
+  const editorSnippet = (raw: string, maxLength: number) => {
+    const payload = parseSerializedEditorModel(raw)
+    if (!payload) return ''
+
+    const additional = payload?.additional ?? {}
+    const description = stripHtml(
+      String(additional?.metaDescription || additional?.previewDescription || '')
+    )
+    if (description) return truncateText(description, maxLength)
+
+    const blocks = Array.isArray(payload?.blocks) ? payload.blocks : []
+    for (const block of blocks) {
+      const text = textFromEditorBlock(block)
+      if (text) return truncateText(text, maxLength)
+    }
+    return ''
+  }
+
+  const snippet = (post: BackendPost, maxLength = 180) => {
+    const raw = String(post.content ?? '').trim()
+    if (!raw) return ''
+    const editorText = editorSnippet(raw, maxLength)
+    if (editorText) return editorText
+    if (looksLikeSerializedEditorModel(raw)) return ''
+    return truncateText(stripHtml(raw), maxLength)
   }
 
   const previewScore = (post: BackendPost) =>
@@ -313,6 +362,9 @@
       comun = payload.comun ?? comun
       roadmapSettingsDraftIds = normalizeRoadmapCategoryIds(comun?.roadmap_category_ids)
       await refreshRoadmapPreviews(comun)
+      if (roadmapSettingsDraftIds.length > 0) {
+        roadmapSettingsOpen = false
+      }
       toast({ content: 'Настройки дорожной карты сохранены', type: 'success' })
     } catch (error) {
       toast({
@@ -322,6 +374,12 @@
     } finally {
       roadmapSettingsSaving = false
     }
+  }
+
+  const openRoadmapSettings = async () => {
+    roadmapSettingsOpen = true
+    await tick()
+    roadmapSettingsSection?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
   $: allCategories = Array.isArray(comun?.categories) ? (comun?.categories ?? []) : []
@@ -411,6 +469,8 @@
         ) ||
         comun?.can_moderate)
   )
+  $: showRoadmapSettings =
+    canManageRoadmap && (savedRoadmapCategoryIds.size === 0 || roadmapSettingsOpen)
   $: comunName = comun?.name || 'Сообщество'
   $: pageTitle = `Публичная дорожная карта — ${comunName}`
   $: pageDescription =
@@ -445,8 +505,9 @@
         Назад к сообществу
       </a>
       {#if canManageRoadmap}
-        <a
-          href="#roadmap-settings"
+        <button
+          type="button"
+          on:click={openRoadmapSettings}
           class="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-900 transition hover:bg-slate-50 dark:border-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-800/60"
           aria-label="Настройки дорожной карты"
           title="Настройки дорожной карты"
@@ -464,7 +525,7 @@
             <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" />
             <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.04.04a2.05 2.05 0 0 1-2.9 2.9l-.04-.04A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21a2.05 2.05 0 0 1-4.1 0v-.06A1.7 1.7 0 0 0 8.6 19.4a1.7 1.7 0 0 0-1.88.34l-.04.04a2.05 2.05 0 0 1-2.9-2.9l.04-.04A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H3a2.05 2.05 0 0 1 0-4.1h.06A1.7 1.7 0 0 0 4.6 8.6a1.7 1.7 0 0 0-.34-1.88l-.04-.04a2.05 2.05 0 0 1 2.9-2.9l.04.04A1.7 1.7 0 0 0 9 4.6a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V3a2.05 2.05 0 0 1 4.1 0v.06A1.7 1.7 0 0 0 15.4 4.6a1.7 1.7 0 0 0 1.88-.34l.04-.04a2.05 2.05 0 0 1 2.9 2.9l-.04.04A1.7 1.7 0 0 0 19.4 9c.4.2.75.4 1 .6.3.3.4.7.4 1.1V11a2.05 2.05 0 0 1 0 4.1h-.06a1.7 1.7 0 0 0-1.34.9Z" />
           </svg>
-        </a>
+        </button>
       {/if}
     </div>
   </div>
@@ -472,8 +533,12 @@
   <section class="roadmap-page-shell overflow-hidden rounded-3xl">
     <div class="roadmap-page-glow"></div>
     <div class="roadmap-page-content relative z-10 flex flex-col gap-5 p-4 sm:p-5 lg:p-6">
-      {#if canManageRoadmap}
-        <section id="roadmap-settings" class="roadmap-settings-card rounded-2xl p-4 sm:p-5">
+      {#if showRoadmapSettings}
+        <section
+          id="roadmap-settings"
+          bind:this={roadmapSettingsSection}
+          class="roadmap-settings-card rounded-2xl p-4 sm:p-5"
+        >
           <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
             <div class="max-w-3xl">
               <div class="text-sm font-semibold text-slate-900 dark:text-zinc-100">

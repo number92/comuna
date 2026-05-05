@@ -308,6 +308,7 @@ export const register = async (payload: {
   username: string
   email?: string
   password: string
+  privacy_accepted?: boolean
 }) => {
   const response = await fetch(buildUrl('/api/auth/register/'), {
     method: 'POST',
@@ -334,6 +335,7 @@ export type TelegramAuthPayload = {
   photo_url?: string
   auth_date: number
   hash: string
+  privacy_accepted?: boolean
 }
 
 export const loginTelegram = async (payload: TelegramAuthPayload) => {
@@ -359,6 +361,7 @@ export type VkAuthPayload = {
   expires_in?: number
   user_id?: number
   id_token?: string
+  privacy_accepted?: boolean
 }
 
 export const loginVK = async (payload: VkAuthPayload) => {

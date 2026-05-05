@@ -19,14 +19,27 @@ from telegram_integration.service import (
     upsert_telegram_account,
     validate_telegram_login,
 )
+from telegram_integration.models import TelegramAccount
 
 User = get_user_model()
+_PRIVACY_CONSENT_ERROR = "Для регистрации нужно согласиться с политикой обработки персональных данных."
 
 
 def _user_service():
     from users import service as user_service
 
     return user_service
+
+
+def _is_privacy_accepted(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        return normalized in {"1", "true", "yes", "on", "accepted"}
+    return False
 
 
 @csrf_exempt
@@ -43,6 +56,10 @@ def telegram_auth(request: HttpRequest) -> HttpResponse:
 
     try:
         validate_telegram_login(payload)
+        telegram_id = payload.get("id")
+        account_exists = TelegramAccount.objects.filter(telegram_id=telegram_id).exists()
+        if not account_exists and not _is_privacy_accepted(payload.get("privacy_accepted")):
+            return JsonResponse({"ok": False, "error": _PRIVACY_CONSENT_ERROR}, status=400)
         user = upsert_telegram_account(payload)
     except ValueError as exc:
         return JsonResponse({"ok": False, "error": str(exc)}, status=400)

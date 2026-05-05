@@ -9,6 +9,8 @@
   export let label = 'Продолжить с Telegram'
   export let helperText = ''
   export let active = true
+  export let disabled = false
+  export let privacyAccepted = false
 
   let container: HTMLDivElement | null = null
   let loading = false
@@ -18,13 +20,13 @@
   let authUrl = ''
 
   const mountWidget = () => {
-    if (!browser || !container || !botName) return
+    if (!browser || !container || !botName || disabled) return
     scriptLoaded = false
     if (!authUrl) {
       const origin = env.PUBLIC_SITE_URL || window.location.origin
       const next = `${window.location.pathname}${window.location.search}`
-      authUrl = `${origin.replace(/\/$/, '')}/api/auth/telegram/?next=${encodeURIComponent(next)}`
     }
+    authUrl = `${(env.PUBLIC_SITE_URL || window.location.origin).replace(/\/$/, '')}/api/auth/telegram/?next=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}${privacyAccepted ? '&privacy_accepted=1' : ''}`
     container.innerHTML = ''
 
     const script = document.createElement('script')
@@ -42,7 +44,7 @@
   }
 
   const remountWhenVisible = async () => {
-    if (!browser || !active) return
+    if (!browser || !active || disabled) return
     await tick()
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
@@ -104,9 +106,14 @@
   <div class="flex flex-col gap-2">
     <div class="relative">
       <div
-        class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-slate-300 hover:bg-slate-50 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:border-zinc-600 dark:hover:bg-zinc-800"
-        title={label}
-        aria-hidden="true"
+      class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-left transition dark:border-zinc-700 dark:bg-zinc-900"
+      class:opacity-60={disabled}
+      class:hover:border-slate-300={!disabled}
+      class:hover:bg-slate-50={!disabled}
+      class:dark:hover:border-zinc-600={!disabled}
+      class:dark:hover:bg-zinc-800={!disabled}
+      title={label}
+      aria-hidden="true"
       >
         <span class="flex items-center gap-3">
           <span class="flex h-9 w-9 items-center justify-center rounded-full bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300">
@@ -125,12 +132,17 @@
         bind:this={container}
         class="telegram-widget-host"
         class:is-loading={!scriptLoaded || loading}
+        class:is-disabled={disabled}
         aria-label={label}
       />
     </div>
 
     {#if loading}
       <p class="text-xs text-slate-500 dark:text-zinc-400">Вход через Telegram…</p>
+    {:else if disabled}
+      <p class="text-xs text-slate-500 dark:text-zinc-400">
+        Сначала примите политику обработки персональных данных.
+      </p>
     {:else if !scriptLoaded}
       <p class="text-xs text-slate-500 dark:text-zinc-400">Загрузка Telegram-входа…</p>
     {/if}
@@ -149,6 +161,10 @@
   }
 
   .telegram-widget-host.is-loading {
+    pointer-events: none;
+  }
+
+  .telegram-widget-host.is-disabled {
     pointer-events: none;
   }
 

@@ -10,8 +10,11 @@ from django.views.decorators.csrf import csrf_exempt
 from telegram_integration import views as telegram_views
 from users import serializers as user_serializers
 from users import service as user_service
+from users.models import VkAccount
 
 User = get_user_model()
+
+_PRIVACY_CONSENT_ERROR = "Для регистрации нужно согласиться с политикой обработки персональных данных."
 
 _get_user_from_request = user_service._get_user_from_request
 _get_user_from_token = user_service._get_user_from_token
@@ -20,6 +23,17 @@ _public_user_author_ids = user_service._public_user_author_ids
 _serialize_public_site_user_author_card = user_serializers._serialize_public_site_user_author_card
 _serialize_public_site_user_profile = user_serializers._serialize_public_site_user_profile
 _serialize_user = user_serializers._serialize_user
+
+
+def _is_privacy_accepted(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        return normalized in {"1", "true", "yes", "on", "accepted"}
+    return False
 
 
 @csrf_exempt
@@ -39,6 +53,8 @@ def register_user(request: HttpRequest) -> HttpResponse:
     username = (payload.get("username") or "").strip()
     password = payload.get("password") or ""
     email = (payload.get("email") or "").strip()
+    if not _is_privacy_accepted(payload.get("privacy_accepted")):
+        return JsonResponse({"ok": False, "error": _PRIVACY_CONSENT_ERROR}, status=400)
     try:
         user = user_service._register_password_user(username, password, email)
     except ValueError as exc:
@@ -152,6 +168,9 @@ def vk_auth(request: HttpRequest) -> HttpResponse:
 
     try:
         vk_user = user_service._authenticate_vk_payload(payload)
+        vk_account_exists = VkAccount.objects.filter(vk_id=vk_user.get("vk_id")).exists()
+        if not vk_account_exists and not _is_privacy_accepted(payload.get("privacy_accepted")):
+            return JsonResponse({"ok": False, "error": _PRIVACY_CONSENT_ERROR}, status=400)
         user = user_service._upsert_vk_account(vk_user)
     except ValueError as exc:
         return JsonResponse({"ok": False, "error": str(exc)}, status=400)

@@ -12,6 +12,7 @@
   let authMode: 'login' | 'signup' = initialMode
   let wasOpen = false
   let telegramButtonModulePromise: Promise<{ default: ComponentType }> | null = null
+  let signupPrivacyAccepted = false
 
   let loginData = {
     username: '',
@@ -26,6 +27,7 @@
       password: '',
       loading: false,
     }
+    signupPrivacyAccepted = false
   }
 
   async function handleLogin() {
@@ -54,6 +56,7 @@
       password: '',
       loading: false,
     }
+    signupPrivacyAccepted = false
   }
 
   $: if (open && !wasOpen) {
@@ -108,12 +111,16 @@
             this={module.default}
             onSuccess={handleSuccessfulAuth}
             active={open}
+            disabled={authMode === 'signup' && !signupPrivacyAccepted}
+            privacyAccepted={signupPrivacyAccepted}
             label={authMode === 'signup' ? 'Зарегистрироваться через Telegram' : 'Войти через Telegram'}
           />
         {/await}
       {/if}
       <VkLoginButton
         onSuccess={handleSuccessfulAuth}
+        disabled={authMode === 'signup' && !signupPrivacyAccepted}
+        privacyAccepted={signupPrivacyAccepted}
         label={authMode === 'signup' ? 'Зарегистрироваться через VK' : 'Войти через VK'}
       />
     </div>
@@ -158,8 +165,26 @@
         </Button>
       </form>
     {:else}
-      <div class="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
-        Регистрация по email отключена. Используйте Telegram или VK.
+      <div class="mt-4 flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
+        <p>Регистрация по email отключена. Используйте Telegram или VK.</p>
+        <label class="flex items-start gap-3">
+          <input
+            bind:checked={signupPrivacyAccepted}
+            type="checkbox"
+            class="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-900"
+          />
+          <span>
+            Я согласен с
+            <a
+              href="/privacy"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="text-blue-600 hover:underline dark:text-blue-400"
+            >
+              политикой обработки персональных данных
+            </a>
+          </span>
+        </label>
       </div>
     {/if}
   </div>

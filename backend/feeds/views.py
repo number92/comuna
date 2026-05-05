@@ -178,6 +178,7 @@ _EDITABLE_STATIC_PAGE_TITLES = {
     "about": "О проекте",
     "advertisement": "Реклама",
     "authors": "Авторам",
+    "privacy": "Политика обработки персональных данных",
     "rules": "Правила",
 }
 
@@ -3631,6 +3632,7 @@ def sitemap_static_xml(request: HttpRequest) -> HttpResponse:
         "/about",
         "/faq",
         "/advertisement",
+        "/privacy",
         "/rules",
     ]
     entries = [(f"{base_url}{path}", None) for path in static_paths]

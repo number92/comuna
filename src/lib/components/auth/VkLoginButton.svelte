@@ -8,6 +8,8 @@
   export let onSuccess: (() => void) | null = null
   export let label = 'Продолжить с VK'
   export let helperText = ''
+  export let disabled = false
+  export let privacyAccepted = false
 
   let container: HTMLDivElement | null = null
   let loading = false
@@ -15,7 +17,7 @@
   const appId = env.PUBLIC_VK_APP_ID
 
   const renderWidget = () => {
-    if (!browser || !container || !appId) return
+    if (!browser || !container || !appId || disabled) return
     const VKID = (window as any).VKIDSDK
     if (!VKID) return
 
@@ -52,6 +54,7 @@
               expires_in: data.expires_in,
               user_id: data.user_id,
               id_token: data.id_token,
+              privacy_accepted: privacyAccepted,
             })
             toast({ content: 'Вы успешно вошли через VK', type: 'success' })
             onSuccess?.()
@@ -67,7 +70,7 @@
   }
 
   onMount(() => {
-    if (!browser || !container || !appId) return
+    if (!browser || !container || !appId || disabled) return
 
     if ((window as any).VKIDSDK) {
       scriptLoaded = true
@@ -108,7 +111,12 @@
   <div class="flex flex-col gap-2">
     <div class="relative">
       <div
-        class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-slate-300 hover:bg-slate-50 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:border-zinc-600 dark:hover:bg-zinc-800"
+        class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-left transition dark:border-zinc-700 dark:bg-zinc-900"
+        class:opacity-60={disabled}
+        class:hover:border-slate-300={!disabled}
+        class:hover:bg-slate-50={!disabled}
+        class:dark:hover:border-zinc-600={!disabled}
+        class:dark:hover:bg-zinc-800={!disabled}
         title={label}
         aria-hidden="true"
       >
@@ -129,12 +137,17 @@
         bind:this={container}
         class="vk-widget-host"
         class:is-loading={!scriptLoaded || loading}
+        class:is-disabled={disabled}
         aria-label={label}
       />
     </div>
 
     {#if loading}
       <p class="text-xs text-slate-500 dark:text-zinc-400">Вход через VK…</p>
+    {:else if disabled}
+      <p class="text-xs text-slate-500 dark:text-zinc-400">
+        Сначала примите политику обработки персональных данных.
+      </p>
     {:else if !scriptLoaded}
       <p class="text-xs text-slate-500 dark:text-zinc-400">Загрузка VK виджета…</p>
     {/if}
@@ -150,6 +163,10 @@
   }
 
   .vk-widget-host.is-loading {
+    pointer-events: none;
+  }
+
+  .vk-widget-host.is-disabled {
     pointer-events: none;
   }
 

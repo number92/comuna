@@ -41,7 +41,8 @@
     application: string | undefined = undefined,
     submitting: boolean = false,
     honeypot: string | undefined = undefined,
-    nsfw: boolean = false
+    nsfw: boolean = false,
+    privacyAccepted: boolean = false
 
   const getCaptcha = async () =>
     (captcha = await getClient(instance, fetch).getCaptcha())
@@ -51,6 +52,14 @@
     : ''
 
   async function submit() {
+    if (!privacyAccepted) {
+      toast({
+        content: 'Нужно согласиться с политикой обработки персональных данных',
+        type: 'error',
+      })
+      return
+    }
+
     submitting = true
 
     try {
@@ -198,6 +207,25 @@
       </div>
     {/if}
     <Checkbox bind:checked={nsfw}>Показывать NSFW</Checkbox>
+    <label class="flex items-start gap-3 text-sm text-slate-600 dark:text-zinc-300">
+      <input
+        bind:checked={privacyAccepted}
+        type="checkbox"
+        class="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 dark:border-zinc-700 dark:bg-zinc-900"
+        required
+      />
+      <span>
+        Я согласен с
+        <a
+          href="/privacy"
+          target="_blank"
+          rel="noopener noreferrer"
+          class="text-blue-600 hover:underline dark:text-blue-400"
+        >
+          политикой обработки персональных данных
+        </a>
+      </span>
+    </label>
     <input type="dn" name="honeypot" bind:value={honeypot} class="hidden" />
     <Button
       submit

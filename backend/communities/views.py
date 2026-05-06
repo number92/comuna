@@ -416,6 +416,7 @@ def _attach_pending_comuns_for_author(author: Author | None) -> None:
     current_comun = _author_telegram_source_comun(author)
     if current_comun:
         claim_unowned_comun(current_comun)
+        community_service._sync_comun_logo_from_author(current_comun, author)
 
     pending_comuns = (
         Comun.objects.filter(
@@ -436,9 +437,13 @@ def _attach_pending_comuns_for_author(author: Author | None) -> None:
         elif not verified_owner_ids:
             continue
         claim_unowned_comun(comun)
+        logo_synced = community_service._sync_comun_logo_from_author(comun, author)
         comun.telegram_source_author = author
         comun.telegram_channel_username = normalized_username
-        comun.save(update_fields=["telegram_source_author", "telegram_channel_username", "updated_at"])
+        update_fields = ["telegram_source_author", "telegram_channel_username", "updated_at"]
+        if logo_synced:
+            update_fields.append("logo_url")
+        comun.save(update_fields=update_fields)
         current_comun = comun
 
 

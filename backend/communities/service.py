@@ -90,6 +90,43 @@ def _author_avatar_url(request: HttpRequest | None, author: Author) -> str | Non
     return _media_url(request, author.avatar_image) or author.avatar_url
 
 
+def _author_avatar_logo_url(author: Author | None) -> str:
+    if not author:
+        return ""
+    avatar_image = getattr(author, "avatar_image", None)
+    if avatar_image:
+        try:
+            image_url = avatar_image.url
+        except Exception:
+            image_url = ""
+        if image_url:
+            site_base = getattr(settings, "SITE_BASE_URL", "").rstrip("/")
+            if site_base and image_url.startswith("/"):
+                image_url = f"{site_base}{image_url}"
+            return image_url[:500]
+    return str(getattr(author, "avatar_url", "") or "").strip()[:500]
+
+
+def _sync_comun_logo_from_author(comun: Comun | None, author: Author | None) -> bool:
+    if not comun:
+        return False
+    current_logo_url = str(getattr(comun, "logo_url", "") or "").strip()
+    logo_url = _author_avatar_logo_url(author)
+    if not logo_url or current_logo_url == logo_url:
+        return False
+    if current_logo_url:
+        generated_avatar_logo = (
+            "api.telegram.org/file/" in current_logo_url
+            or "/media/authors/avatars/" in current_logo_url
+            or current_logo_url == str(getattr(author, "avatar_url", "") or "").strip()
+        )
+        if not generated_avatar_logo:
+            return False
+    comun.logo_url = logo_url
+    comun.save(update_fields=["logo_url", "updated_at"])
+    return True
+
+
 def _rubric_icon_url(request: HttpRequest | None, rubric: Rubric | None) -> str | None:
     if not rubric:
         return None
@@ -606,6 +643,7 @@ def _ensure_telegram_channel_comun_for_author(author: Author | None) -> Comun | 
     current_comun = _author_telegram_source_comun(author)
     if current_comun:
         _claim_unowned_comun_for_author(current_comun, author)
+        _sync_comun_logo_from_author(current_comun, author)
         return current_comun
 
     comun = (
@@ -619,9 +657,13 @@ def _ensure_telegram_channel_comun_for_author(author: Author | None) -> Comun | 
     )
     if comun:
         _claim_unowned_comun_for_author(comun, author)
+        logo_synced = _sync_comun_logo_from_author(comun, author)
         comun.telegram_source_author = author
         comun.telegram_channel_username = normalized_username
-        comun.save(update_fields=["telegram_source_author", "telegram_channel_username", "updated_at"])
+        update_fields = ["telegram_source_author", "telegram_channel_username", "updated_at"]
+        if logo_synced:
+            update_fields.append("logo_url")
+        comun.save(update_fields=update_fields)
         return comun
 
     verified_owner_ids = _verified_author_owner_ids(author)
@@ -637,7 +679,7 @@ def _ensure_telegram_channel_comun_for_author(author: Author | None) -> Comun | 
         name=comun_name,
         slug=comun_slug,
         creator_id=owner_id,
-        logo_url=(author.avatar_url or "").strip(),
+        logo_url=_author_avatar_logo_url(author),
         product_description=(author.description or "").strip(),
         telegram_source_author=author,
         telegram_channel_username=normalized_username,
@@ -659,6 +701,7 @@ def _attach_pending_comuns_for_author(author: Author | None) -> None:
     current_comun = _author_telegram_source_comun(author)
     if current_comun:
         _claim_unowned_comun_for_author(current_comun, author)
+        _sync_comun_logo_from_author(current_comun, author)
 
     pending_comuns = (
         Comun.objects.filter(
@@ -679,9 +722,13 @@ def _attach_pending_comuns_for_author(author: Author | None) -> None:
         elif not verified_owner_ids:
             continue
         _claim_unowned_comun_for_author(comun, author)
+        logo_synced = _sync_comun_logo_from_author(comun, author)
         comun.telegram_source_author = author
         comun.telegram_channel_username = normalized_username
-        comun.save(update_fields=["telegram_source_author", "telegram_channel_username", "updated_at"])
+        update_fields = ["telegram_source_author", "telegram_channel_username", "updated_at"]
+        if logo_synced:
+            update_fields.append("logo_url")
+        comun.save(update_fields=update_fields)
         current_comun = comun
 
 
@@ -1115,6 +1162,7 @@ __all__ = [
     "_allowed_templates_for_comun_category",
     "_apply_post_tags",
     "_attach_pending_comuns_for_author",
+    "_author_avatar_logo_url",
     "_author_avatar_url",
     "_author_telegram_source_comun",
     "_comun_can_manage_moderators",
@@ -1171,6 +1219,7 @@ __all__ = [
     "_site_user_avatar_url",
     "_slugify_title",
     "_sync_comun_glossary_terms",
+    "_sync_comun_logo_from_author",
     "_text_contains_external_links",
 ]
 

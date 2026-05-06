@@ -96,7 +96,9 @@ class Comun(models.Model):
     slug = models.SlugField(max_length=160, unique=True)
     creator = models.ForeignKey(
         User,
-        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
         related_name="created_comuns",
         verbose_name="Создатель",
     )

@@ -299,6 +299,7 @@ def _handle_channel_post(message: dict, force_publish: bool = False) -> None:
         if not _is_bot_admin(chat_id, token):
             return
         _refresh_author_from_telegram(author, chat_id, token)
+    community_service._ensure_telegram_channel_comun_for_author(author)
 
     raw_text = _fv()._extract_plain_text(message)
     explicit_tags = _fv()._extract_hashtags(raw_text)
@@ -736,6 +737,7 @@ def _handle_my_chat_member(update: dict) -> None:
     token = settings.TELEGRAM_BOT_TOKEN
     if token:
         _refresh_author_from_telegram(author, f"@{username}", token)
+    community_service._ensure_telegram_channel_comun_for_author(author)
 
     _send_bot_message(
         admin_chat_id,

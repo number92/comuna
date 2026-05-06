@@ -399,7 +399,24 @@ def _attach_pending_comuns_for_author(author: Author | None) -> None:
     if not normalized_username:
         return
 
+    verified_owner_ids = list(
+        AuthorAdmin.objects.filter(author=author, verified_at__isnull=False)
+        .order_by("verified_at", "created_at", "id")
+        .values_list("user_id", flat=True)
+    )
+
+    def claim_unowned_comun(comun: Comun) -> None:
+        if comun.creator_id or not verified_owner_ids:
+            return
+        owner_id = int(verified_owner_ids[0])
+        comun.creator_id = owner_id
+        comun.save(update_fields=["creator", "updated_at"])
+        comun.moderators.add(owner_id)
+
     current_comun = _author_telegram_source_comun(author)
+    if current_comun:
+        claim_unowned_comun(current_comun)
+
     pending_comuns = (
         Comun.objects.filter(
             telegram_channel_username__iexact=normalized_username,
@@ -413,8 +430,12 @@ def _attach_pending_comuns_for_author(author: Author | None) -> None:
     for comun in pending_comuns:
         if current_comun and current_comun.id != comun.id:
             continue
-        if not _author_is_managed_by_comun_team(author, comun):
+        if comun.creator_id:
+            if not _author_is_managed_by_comun_team(author, comun):
+                continue
+        elif not verified_owner_ids:
             continue
+        claim_unowned_comun(comun)
         comun.telegram_source_author = author
         comun.telegram_channel_username = normalized_username
         comun.save(update_fields=["telegram_source_author", "telegram_channel_username", "updated_at"])
@@ -1263,6 +1284,7 @@ def comun_create_from_telegram_channel(request: HttpRequest) -> HttpResponse:
     ).exists():
         return JsonResponse({"ok": False, "error": "forbidden"}, status=403)
 
+    _attach_pending_comuns_for_author(author)
     existing_comun = _author_telegram_source_comun(author)
     if existing_comun and existing_comun.is_active:
         existing_comun = (

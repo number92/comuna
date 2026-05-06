@@ -573,6 +573,80 @@ def _author_telegram_source_comun(author: Author | None) -> Comun | None:
         return None
 
 
+def _verified_author_owner_ids(author: Author | None) -> list[int]:
+    if not author:
+        return []
+    return list(
+        AuthorAdmin.objects.filter(author=author, verified_at__isnull=False)
+        .order_by("verified_at", "created_at", "id")
+        .values_list("user_id", flat=True)
+    )
+
+
+def _claim_unowned_comun_for_author(comun: Comun, author: Author | None) -> bool:
+    if comun.creator_id:
+        return False
+    verified_owner_ids = _verified_author_owner_ids(author)
+    if not verified_owner_ids:
+        return False
+    owner_id = int(verified_owner_ids[0])
+    comun.creator_id = owner_id
+    comun.save(update_fields=["creator", "updated_at"])
+    comun.moderators.add(owner_id)
+    return True
+
+
+def _ensure_telegram_channel_comun_for_author(author: Author | None) -> Comun | None:
+    if not author:
+        return None
+    normalized_username = _normalize_telegram_channel_username(author.username)
+    if not normalized_username:
+        return None
+
+    current_comun = _author_telegram_source_comun(author)
+    if current_comun:
+        _claim_unowned_comun_for_author(current_comun, author)
+        return current_comun
+
+    comun = (
+        Comun.objects.filter(
+            telegram_channel_username__iexact=normalized_username,
+            telegram_source_author__isnull=True,
+            is_active=True,
+        )
+        .order_by("id")
+        .first()
+    )
+    if comun:
+        _claim_unowned_comun_for_author(comun, author)
+        comun.telegram_source_author = author
+        comun.telegram_channel_username = normalized_username
+        comun.save(update_fields=["telegram_source_author", "telegram_channel_username", "updated_at"])
+        return comun
+
+    verified_owner_ids = _verified_author_owner_ids(author)
+    owner_id = int(verified_owner_ids[0]) if verified_owner_ids else None
+    base_name = (author.title or "").strip() or f"@{author.username}"
+    comun_name = _generate_unique_comun_name(base_name, author.username)
+    comun_slug = _generate_unique_comun_slug(author.username or comun_name)
+    if not comun_slug:
+        comun_slug = _generate_unique_comun_slug(comun_name)
+    if not comun_slug:
+        return None
+    comun = Comun.objects.create(
+        name=comun_name,
+        slug=comun_slug,
+        creator_id=owner_id,
+        logo_url=(author.avatar_url or "").strip(),
+        product_description=(author.description or "").strip(),
+        telegram_source_author=author,
+        telegram_channel_username=normalized_username,
+    )
+    if owner_id:
+        comun.moderators.add(owner_id)
+    return comun
+
+
 def _attach_pending_comuns_for_author(author: Author | None) -> None:
     if not author:
         return
@@ -580,7 +654,12 @@ def _attach_pending_comuns_for_author(author: Author | None) -> None:
     if not normalized_username:
         return
 
+    verified_owner_ids = _verified_author_owner_ids(author)
+
     current_comun = _author_telegram_source_comun(author)
+    if current_comun:
+        _claim_unowned_comun_for_author(current_comun, author)
+
     pending_comuns = (
         Comun.objects.filter(
             telegram_channel_username__iexact=normalized_username,
@@ -594,8 +673,12 @@ def _attach_pending_comuns_for_author(author: Author | None) -> None:
     for comun in pending_comuns:
         if current_comun and current_comun.id != comun.id:
             continue
-        if not _author_is_managed_by_comun_team(author, comun):
+        if comun.creator_id:
+            if not _author_is_managed_by_comun_team(author, comun):
+                continue
+        elif not verified_owner_ids:
             continue
+        _claim_unowned_comun_for_author(comun, author)
         comun.telegram_source_author = author
         comun.telegram_channel_username = normalized_username
         comun.save(update_fields=["telegram_source_author", "telegram_channel_username", "updated_at"])
@@ -1053,6 +1136,7 @@ __all__ = [
     "_comun_source_tags_list",
     "_current_user_verified_telegram_authors",
     "_ensure_comun_category_by_name",
+    "_ensure_telegram_channel_comun_for_author",
     "_ensure_tag_by_name",
     "_favorite_post_ids_for_user",
     "_format_rating_value",

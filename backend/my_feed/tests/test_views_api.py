@@ -180,6 +180,21 @@ class UserFeedSettingsApiTests(TestCase):
         self.assertEqual(response.status_code, 200, response.content.decode())
         self.assertEqual([post["id"] for post in response.json()["posts"]], [self.comun_post.id])
 
+    def test_my_feed_ignores_query_comun_override_for_authenticated_user(self):
+        UserFeedSettings.objects.create(
+            user=self.user,
+            home_feed="mine",
+            my_feed_comuns=[self.comun.slug],
+        )
+        response = self.client.get(
+            reverse("my-feed"),
+            {"comuns": self.other_comun.slug, "limit": "10"},
+            **self.auth_headers,
+        )
+
+        self.assertEqual(response.status_code, 200, response.content.decode())
+        self.assertEqual([post["id"] for post in response.json()["posts"]], [self.comun_post.id])
+
     def test_my_feed_ignores_saved_author_selection_without_comun_subscription(self):
         UserFeedSettings.objects.create(
             user=self.user,

@@ -303,12 +303,8 @@ def my_feed(request: HttpRequest) -> HttpResponse:
         offset = 0
 
     current_user = _fv()._get_user_from_request(request)
-    uses_query_selection = any(
-        param in request.GET
-        for param in ("comuns", "comun_categories")
-    )
     saved_feed_settings = None
-    if current_user and not uses_query_selection:
+    if current_user:
         saved_feed_settings = _serialize_user_feed_settings(
             _get_or_create_user_feed_settings(current_user)
         )

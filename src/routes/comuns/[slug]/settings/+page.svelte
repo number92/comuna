@@ -61,8 +61,8 @@
     channel_url?: string | null
     avatar_url?: string | null
   }
-  type TemplateTypeOption = { value: PostTemplateCode; label: string }
-  type ComunSettingsTabKey = 'description' | 'availability' | 'moderation' | 'categories' | 'rules'
+  type TemplateTypeOption = { value: PostTemplateCode; label: string; description?: string }
+  type ComunSettingsTabKey = 'description' | 'moderation' | 'categories' | 'rules'
   type CustomTemplateBlockOption = { value: string; label: string }
   type CustomTemplatePlacement = '' | 'available' | 'header' | 'footer'
   type CustomTemplateFieldType = 'text' | 'file' | 'select' | 'checkbox'
@@ -91,7 +91,6 @@
   ]
   const comunSettingsTabs: Array<{ value: ComunSettingsTabKey; label: string }> = [
     { value: 'description', label: 'Описание' },
-    { value: 'availability', label: 'Доступность' },
     { value: 'moderation', label: 'Модерирование' },
     { value: 'categories', label: 'Категории и шаблоны' },
     { value: 'rules', label: 'Правила' },
@@ -187,12 +186,17 @@
         .trim()
         .toLowerCase()
       const templateLabel = String((item as any)?.label ?? '').trim()
+      const templateDescription = String((item as any)?.description ?? '').trim()
       const templateValue = templateCodePattern.test(templateValueRaw)
         ? (templateValueRaw as PostTemplateCode)
         : null
       if (!templateValue || !templateLabel || seen.has(templateValue)) continue
       seen.add(templateValue)
-      normalized.push({ value: templateValue, label: templateLabel })
+      normalized.push({
+        value: templateValue,
+        label: templateLabel,
+        ...(templateDescription ? { description: templateDescription } : {}),
+      })
     }
     return normalized.length ? normalized : fallbackTemplateTypeOptions
   }
@@ -1212,31 +1216,63 @@
               class="rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"
             />
           </label>
-        {:else if settingsTab === 'availability'}
-          <label class="flex flex-col gap-1">
-            <span class="text-sm text-slate-700 dark:text-zinc-300">
-              Минимальный рейтинг автора для публикации
-            </span>
-            <input
-              bind:value={settingsDraft.minimum_author_rating_to_post}
-              type="number"
-              min="0"
-              step="0.5"
-              class="rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"
-            />
-            <span class="text-xs text-slate-500 dark:text-zinc-400">
-              `0` означает, что писать в сообщество может любой автор. Сейчас установлен порог от
-              {formatRatingValue(settingsDraft.minimum_author_rating_to_post)}.
-            </span>
-          </label>
-
         {:else if settingsTab === 'moderation'}
-          <div class="flex flex-col gap-3 rounded-xl border border-slate-200 dark:border-zinc-800 px-3 py-3">
-            <div class="text-sm font-medium text-slate-900 dark:text-zinc-100">
+          <div class="rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/40">
+            <div class="mb-4">
+              <div class="text-base font-semibold text-slate-950 dark:text-zinc-50">
+                Доступ к публикации
+              </div>
+              <div class="mt-1 text-sm text-slate-500 dark:text-zinc-400">
+                Общие ограничения для новых постов в сообществе.
+              </div>
+            </div>
+
+            <div class="grid gap-4 md:grid-cols-2">
+              <label class="flex flex-col gap-1">
+                <span class="text-sm font-medium text-slate-700 dark:text-zinc-300">
+                  Минимальный рейтинг автора
+                </span>
+                <input
+                  bind:value={settingsDraft.minimum_author_rating_to_post}
+                  type="number"
+                  min="0"
+                  step="0.5"
+                  class="rounded-xl border border-slate-300 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900"
+                />
+                <span class="text-xs text-slate-500 dark:text-zinc-400">
+                  0 - писать может любой автор. Сейчас: от {formatRatingValue(settingsDraft.minimum_author_rating_to_post)}.
+                </span>
+              </label>
+
+              <label class="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 dark:border-zinc-800 dark:bg-zinc-900/60">
+                <input
+                  type="checkbox"
+                  class="mt-0.5"
+                  checked={Boolean(settingsDraft.forbid_external_links)}
+                  on:change={() =>
+                    (settingsDraft = {
+                      ...settingsDraft,
+                      forbid_external_links: !Boolean(settingsDraft.forbid_external_links),
+                    })}
+                />
+                <span class="min-w-0">
+                  <span class="block text-sm font-medium text-slate-900 dark:text-zinc-100">
+                    Запретить внешние ссылки
+                  </span>
+                  <span class="mt-1 block text-xs text-slate-500 dark:text-zinc-400">
+                    Посты с внешними ссылками не будут попадать в это сообщество, а новые публикации будут отклоняться.
+                  </span>
+                </span>
+              </label>
+            </div>
+          </div>
+
+          <div class="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/40">
+            <div class="text-base font-semibold text-slate-950 dark:text-zinc-50">
               Telegram-канал сообщества
             </div>
-            <div class="text-xs text-slate-500 dark:text-zinc-400">
-              Укажите публичный `@username` канала. Если канал уже подтвержден у вас на сайте, его можно выбрать сразу. Если нет, сохраните username здесь и завершите подключение в боте.
+            <div class="text-sm text-slate-500 dark:text-zinc-400">
+              Укажите публичный @username канала или выберите уже подтвержденный канал.
             </div>
             <input
               value={settingsDraft.telegram_channel_username ?? ''}
@@ -1282,30 +1318,14 @@
             {/if}
           </div>
 
-          <label class="flex items-start gap-2 cursor-pointer rounded-xl border border-slate-200 dark:border-zinc-800 px-3 py-3">
-            <input
-              type="checkbox"
-              class="mt-0.5"
-              checked={Boolean(settingsDraft.forbid_external_links)}
-              on:change={() =>
-                (settingsDraft = {
-                  ...settingsDraft,
-                  forbid_external_links: !Boolean(settingsDraft.forbid_external_links),
-                })}
-            />
-            <span class="min-w-0">
-              <span class="block text-sm text-slate-900 dark:text-zinc-100">
-                Запретить внешние ссылки
-              </span>
-              <span class="block text-xs text-slate-500 dark:text-zinc-400">
-                Посты с внешними ссылками не будут попадать в это сообщество, а новые публикации с такими ссылками будут отклоняться.
-              </span>
-            </span>
-          </label>
-
           {#if canManageComunModerators()}
-            <div class="flex flex-col gap-2">
-              <div class="text-sm text-slate-700 dark:text-zinc-300">Модераторы сообщества</div>
+            <div class="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/40">
+              <div>
+                <div class="text-base font-semibold text-slate-950 dark:text-zinc-50">Модераторы сообщества</div>
+                <div class="mt-1 text-sm text-slate-500 dark:text-zinc-400">
+                  Найдите пользователя и добавьте его в команду модерации.
+                </div>
+              </div>
               <input
                 bind:value={settingsUserSearch}
                 placeholder="Поиск пользователя по имени или логину..."
@@ -1361,8 +1381,13 @@
             </div>
           {/if}
 
-          <div class="flex flex-col gap-2">
-            <div class="text-sm text-slate-700 dark:text-zinc-300">Черный список авторов</div>
+          <div class="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/40">
+            <div>
+              <div class="text-base font-semibold text-slate-950 dark:text-zinc-50">Черный список авторов</div>
+              <div class="mt-1 text-sm text-slate-500 dark:text-zinc-400">
+                Посты выбранных авторов будут исключаться из сообщества.
+              </div>
+            </div>
             <input
               bind:value={settingsAuthorSearch}
               placeholder="Поиск автора по логину или названию..."
@@ -1417,10 +1442,12 @@
             </div>
           </div>
 
-          <div class="flex flex-col gap-2">
-            <div class="text-sm text-slate-700 dark:text-zinc-300">Черный список тегов</div>
-            <div class="text-xs text-slate-500 dark:text-zinc-400">
-              Посты с этими тегами будут исключаться из сообщества.
+          <div class="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-950/40">
+            <div>
+              <div class="text-base font-semibold text-slate-950 dark:text-zinc-50">Черный список тегов</div>
+              <div class="mt-1 text-sm text-slate-500 dark:text-zinc-400">
+                Посты с этими тегами будут исключаться из сообщества.
+              </div>
             </div>
             <input
               bind:value={settingsBlockedTagSearch}

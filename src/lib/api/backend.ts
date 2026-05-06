@@ -507,7 +507,7 @@ export type BackendComun = {
   hide_from_home?: boolean
   allowed_template_types?: string[]
   allowed_post_templates?: string[]
-  template_type_options?: Array<{ value: string; label: string }>
+  template_type_options?: Array<{ value: string; label: string; description?: string }>
   template_editor_blocks_by_template?: Record<string, string[]>
   custom_templates?: BackendComunCustomTemplate[]
   is_active?: boolean
@@ -554,7 +554,7 @@ export type BackendComun = {
       channel_url?: string | null
       avatar_url?: string | null
     }>
-    template_types?: Array<{ value: string; label: string }>
+    template_types?: Array<{ value: string; label: string; description?: string }>
     template_editor_block_options_by_template?: Record<string, Array<{ value: string; label: string }>>
     template_editor_blocks_by_template?: Record<string, string[]>
     custom_template_editor?: {

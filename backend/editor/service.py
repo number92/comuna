@@ -12,6 +12,7 @@ from datetime import datetime as dt_datetime, timedelta, timezone as dt_timezone
 
 from communities.models import Comun, ComunCategory, ComunPostCategoryAssignment
 from django.contrib.auth import get_user_model
+from django.db import OperationalError, ProgrammingError
 from django.db.models import Avg, Count
 from django.http import HttpRequest
 from django.utils import timezone
@@ -1270,10 +1271,26 @@ def _sync_template_derived_raw_data(
 
 
 def _serialize_post_template_type_options() -> list[dict]:
-    return [
-        {"value": value, "label": label}
-        for value, label in post_template_type_choices()
-    ]
+    descriptions_by_type: dict[str, str] = {}
+    try:
+        for template_type, description in PostTemplateConfig.objects.values_list(
+            "template_type", "description"
+        ):
+            code = normalize_post_template_type_code(template_type)
+            normalized_description = re.sub(r"\s+", " ", str(description or "").strip())[:500]
+            if code and normalized_description:
+                descriptions_by_type[code] = normalized_description
+    except (OperationalError, ProgrammingError):
+        descriptions_by_type = {}
+
+    options: list[dict] = []
+    for value, label in post_template_type_choices():
+        option = {"value": value, "label": label}
+        description = descriptions_by_type.get(normalize_post_template_type_code(value), "")
+        if description:
+            option["description"] = description
+        options.append(option)
+    return options
 
 
 def _serialize_template_editor_block_options_by_template() -> dict[str, list[dict]]:

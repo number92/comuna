@@ -969,9 +969,14 @@
                             on:click={() => selectTemplateType(templateOption.value)}
                           >
                             <div class="min-w-0 flex-1">
-                              <div class="truncate text-sm font-medium text-slate-900 dark:text-zinc-100">
+                              <div class="text-sm font-medium text-slate-900 dark:text-zinc-100">
                                 {templateOption.label}
                               </div>
+                              {#if templateOption.description}
+                                <div class="mt-1 text-xs leading-snug text-slate-500 dark:text-zinc-400">
+                                  {templateOption.description}
+                                </div>
+                              {/if}
                             </div>
                           </button>
                         {/each}

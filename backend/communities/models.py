@@ -32,6 +32,11 @@ class ComunCategory(models.Model):
         verbose_name="Публикация только для создателя и модераторов",
         help_text="Если включено, писать в эту категорию смогут только создатель сообщества, модераторы и администраторы сайта.",
     )
+    hide_from_home = models.BooleanField(
+        default=False,
+        verbose_name="Не показывать в горячем",
+        help_text="Посты этой категории не будут попадать в Горячее.",
+    )
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -139,22 +144,6 @@ class Comun(models.Model):
         related_name="excluded_from_comuns",
         verbose_name="Исключенные авторы",
         help_text="Авторы, чьи посты не будут попадать в это сообщество.",
-    )
-    product_tag = models.ForeignKey(
-        "feeds.Tag",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="comuns",
-        verbose_name="Тег продукта",
-        help_text="Все посты с этим тегом попадут в коммуну.",
-    )
-    source_tags = models.ManyToManyField(
-        "feeds.Tag",
-        blank=True,
-        related_name="comuns_source",
-        verbose_name="Теги сообщества",
-        help_text="Посты с этими тегами будут попадать в сообщество.",
     )
     welcome_post = models.ForeignKey(
         "feeds.Post",

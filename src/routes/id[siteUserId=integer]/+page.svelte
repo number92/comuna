@@ -358,9 +358,13 @@
                     </span>
                   {/if}
                 </div>
-                {#if comun.product_tag?.name}
-                  <div class="mt-1 text-xs text-slate-500 dark:text-zinc-400">
-                    #{comun.product_tag.name}
+                {#if comun.tags?.length}
+                  <div class="mt-1 flex flex-wrap gap-1">
+                    {#each comun.tags.slice(0, 3) as tag}
+                      <span class="rounded-full bg-slate-100 dark:bg-zinc-800 px-2 py-0.5 text-xs text-slate-500 dark:text-zinc-400">
+                        #{tag.name}
+                      </span>
+                    {/each}
                   </div>
                 {/if}
                 {#if comun.product_description}

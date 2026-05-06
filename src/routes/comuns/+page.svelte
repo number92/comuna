@@ -366,16 +366,12 @@
                 <div class="text-base font-semibold text-slate-900 dark:text-zinc-100 truncate">
                   {comun.name}
                 </div>
-                {#if comun.source_tags?.length}
-                  {#each comun.source_tags.slice(0, 2) as sourceTag}
+                {#if comun.tags?.length}
+                  {#each comun.tags.slice(0, 2) as sourceTag}
                     <span class="shrink-0 rounded-full bg-slate-100 dark:bg-zinc-800 px-2 py-0.5 text-xs text-slate-600 dark:text-zinc-300">
                       #{sourceTag.name}
                     </span>
                   {/each}
-                {:else if comun.product_tag}
-                  <span class="shrink-0 rounded-full bg-slate-100 dark:bg-zinc-800 px-2 py-0.5 text-xs text-slate-600 dark:text-zinc-300">
-                    #{comun.product_tag.name}
-                  </span>
                 {/if}
               </div>
               {#if comun.product_description}

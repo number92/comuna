@@ -2916,6 +2916,9 @@ def home_feed(request: HttpRequest) -> HttpResponse:
     hidden_home_comun_slugs = list(
         Comun.objects.filter(hide_from_home=True).values_list("slug", flat=True)
     )
+    hidden_home_comun_category_post_ids = ComunPostCategoryAssignment.objects.filter(
+        category__hide_from_home=True,
+    ).values("post_id")
     base_query = (
         Post.objects.filter(
             is_blocked=False,
@@ -2930,11 +2933,14 @@ def home_feed(request: HttpRequest) -> HttpResponse:
         .annotate(has_hidden_home_tag=Exists(hidden_home_tag_qs))
         .filter(has_hidden_home_tag=False)
         .filter(combined_scaled__gte=0)
+        .exclude(id__in=hidden_home_comun_category_post_ids)
     )
     if hidden_home_comun_slugs:
         hidden_home_comun_post_ids = Post.objects.filter(
             raw_data__source="manual_comun",
             raw_data__comun_slug__in=hidden_home_comun_slugs,
+        ).exclude(
+            comun_category_assignments__category_id__isnull=False,
         ).values("id")
         base_query = base_query.exclude(id__in=hidden_home_comun_post_ids)
     hidden_read_count = 0
@@ -3625,8 +3631,6 @@ _comun_categories_count = community_service._comun_categories_count
 _recalculate_comun_rating = community_service._recalculate_comun_rating
 _serialize_comun_rating = community_serializers._serialize_comun_rating
 _serialize_comun = community_serializers._serialize_comun
-_comun_product_tag_filter = community_service._comun_product_tag_filter
-_comun_source_tags_list = community_service._comun_source_tags_list
 _comun_source_filter = community_service._comun_source_filter
 _is_internal_comuna_url = community_service._is_internal_comuna_url
 _text_contains_external_links = community_service._text_contains_external_links

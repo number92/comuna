@@ -520,7 +520,7 @@ def _comun_post_access_state(
         return False, minimum_rating, None
     if _comun_is_moderator(user, comun):
         return True, minimum_rating, None
-    if bool(getattr(comun, "only_moderators_can_post", False)):
+    if category is None and bool(getattr(comun, "only_moderators_can_post", False)):
         return False, minimum_rating, None
     if category is not None and bool(getattr(category, "only_moderators_can_post", False)):
         return False, minimum_rating, None
@@ -547,12 +547,12 @@ def _comun_post_access_error_message(
     author_rating: float | None = None,
     category: ComunCategory | None = None,
 ) -> str:
-    if bool(getattr(comun, "only_moderators_can_post", False)):
-        return "Публикация в этом сообществе доступна только создателю и модераторам."
     if category is not None and bool(getattr(category, "only_moderators_can_post", False)):
         return (
             f'Публикация в категории "{category.name}" доступна только создателю и модераторам.'
         )
+    if category is None and bool(getattr(comun, "only_moderators_can_post", False)):
+        return "Публикация без категории доступна только создателю и модераторам."
     minimum_text = _format_rating_value(_comun_minimum_author_rating_value(comun))
     if author_rating is None:
         return f"Для публикации в этой комуне нужен рейтинг автора не ниже {minimum_text}."
@@ -579,7 +579,6 @@ def _serialize_comun_profile_card(
     current_user: User | None = None,
     role: str = "moderator",
 ) -> dict:
-    product_tag = comun.product_tag
     source_rubric = getattr(comun, "source_rubric", None)
     tags = list(comun.tags.filter(is_active=True).order_by("name"))
     return {
@@ -593,15 +592,6 @@ def _serialize_comun_profile_card(
         "target_audience": comun.target_audience,
         "role": role,
         "can_moderate": _comun_is_moderator(current_user, comun),
-        "product_tag": (
-            {
-                "id": product_tag.id,
-                "name": product_tag.name,
-                "lemma": product_tag.lemma or _fv()._lemmatize_tag(product_tag.name) or product_tag.name,
-            }
-            if product_tag
-            else None
-        ),
         "source_rubric": (
             {
                 "id": source_rubric.id,
@@ -632,6 +622,7 @@ def _serialize_comun_category(category: ComunCategory, comun: Comun | None = Non
         "description": category.description,
         "sort_order": category.sort_order,
         "only_moderators_can_post": bool(getattr(category, "only_moderators_can_post", False)),
+        "hide_from_home": bool(getattr(category, "hide_from_home", False)),
         "category_allowed_template_types": category_allowed_template_types,
         "allowed_template_types": _allowed_templates_for_comun_category(comun, category),
         "inherits_comun_template_types": not bool(category_allowed_template_types),
@@ -715,8 +706,6 @@ def _serialize_comun(
     ]
     moderators = list(comun.moderators.select_related("site_profile").order_by("username"))
     excluded_authors = list(comun.excluded_authors.filter(is_blocked=False).order_by("username"))
-    source_tags = _comun_source_tags_list(comun)
-    product_tag = source_tags[0] if source_tags else comun.product_tag
     source_rubric = getattr(comun, "source_rubric", None)
     telegram_source_author = getattr(comun, "telegram_source_author", None)
     tags = list(comun.tags.filter(is_active=True).order_by("name"))
@@ -793,23 +782,6 @@ def _serialize_comun(
         "excluded_authors_count": len(excluded_authors),
         "categories": [_serialize_comun_category(category, comun) for category in categories],
         "categories_count": len(categories),
-        "source_tags": [
-            {
-                "id": tag.id,
-                "name": tag.name,
-                "lemma": tag.lemma or _fv()._lemmatize_tag(tag.name) or tag.name,
-            }
-            for tag in source_tags
-        ],
-        "product_tag": (
-            {
-                "id": product_tag.id,
-                "name": product_tag.name,
-                "lemma": product_tag.lemma or _fv()._lemmatize_tag(product_tag.name) or product_tag.name,
-            }
-            if product_tag
-            else None
-        ),
         "source_rubric": (
             {
                 "id": source_rubric.id,
@@ -872,11 +844,9 @@ def _serialize_comun(
         payload["roadmap_category_ids"] = [category.id for category in roadmap_categories]
         payload["moderator_ids"] = [moderator.id for moderator in moderators]
         payload["tag_ids"] = [tag.id for tag in tags]
-        payload["source_tag_ids"] = [tag.id for tag in source_tags]
         payload["excluded_author_ids"] = [author.id for author in excluded_authors]
         payload["blocked_tag_ids"] = [tag.id for tag in blocked_tags]
         payload["excluded_tag_ids"] = [tag.id for tag in blocked_tags]
-        payload["product_tag_id"] = comun.product_tag_id
         payload["telegram_source_author_id"] = comun.telegram_source_author_id
         payload["welcome_post_ref"] = str(comun.welcome_post_id or "")
     if include_options:
@@ -928,39 +898,9 @@ def _serialize_comun(
     return payload
 
 
-def _comun_product_tag_filter(product_tag: Tag | None) -> Q | None:
-    if not product_tag:
-        return None
-    filters = Q(tags__id=product_tag.id)
-    tag_name = _fv()._normalize_tag_value(product_tag.name)
-    if tag_name:
-        filters |= Q(tags__name__iexact=tag_name)
-    tag_lemma = (product_tag.lemma or _fv()._lemmatize_tag(product_tag.name) or "").strip()
-    if tag_lemma:
-        filters |= Q(tags__lemma__iexact=tag_lemma)
-    return filters
-
-
-def _comun_source_tags_list(comun: Comun) -> list[Tag]:
-    source_tags = list(comun.source_tags.filter(is_active=True).order_by("name"))
-    if source_tags:
-        return source_tags
-    product_tag = comun.product_tag
-    if product_tag and product_tag.is_active:
-        return [product_tag]
-    return []
-
-
 def _comun_source_filter(comun: Comun) -> Q | None:
     combined_filter = Q()
     has_source = False
-
-    for source_tag in _comun_source_tags_list(comun):
-        tag_filter = _comun_product_tag_filter(source_tag)
-        if tag_filter is None:
-            continue
-        combined_filter |= tag_filter
-        has_source = True
 
     source_rubric_id = getattr(comun, "source_rubric_id", None)
     if source_rubric_id:
@@ -1294,8 +1234,8 @@ def comun_create_from_telegram_channel(request: HttpRequest) -> HttpResponse:
     if existing_comun and existing_comun.is_active:
         existing_comun = (
             Comun.objects.filter(id=existing_comun.id)
-            .select_related("creator", "product_tag", "source_rubric", "welcome_post", "telegram_source_author")
-            .prefetch_related("moderators", "excluded_authors", "categories", "tags", "source_tags", "blocked_tags")
+            .select_related("creator", "source_rubric", "welcome_post", "telegram_source_author")
+            .prefetch_related("moderators", "excluded_authors", "categories", "tags", "blocked_tags")
             .first()
         )
         return JsonResponse(
@@ -1333,8 +1273,8 @@ def comun_create_from_telegram_channel(request: HttpRequest) -> HttpResponse:
     comun.moderators.add(current_user)
     comun = (
         Comun.objects.filter(id=comun.id)
-        .select_related("creator", "product_tag", "source_rubric", "welcome_post", "telegram_source_author")
-        .prefetch_related("moderators", "excluded_authors", "categories", "tags", "source_tags", "blocked_tags")
+        .select_related("creator", "source_rubric", "welcome_post", "telegram_source_author")
+        .prefetch_related("moderators", "excluded_authors", "categories", "tags", "blocked_tags")
         .get()
     )
     return JsonResponse(
@@ -1360,8 +1300,8 @@ def comuns_list_create(request: HttpRequest) -> HttpResponse:
     if request.method == "GET":
         comuns = list(
             Comun.objects.filter(is_active=True).exclude(slug__iexact="faq")
-            .select_related("creator", "product_tag", "source_rubric", "telegram_source_author")
-            .prefetch_related("moderators", "excluded_authors", "categories", "tags", "source_tags", "blocked_tags")
+            .select_related("creator", "source_rubric", "telegram_source_author")
+            .prefetch_related("moderators", "excluded_authors", "categories", "tags", "blocked_tags")
             .order_by("-rating_score", "sort_order", "name")
         )
         payload = [
@@ -1419,12 +1359,6 @@ def comuns_list_create(request: HttpRequest) -> HttpResponse:
     tag_ids = community_service._parse_int_list(body.get("tag_ids"))[:5]
     raw_tag_names = body.get("tag_names") if isinstance(body.get("tag_names"), list) else []
     category_ids = community_service._parse_int_list(body.get("category_ids"))
-    source_tag_ids = community_service._parse_int_list(body.get("source_tag_ids"))[:5]
-    raw_source_tag_names = (
-        body.get("source_tag_names") if isinstance(body.get("source_tag_names"), list) else []
-    )
-    product_tag_id = _parse_post_reference_to_id(body.get("product_tag_id"))
-    product_tag_name = str(body.get("product_tag_name") or "").strip()
     welcome_post_id = _parse_post_reference_to_id(body.get("welcome_post_id") or body.get("welcome_post_ref"))
     selected_tag_ids: list[int] = []
     seen_tag_ids: set[int] = set()
@@ -1441,30 +1375,6 @@ def comuns_list_create(request: HttpRequest) -> HttpResponse:
         selected_tag_ids.append(tag.id)
         if len(selected_tag_ids) >= 5:
             break
-    selected_source_tag_ids: list[int] = []
-    seen_source_tag_ids: set[int] = set()
-    for tag_id in source_tag_ids:
-        if tag_id in seen_source_tag_ids:
-            continue
-        seen_source_tag_ids.add(tag_id)
-        selected_source_tag_ids.append(tag_id)
-    if product_tag_id and product_tag_id not in seen_source_tag_ids:
-        seen_source_tag_ids.add(product_tag_id)
-        selected_source_tag_ids.append(product_tag_id)
-    for raw_source_tag_name in raw_source_tag_names:
-        tag, _created = community_service._ensure_tag_by_name(str(raw_source_tag_name or ""))
-        if not tag or tag.id in seen_source_tag_ids:
-            continue
-        seen_source_tag_ids.add(tag.id)
-        selected_source_tag_ids.append(tag.id)
-        if len(selected_source_tag_ids) >= 5:
-            break
-    if product_tag_name and len(selected_source_tag_ids) < 5:
-        tag, _created = community_service._ensure_tag_by_name(product_tag_name)
-        if tag and tag.id not in seen_source_tag_ids:
-            selected_source_tag_ids.append(tag.id)
-            seen_source_tag_ids.add(tag.id)
-
     comun = Comun.objects.create(
         name=name,
         slug=slug,
@@ -1483,10 +1393,6 @@ def comuns_list_create(request: HttpRequest) -> HttpResponse:
         )
     if selected_tag_ids:
         comun.tags.set(Tag.objects.filter(id__in=selected_tag_ids, is_active=True))
-    if selected_source_tag_ids:
-        source_tag_queryset = Tag.objects.filter(id__in=selected_source_tag_ids, is_active=True)
-        comun.source_tags.set(source_tag_queryset)
-        comun.product_tag = source_tag_queryset.order_by("name").first()
     if welcome_post_id:
         welcome_post = Post.objects.filter(id=welcome_post_id, is_blocked=False, author__is_blocked=False).first()
         if welcome_post:
@@ -1495,8 +1401,8 @@ def comuns_list_create(request: HttpRequest) -> HttpResponse:
 
     comun = (
         Comun.objects.filter(id=comun.id)
-        .select_related("creator", "product_tag", "source_rubric", "welcome_post", "telegram_source_author")
-        .prefetch_related("moderators", "excluded_authors", "categories", "tags", "source_tags", "blocked_tags")
+        .select_related("creator", "source_rubric", "welcome_post", "telegram_source_author")
+        .prefetch_related("moderators", "excluded_authors", "categories", "tags", "blocked_tags")
         .get()
     )
     return JsonResponse({"ok": True, "comun": _serialize_comun(request, comun, current_user=current_user, include_manage_fields=True)})
@@ -1508,8 +1414,8 @@ def comun_detail_manage(request: HttpRequest, slug: str) -> HttpResponse:
     try:
         comun = (
             Comun.objects.filter(slug=slug)
-            .select_related("creator", "product_tag", "source_rubric", "welcome_post", "telegram_source_author")
-            .prefetch_related("moderators", "excluded_authors", "categories", "tags", "source_tags", "blocked_tags")
+            .select_related("creator", "source_rubric", "welcome_post", "telegram_source_author")
+            .prefetch_related("moderators", "excluded_authors", "categories", "tags", "blocked_tags")
             .get()
         )
     except Comun.DoesNotExist:
@@ -1630,6 +1536,10 @@ def comun_detail_manage(request: HttpRequest, slug: str) -> HttpResponse:
         moderator_ids = {int(user_id) for user_id in moderator_ids if int(user_id) > 0}
         comun.moderators.set(User.objects.filter(id__in=moderator_ids, is_active=True))
 
+    if "tag_ids" in body:
+        tag_ids = community_service._parse_int_list(body.get("tag_ids"))[:5]
+        comun.tags.set(Tag.objects.filter(id__in=tag_ids, is_active=True))
+
     if "excluded_author_ids" in body:
         comun.excluded_authors.set(
             Author.objects.filter(
@@ -1637,45 +1547,6 @@ def comun_detail_manage(request: HttpRequest, slug: str) -> HttpResponse:
                 is_blocked=False,
             )
         )
-
-    if (
-        "source_tag_ids" in body
-        or "source_tag_names" in body
-        or "product_tag_id" in body
-        or "product_tag_name" in body
-    ):
-        source_tag_ids = community_service._parse_int_list(body.get("source_tag_ids"))[:5]
-        raw_source_tag_names = (
-            body.get("source_tag_names") if isinstance(body.get("source_tag_names"), list) else []
-        )
-        if "product_tag_id" in body:
-            product_tag_id = _parse_post_reference_to_id(body.get("product_tag_id"))
-            if product_tag_id and product_tag_id not in source_tag_ids:
-                source_tag_ids.append(product_tag_id)
-        if "product_tag_name" in body:
-            product_tag_name = str(body.get("product_tag_name") or "").strip()
-            if product_tag_name:
-                raw_source_tag_names = [*raw_source_tag_names, product_tag_name]
-
-        selected_source_tag_ids: list[int] = []
-        seen_source_tag_ids: set[int] = set()
-        for tag_id in source_tag_ids:
-            if tag_id in seen_source_tag_ids:
-                continue
-            seen_source_tag_ids.add(tag_id)
-            selected_source_tag_ids.append(tag_id)
-        for raw_source_tag_name in raw_source_tag_names:
-            tag, _created = community_service._ensure_tag_by_name(str(raw_source_tag_name or ""))
-            if not tag or tag.id in seen_source_tag_ids:
-                continue
-            seen_source_tag_ids.add(tag.id)
-            selected_source_tag_ids.append(tag.id)
-            if len(selected_source_tag_ids) >= 5:
-                break
-
-        source_tags_queryset = Tag.objects.filter(id__in=selected_source_tag_ids, is_active=True)
-        comun.source_tags.set(source_tags_queryset)
-        comun.product_tag = source_tags_queryset.order_by("name").first()
 
     if "telegram_source_author_id" in body or "telegram_channel_username" in body:
         telegram_source_author_id = _parse_post_reference_to_id(body.get("telegram_source_author_id"))
@@ -1832,6 +1703,22 @@ def comun_detail_manage(request: HttpRequest, slug: str) -> HttpResponse:
             category.only_moderators_can_post = next_only_moderators_can_post
             category.save(update_fields=["only_moderators_can_post", "updated_at"])
 
+    if "category_hide_from_home_ids" in body:
+        if not _comun_can_manage_moderators(current_user, comun):
+            return JsonResponse({"ok": False, "error": "forbidden"}, status=403)
+        category_hide_from_home_ids = set(
+            community_service._parse_int_list(body.get("category_hide_from_home_ids"))
+        )
+        for category in ComunCategory.objects.filter(
+            comun=comun,
+            is_active=True,
+        ):
+            next_hide_from_home = category.id in category_hide_from_home_ids
+            if bool(getattr(category, "hide_from_home", False)) == next_hide_from_home:
+                continue
+            category.hide_from_home = next_hide_from_home
+            category.save(update_fields=["hide_from_home", "updated_at"])
+
     if "blocked_tag_ids" in body or "excluded_tag_ids" in body:
         blocked_tag_ids = community_service._parse_int_list(
             body.get("blocked_tag_ids")
@@ -1857,8 +1744,8 @@ def comun_detail_manage(request: HttpRequest, slug: str) -> HttpResponse:
 
     comun = (
         Comun.objects.filter(id=comun.id)
-        .select_related("creator", "product_tag", "source_rubric", "welcome_post", "telegram_source_author")
-        .prefetch_related("moderators", "excluded_authors", "categories", "tags", "source_tags", "blocked_tags")
+        .select_related("creator", "source_rubric", "welcome_post", "telegram_source_author")
+        .prefetch_related("moderators", "excluded_authors", "categories", "tags", "blocked_tags")
         .get()
     )
     return JsonResponse(
@@ -1951,8 +1838,8 @@ def comun_posts(request: HttpRequest, slug: str) -> HttpResponse:
     try:
         comun = (
             Comun.objects.filter(slug=slug)
-            .select_related("creator", "product_tag", "source_rubric", "welcome_post", "telegram_source_author")
-            .prefetch_related("moderators", "excluded_authors", "categories", "source_tags", "blocked_tags")
+            .select_related("creator", "source_rubric", "welcome_post", "telegram_source_author")
+            .prefetch_related("moderators", "excluded_authors", "categories", "blocked_tags")
             .get()
         )
     except Comun.DoesNotExist:
@@ -2043,24 +1930,7 @@ def comun_posts(request: HttpRequest, slug: str) -> HttpResponse:
         except ValueError:
             return JsonResponse({"ok": False, "error": "unable to create post"}, status=500)
 
-        raw_explicit_tags = community_service._parse_tag_payload(payload.get("tags"))
-        explicit_tags: list[str] = []
-        seen_tag_keys: set[str] = set()
-        for source_tag in _comun_source_tags_list(comun):
-            source_tag_name = (source_tag.name or "").strip()
-            if not source_tag_name:
-                continue
-            source_tag_key = source_tag_name.lower()
-            if source_tag_key in seen_tag_keys:
-                continue
-            explicit_tags.append(source_tag_name)
-            seen_tag_keys.add(source_tag_key)
-        for tag_name in raw_explicit_tags:
-            key = (tag_name or "").strip().lower()
-            if not key or key in seen_tag_keys:
-                continue
-            seen_tag_keys.add(key)
-            explicit_tags.append(tag_name)
+        explicit_tags = community_service._parse_tag_payload(payload.get("tags"))
 
         raw_data = {
             "source": "manual_comun",
@@ -2231,7 +2101,7 @@ def comun_post_category_update(request: HttpRequest, slug: str, post_id: int) ->
     try:
         comun = (
             Comun.objects.filter(slug=slug)
-            .select_related("creator", "product_tag", "source_rubric", "telegram_source_author")
+            .select_related("creator", "source_rubric", "telegram_source_author")
             .prefetch_related("moderators", "categories")
             .get()
         )
@@ -2337,8 +2207,6 @@ _comun_minimum_author_rating_value = community_service._comun_minimum_author_rat
 _comun_post_access_state = community_service._comun_post_access_state
 _comun_post_access_error_message = community_service._comun_post_access_error_message
 _comun_logo_url = community_service._comun_logo_url
-_comun_product_tag_filter = community_service._comun_product_tag_filter
-_comun_source_tags_list = community_service._comun_source_tags_list
 _comun_source_filter = community_service._comun_source_filter
 _comun_post_membership_filter = community_service._comun_post_membership_filter
 _is_internal_comuna_url = community_service._is_internal_comuna_url

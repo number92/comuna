@@ -361,6 +361,7 @@ export type BackendAuthor = {
 }
 
 export type BackendTag = {
+  id: number
   name: string
   lemma?: string | null
   mood?: string
@@ -414,6 +415,7 @@ export type BackendComunCategory = {
   description?: string | null
   sort_order?: number
   only_moderators_can_post?: boolean
+  hide_from_home?: boolean
   allowed_template_types?: string[]
   category_allowed_template_types?: string[]
   inherits_comun_template_types?: boolean
@@ -522,9 +524,6 @@ export type BackendComun = {
   categories?: BackendComunCategory[]
   categories_count?: number
   category_ids?: number[]
-  source_tags?: BackendTag[]
-  source_tag_ids?: number[]
-  product_tag?: { id: number; name: string; lemma?: string | null } | null
   blocked_tags?: BackendTag[]
   excluded_tags?: BackendTag[]
   blocked_tag_ids?: number[]
@@ -539,7 +538,6 @@ export type BackendComun = {
   telegram_source_author_id?: number | null
   telegram_channel_username?: string | null
   source_rubric?: { id: number; name: string; slug: string } | null
-  product_tag_id?: number | null
   welcome_post_id?: number | null
   welcome_post_ref?: string
   welcome_post?: BackendPost | null
@@ -601,7 +599,6 @@ export type BackendPublicSiteUserComun = {
   role?: 'creator' | 'moderator' | string
   can_moderate?: boolean
   categories_count?: number
-  product_tag?: { id: number; name: string; lemma?: string | null } | null
 }
 
 export type BackendPublicSiteUserAuthor = {

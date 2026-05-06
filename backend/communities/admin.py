@@ -49,7 +49,6 @@ class ComunAdmin(admin.ModelAdmin):
         "rating_score",
         "slug",
         "creator",
-        "product_tag",
         "welcome_post",
         "is_active",
         "sort_order",
@@ -60,7 +59,7 @@ class ComunAdmin(admin.ModelAdmin):
     search_fields = ("name", "slug", "product_description", "target_audience")
     prepopulated_fields = {"slug": ("name",)}
     filter_horizontal = ("moderators", "categories")
-    raw_id_fields = ("creator", "product_tag", "welcome_post")
+    raw_id_fields = ("creator", "welcome_post")
     readonly_fields = ("rating_score",)
     ordering = ("-rating_score", "sort_order", "name")
     fields = (
@@ -68,7 +67,6 @@ class ComunAdmin(admin.ModelAdmin):
         "slug",
         "creator",
         "moderators",
-        "product_tag",
         "welcome_post",
         "website_url",
         "logo_url",

@@ -13,11 +13,9 @@
     buildBackendPostPath,
     buildComunPostsUrl,
     buildComunUrl,
-    buildTagsEnsureUrl,
     type BackendComun,
     type BackendComunCategory,
     type BackendPost,
-    type BackendTag,
   } from '$lib/api/backend'
   import { refreshSiteUser, siteToken, siteUser, uploadSiteImage } from '$lib/siteAuth'
   import { env } from '$env/dynamic/public'
@@ -44,8 +42,6 @@
   let deleteComunOpen = false
   let deleteComunSaving = false
   let settingsError = ''
-  let settingsTagSearch = ''
-  let settingsTagCreating = false
   let settingsUserSearch = ''
   let settingsDraft: BackendComun | null = null
   let settingsLogoInput: HTMLInputElement | null = null
@@ -53,9 +49,7 @@
   let autoSettingsOpenHandled = false
   let wantsSettingsOpenFromUrl = false
   let settingsCategoryOptions: BackendComunCategory[] = []
-  type ComunTagOption = BackendTag & { id: number }
   type ComunUserOption = { id: number; username: string; display_name?: string | null }
-  let settingsTagOptions: ComunTagOption[] = []
   let settingsUserOptions: ComunUserOption[] = []
   const COMUN_SUGGESTIONS_CATEGORY_SLUGS = new Set(['feature-ideas', 'suggestions'])
   const ROADMAP_PREVIEW_LIMIT = 4
@@ -321,7 +315,6 @@
       ),
       only_moderators_can_post: Boolean(value?.only_moderators_can_post),
       hide_from_home: Boolean(value?.hide_from_home),
-      product_tag_id: value?.product_tag_id ?? value?.product_tag?.id ?? null,
       category_ids: comunCategoryIds(value),
       moderator_ids: comunModeratorIds(value),
       welcome_post_ref: String(value?.welcome_post_ref ?? value?.welcome_post_id ?? '').trim(),
@@ -831,7 +824,6 @@
         comun = payload.comun
         settingsDraft = cloneComun(payload.comun)
         settingsCategoryOptions = payload.comun?.options?.categories ?? []
-        settingsTagOptions = payload.comun?.options?.tags ?? []
         settingsUserOptions = payload.comun?.options?.users ?? []
       }
     } catch (error) {
@@ -847,7 +839,6 @@
       goto(`/account?next=${encodeURIComponent(next)}`)
       return
     }
-    settingsTagSearch = ''
     settingsUserSearch = ''
     settingsDraft = cloneComun(comun)
     await refreshComunManage()
@@ -905,45 +896,15 @@
     setDraftModeratorIds(comunModeratorIds(settingsDraft).filter((id) => id !== userId))
   }
 
-  const chooseDraftTag = (tag: ComunTagOption) => {
-    if (!settingsDraft) return
-    settingsDraft = {
-      ...settingsDraft,
-      product_tag_id: tag.id,
-      product_tag: { id: tag.id, name: tag.name, lemma: tag.lemma ?? null },
-    }
-  }
-
-  const clearDraftTag = () => {
-    if (!settingsDraft) return
-    settingsDraft = { ...settingsDraft, product_tag_id: null, product_tag: null }
-  }
-
-  const normalizeTagInput = (value: string) =>
-    value.trim().replace(/^#+/, '').replace(/\s+/g, ' ').trim()
-
-  $: normalizedTagSearch = settingsTagSearch.trim().toLowerCase()
-  $: normalizedTagCreateValue = normalizeTagInput(settingsTagSearch)
-  $: hasExactTagMatch = (settingsTagOptions ?? []).some((tag) => {
-    const needle = normalizedTagCreateValue.toLowerCase()
-    if (!needle) return false
-    return [tag.name, tag.lemma ?? '']
-      .map((value) => normalizeTagInput(value).toLowerCase())
-      .some((value) => value === needle)
-  })
   $: draftCategoryIdSet = new Set<number>(
     ((settingsDraft?.category_ids as number[] | undefined) ??
       (settingsDraft?.categories ?? []).map((item) => item.id)) as number[]
   )
-  $: filteredTagOptions = (settingsTagOptions ?? []).filter((tag) => {
-    if (!normalizedTagSearch) return false
-    return [tag.name, tag.lemma ?? ''].some((value) => value.toLowerCase().includes(normalizedTagSearch))
-  }).slice(0, 30)
   $: normalizedUserSearch = settingsUserSearch.trim().toLowerCase()
   $: draftModeratorIdSet = new Set<number>(comunModeratorIds(settingsDraft))
   $: settingsHasChanges = settingsComparable(settingsDraft) !== settingsComparable(comun)
   $: settingsCanDismiss =
-    !settingsHasChanges && !settingsSaving && !settingsLogoUploading && !settingsTagCreating
+    !settingsHasChanges && !settingsSaving && !settingsLogoUploading
   $: filteredUserOptions = (settingsUserOptions ?? [])
     .filter((user) => {
       if (!normalizedUserSearch) return false
@@ -961,48 +922,6 @@
       display_name: fromDraft?.display_name ?? null,
     }
   })
-  $: selectedProductTag = settingsDraft?.product_tag ?? null
-
-  const createTagAndChooseDraft = async () => {
-    const tagName = normalizeTagInput(settingsTagSearch)
-    if (!tagName || settingsTagCreating) return
-    settingsTagCreating = true
-    try {
-      const response = await fetch(buildTagsEnsureUrl(), {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify({ name: tagName }),
-      })
-      const payload = await response.json().catch(() => ({}))
-      if (!response.ok || !payload?.tag?.id) {
-        throw new Error(payload?.error || 'Не удалось добавить тег')
-      }
-      const nextTag: ComunTagOption = {
-        id: Number(payload.tag.id),
-        name: String(payload.tag.name ?? tagName),
-        lemma: payload.tag.lemma ? String(payload.tag.lemma) : null,
-      }
-      const nextOptions = [...(settingsTagOptions ?? [])]
-      const existingIndex = nextOptions.findIndex((tag) => tag.id === nextTag.id)
-      if (existingIndex >= 0) {
-        nextOptions[existingIndex] = nextTag
-      } else {
-        nextOptions.push(nextTag)
-      }
-      settingsTagOptions = nextOptions.sort((a, b) => a.name.localeCompare(b.name, 'ru'))
-      chooseDraftTag(nextTag)
-      settingsTagSearch = nextTag.name
-      toast({
-        content: payload.created ? 'Тег добавлен и выбран' : 'Тег найден и выбран',
-        type: 'success',
-      })
-    } catch (error) {
-      toast({ content: error instanceof Error ? error.message : 'Не удалось добавить тег', type: 'error' })
-    } finally {
-      settingsTagCreating = false
-    }
-  }
-
   const saveSettings = async () => {
     if (!comun?.slug || !settingsDraft) return
     settingsSaving = true
@@ -1027,7 +946,6 @@
           only_moderators_can_post: Boolean(settingsDraft.only_moderators_can_post),
           hide_from_home: canManageComunModerators() ? Boolean(settingsDraft.hide_from_home) : undefined,
           moderator_ids: canManageComunModerators() ? comunModeratorIds(settingsDraft) : undefined,
-          product_tag_id: settingsDraft.product_tag_id ?? null,
           category_ids: settingsDraft.category_ids ?? (settingsDraft.categories ?? []).map((category) => category.id),
           welcome_post_ref:
             welcomePostRef !== currentWelcomePostRef ? welcomePostRef : undefined,
@@ -1402,11 +1320,7 @@
     {/if}
   {:else}
     <div class="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white/95 dark:bg-zinc-900/85 p-6 text-slate-600 dark:text-zinc-400">
-      {#if comun?.source_tags?.length}
-        В этом сообществе пока нет публикаций по тегам {comun.source_tags.map((tag) => `#${tag.name}`).join(', ')}.
-      {:else if comun?.product_tag}
-        В этом сообществе пока нет публикаций по тегу #{comun.product_tag.name}.
-      {:else if comun?.source_rubric}
+      {#if comun?.source_rubric}
         В этом сообществе пока нет публикаций из рубрики {comun.source_rubric.name}.
       {:else}
         <div class="flex flex-col gap-4">
@@ -1647,69 +1561,6 @@
             </div>
           </div>
         {/if}
-
-        <div class="flex flex-col gap-2">
-          <div class="text-sm text-slate-700 dark:text-zinc-300">Тег продукта (посты с этим тегом попадут в сообщество)</div>
-          <input
-            bind:value={settingsTagSearch}
-            placeholder="Поиск тега..."
-            class="rounded-xl border border-slate-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-3 py-2"
-          />
-          <div class="flex flex-wrap items-center gap-2">
-            {#if selectedProductTag}
-              <span class="rounded-full bg-slate-100 dark:bg-zinc-800 px-3 py-1 text-sm">
-                #{selectedProductTag.name}
-              </span>
-              <Button color="ghost" size="sm" on:click={clearDraftTag}>Сбросить</Button>
-            {:else}
-              <span class="text-sm text-slate-500 dark:text-zinc-400">Тег не выбран</span>
-            {/if}
-          </div>
-          <div class="max-h-48 overflow-auto rounded-xl border border-slate-200 dark:border-zinc-800 divide-y divide-slate-100 dark:divide-zinc-800">
-            {#if normalizedTagCreateValue && !hasExactTagMatch}
-              <div class="flex items-center justify-between gap-2 px-3 py-2 bg-slate-50 dark:bg-zinc-900/60">
-                <div class="min-w-0 text-sm">
-                  <div class="font-medium text-slate-900 dark:text-zinc-100 truncate">
-                    Добавить тег #{normalizedTagCreateValue}
-                  </div>
-                  <div class="text-xs text-slate-500 dark:text-zinc-400">
-                    Создаст тег в системе и выберет его для сообщества
-                  </div>
-                </div>
-                <Button
-                  size="sm"
-                  on:click={createTagAndChooseDraft}
-                  disabled={settingsTagCreating || settingsSaving}
-                >
-                  {settingsTagCreating ? '...' : 'Добавить'}
-                </Button>
-              </div>
-            {/if}
-            {#if filteredTagOptions.length}
-              {#each filteredTagOptions as tag}
-                <div class="flex items-center justify-between gap-2 px-3 py-2 text-sm">
-                  <div class="min-w-0">
-                    <div class="font-medium text-slate-900 dark:text-zinc-100 truncate">{tag.name}</div>
-                    {#if tag.lemma}
-                      <div class="text-xs text-slate-500 dark:text-zinc-400 truncate">{tag.lemma}</div>
-                    {/if}
-                  </div>
-                  <Button size="sm" on:click={() => chooseDraftTag(tag)} disabled={settingsTagCreating || settingsSaving}>Выбрать</Button>
-                </div>
-              {/each}
-            {:else}
-              {#if normalizedTagCreateValue && !hasExactTagMatch}
-                <div class="px-3 py-2 text-sm text-slate-500 dark:text-zinc-400">
-                  Можно добавить новый тег выше
-                </div>
-              {:else if normalizedTagSearch}
-                <div class="px-3 py-2 text-sm text-slate-500 dark:text-zinc-400">
-                  Ничего не найдено
-                </div>
-              {/if}
-            {/if}
-          </div>
-        </div>
 
         <div class="flex flex-col gap-2">
           <div class="text-sm text-slate-700 dark:text-zinc-300">Внутренние категории</div>

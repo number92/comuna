@@ -494,9 +494,7 @@ class Command(BaseCommand):
             comun = Comun.objects.create(
                 name=topic.community_name,
                 slug=topic.community_slug,
-                creator=creator,
-                product_tag=tags[topic.tag_name],
-                website_url=f"https://example.com/{topic.community_slug}",
+                creator=creator,                website_url=f"https://example.com/{topic.community_slug}",
                 logo_url=f"https://api.dicebear.com/8.x/shapes/svg?seed={topic.community_slug}",
                 product_description=(
                     f"{topic.community_name} для обсуждения практики, заметок и конкретных разборов без пустых анонсов."
@@ -515,9 +513,7 @@ class Command(BaseCommand):
                 allowed_post_templates=["basic"],
                 is_active=True,
                 sort_order=index + 1,
-            )
-            comun.source_tags.add(tags[topic.tag_name])
-            comun.tags.add(tags[topic.tag_name], tags["Дискуссия"])
+            )            comun.tags.add(tags[topic.tag_name], tags["Дискуссия"])
             comun.moderators.add(creator, moderator)
             Comun.objects.filter(id=comun.id).update(
                 created_at=now - timedelta(days=10 - index),

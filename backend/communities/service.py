@@ -851,7 +851,7 @@ def _comun_post_access_state(
         return False, minimum_rating, None
     if _comun_is_moderator(user, comun):
         return True, minimum_rating, None
-    if bool(getattr(comun, "only_moderators_can_post", False)):
+    if category is None and bool(getattr(comun, "only_moderators_can_post", False)):
         return False, minimum_rating, None
     if category is not None and bool(getattr(category, "only_moderators_can_post", False)):
         return False, minimum_rating, None
@@ -876,12 +876,12 @@ def _comun_post_access_error_message(
     author_rating: float | None = None,
     category: ComunCategory | None = None,
 ) -> str:
-    if bool(getattr(comun, "only_moderators_can_post", False)):
-        return "Публикация в этом сообществе доступна только создателю и модераторам."
     if category is not None and bool(getattr(category, "only_moderators_can_post", False)):
         return (
             f'Публикация в категории "{category.name}" доступна только создателю и модераторам.'
         )
+    if category is None and bool(getattr(comun, "only_moderators_can_post", False)):
+        return "Публикация без категории доступна только создателю и модераторам."
     minimum_text = _format_rating_value(_comun_minimum_author_rating_value(comun))
     if author_rating is None:
         return f"Для публикации в этой комуне нужен рейтинг автора не ниже {minimum_text}."
@@ -901,39 +901,9 @@ def _comun_logo_url(request: HttpRequest | None, comun: Comun | None) -> str | N
     return _rubric_icon_url(request, getattr(comun, "source_rubric", None))
 
 
-def _comun_product_tag_filter(product_tag: Tag | None) -> Q | None:
-    if not product_tag:
-        return None
-    filters = Q(tags__id=product_tag.id)
-    tag_name = _normalize_tag_value(product_tag.name)
-    if tag_name:
-        filters |= Q(tags__name__iexact=tag_name)
-    tag_lemma = (product_tag.lemma or _lemmatize_tag(product_tag.name) or "").strip()
-    if tag_lemma:
-        filters |= Q(tags__lemma__iexact=tag_lemma)
-    return filters
-
-
-def _comun_source_tags_list(comun: Comun) -> list[Tag]:
-    source_tags = list(comun.source_tags.filter(is_active=True).order_by("name"))
-    if source_tags:
-        return source_tags
-    product_tag = comun.product_tag
-    if product_tag and product_tag.is_active:
-        return [product_tag]
-    return []
-
-
 def _comun_source_filter(comun: Comun) -> Q | None:
     combined_filter = Q()
     has_source = False
-
-    for source_tag in _comun_source_tags_list(comun):
-        tag_filter = _comun_product_tag_filter(source_tag)
-        if tag_filter is None:
-            continue
-        combined_filter |= tag_filter
-        has_source = True
 
     source_rubric_id = getattr(comun, "source_rubric_id", None)
     if source_rubric_id:
@@ -1079,8 +1049,8 @@ def _comun_rating_value(post_rating_total: int | None, comments_total: int | Non
 def _recalculate_comun_rating(comun_id: int) -> tuple[int, int, Decimal]:
     comun = (
         Comun.objects.filter(id=comun_id)
-        .select_related("product_tag", "source_rubric", "telegram_source_author")
-        .prefetch_related("source_tags", "excluded_authors", "blocked_tags")
+        .select_related("source_rubric", "telegram_source_author")
+        .prefetch_related("excluded_authors", "blocked_tags")
         .first()
     )
     if not comun:
@@ -1123,11 +1093,6 @@ def _candidate_comun_ids_for_post(post: Post | None) -> list[int]:
         has_filter = True
     if getattr(post, "author_id", None):
         combined_filter |= Q(telegram_source_author_id=post.author_id)
-        has_filter = True
-
-    tag_ids = list(post.tags.values_list("id", flat=True))
-    if tag_ids:
-        combined_filter |= Q(product_tag_id__in=tag_ids) | Q(source_tags__id__in=tag_ids)
         has_filter = True
 
     if not has_filter:
@@ -1287,9 +1252,7 @@ __all__ = [
     "_comun_post_access_error_message",
     "_comun_post_access_state",
     "_comun_posts_base_queryset",
-    "_comun_product_tag_filter",
     "_comun_source_filter",
-    "_comun_source_tags_list",
     "_current_user_verified_telegram_authors",
     "_ensure_comun_category_by_name",
     "_ensure_telegram_channel_comun_for_author",

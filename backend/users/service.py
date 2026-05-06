@@ -205,7 +205,7 @@ def _build_public_user_profile_payload(
 
     managed_comuns = list(
         Comun.objects.filter(Q(creator_id=profile_user.id) | Q(moderators__id=profile_user.id), is_active=True)
-        .select_related("creator", "product_tag", "source_rubric", "telegram_source_author")
+        .select_related("creator", "source_rubric", "telegram_source_author")
         .prefetch_related("moderators", "categories")
         .distinct()
         .order_by("sort_order", "name")
@@ -235,7 +235,7 @@ def _build_public_user_profile_payload(
     if subscribed_comun_slugs:
         subscribed_comuns = list(
             Comun.objects.filter(slug__in=subscribed_comun_slugs, is_active=True)
-            .select_related("creator", "product_tag", "source_rubric", "telegram_source_author")
+            .select_related("creator", "source_rubric", "telegram_source_author")
             .prefetch_related("moderators", "categories")
             .order_by("sort_order", "name")
         )

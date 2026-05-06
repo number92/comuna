@@ -369,14 +369,10 @@ def my_feed(request: HttpRequest) -> HttpResponse:
     if comun_slugs:
         comuns = list(
             community_views.Comun.objects.filter(is_active=True, slug__in=comun_slugs)
-            .select_related("product_tag", "source_rubric")
+            .select_related("source_rubric")
             .only(
                 "id",
                 "slug",
-                "product_tag_id",
-                "product_tag__id",
-                "product_tag__name",
-                "product_tag__lemma",
                 "source_rubric_id",
             )
         )

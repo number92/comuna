@@ -67,7 +67,7 @@
     recommendedComunsLoading = true
     recommendedComunsError = ''
     try {
-      const response = await fetch(buildTopComunsUrl({ limit: 'all' }))
+      const response = await fetch(buildTopComunsUrl({ limit: 50 }))
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) {
         throw new Error(payload?.error || 'Не удалось загрузить рекомендации')

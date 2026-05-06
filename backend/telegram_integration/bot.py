@@ -416,7 +416,6 @@ def _handle_channel_post(message: dict, force_publish: bool = False) -> None:
             "channel_url": channel_url,
             "raw_data": raw_data,
             "is_pending": requires_approval,
-            "rubric": author.rubric,
             "media_group_id": media_group_id,
             "publish_at": publish_at,
         },
@@ -778,11 +777,6 @@ def _handle_callback_query(callback_query: dict) -> None:
         _maybe_send_setup_instructions(chat_id)
         return
 
-    if data.startswith("rubric:") and chat_id:
-        _answer_callback_query(callback_id, "Тематика больше не настраивается в боте")
-        _maybe_send_setup_instructions(chat_id)
-        return
-
     if data.startswith("delay:") and chat_id:
         try:
             delay_days = int(data.split(":", 1)[1])
@@ -873,9 +867,6 @@ def _handle_callback_query(callback_query: dict) -> None:
                     ]
                 },
             )
-            return
-        if action == "rubric":
-            _answer_callback_query(callback_id, "Тематика больше не настраивается в боте")
             return
         if action == "delay":
             _answer_callback_query(callback_id, "Выберите задержку")

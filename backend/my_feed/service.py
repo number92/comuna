@@ -114,7 +114,6 @@ def _feed_settings_have_customizations(settings: UserFeedSettings) -> bool:
         [
             settings.home_feed != "hot",
             bool(settings.hide_read_posts),
-            bool(settings.my_feed_rubrics),
             bool(settings.my_feed_authors),
             bool(settings.my_feed_tags),
             bool(settings.my_feed_comuns),
@@ -130,7 +129,6 @@ def _serialize_user_feed_settings(settings: UserFeedSettings) -> dict:
     return {
         "home_feed": settings.home_feed if settings.home_feed in VALID_HOME_FEEDS else "hot",
         "hide_read_posts": bool(settings.hide_read_posts),
-        "my_feed_rubrics": _normalize_unique_string_list(settings.my_feed_rubrics),
         "my_feed_authors": _normalize_unique_string_list(settings.my_feed_authors),
         "my_feed_tags": _normalize_unique_string_list(settings.my_feed_tags, lowercase=True),
         "my_feed_comuns": _normalize_unique_string_list(settings.my_feed_comuns),
@@ -151,8 +149,6 @@ def _apply_user_feed_settings_payload(settings: UserFeedSettings, payload: dict)
             settings.home_feed = home_feed
     if "hide_read_posts" in payload:
         settings.hide_read_posts = bool(payload.get("hide_read_posts"))
-    if "my_feed_rubrics" in payload:
-        settings.my_feed_rubrics = _normalize_unique_string_list(payload.get("my_feed_rubrics"))
     if "my_feed_authors" in payload:
         settings.my_feed_authors = _normalize_unique_string_list(payload.get("my_feed_authors"))
     if "my_feed_tags" in payload:

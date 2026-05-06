@@ -107,13 +107,10 @@
             undefined,
             undefined,
             undefined,
-            undefined,
-            undefined,
             effectiveHideRead,
             readOnly
           )
         : buildMyFeedUrl(
-            [],
             selectedMyFeedAuthors,
             [],
             selectedMyFeedComuns,

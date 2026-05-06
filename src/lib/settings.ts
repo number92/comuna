@@ -102,7 +102,6 @@ export interface Settings {
   infiniteScroll: boolean
   homeFeed: 'hot' | 'mine'
   language: string | null
-  myFeedRubrics: string[]
   myFeedAuthors: string[]
   myFeedTags: string[]
   myFeedComuns: string[]
@@ -191,7 +190,6 @@ export const defaultSettings: Settings = {
   infiniteScroll: true,
   homeFeed: 'hot',
   language: 'ru',
-  myFeedRubrics: [],
   myFeedAuthors: [],
   myFeedTags: [],
   myFeedComuns: [],
@@ -217,7 +215,6 @@ export const feedSettingsHydrated = writable(false)
 type BackendFeedSettings = {
   home_feed?: string
   hide_read_posts?: boolean
-  my_feed_rubrics?: string[]
   my_feed_authors?: string[]
   my_feed_tags?: string[]
   my_feed_comuns?: string[]
@@ -230,7 +227,6 @@ type BackendFeedSettings = {
 const feedSettingsDefaults = () => ({
   homeFeed: defaultSettings.homeFeed,
   hideReadPosts: defaultSettings.hideReadPosts,
-  myFeedRubrics: [...defaultSettings.myFeedRubrics],
   myFeedAuthors: [...defaultSettings.myFeedAuthors],
   myFeedTags: [...defaultSettings.myFeedTags],
   myFeedComuns: [...defaultSettings.myFeedComuns],
@@ -244,7 +240,6 @@ const feedSettingsSnapshot = (settings: Settings) =>
   JSON.stringify({
     homeFeed: settings.homeFeed,
     hideReadPosts: settings.hideReadPosts,
-    myFeedRubrics: [],
     myFeedAuthors: settings.myFeedAuthors ?? [],
     myFeedTags: [],
     myFeedComuns: settings.myFeedComuns ?? [],
@@ -257,7 +252,6 @@ const feedSettingsSnapshot = (settings: Settings) =>
 const backendPayloadFromSettings = (settings: Settings) => ({
   home_feed: settings.homeFeed,
   hide_read_posts: settings.hideReadPosts,
-  my_feed_rubrics: [],
   my_feed_authors: settings.myFeedAuthors ?? [],
   my_feed_tags: [],
   my_feed_comuns: settings.myFeedComuns ?? [],
@@ -272,7 +266,6 @@ const settingsFromBackendPayload = (settings: Settings, payload: BackendFeedSett
     ...settings,
     homeFeed: payload.home_feed ?? settings.homeFeed,
     hideReadPosts: payload.hide_read_posts ?? settings.hideReadPosts,
-    myFeedRubrics: [],
     myFeedAuthors: payload.my_feed_authors ?? settings.myFeedAuthors,
     myFeedTags: [],
     myFeedComuns: payload.my_feed_comuns ?? settings.myFeedComuns,
@@ -402,9 +395,6 @@ const migrate = (settings: any): Settings => {
       },
     ]
     settings.moderation.removalReasonPreset = undefined
-  }
-  if (!Array.isArray(settings?.myFeedRubrics)) {
-    settings.myFeedRubrics = []
   }
   if (!Array.isArray(settings?.myFeedAuthors)) {
     settings.myFeedAuthors = []

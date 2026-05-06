@@ -455,11 +455,7 @@
         {/if}
 
         <div class="rounded-lg border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-800/40 px-3 py-2 text-sm text-slate-700 dark:text-zinc-300">
-          {#if comun?.source_rubric}
-            Пост будет опубликован в рубрике <span class="font-semibold">{comun.source_rubric.name}</span>.
-          {:else}
-            Запись будет автоматически привязана к этому сообществу.
-          {/if}
+          Запись будет автоматически привязана к этому сообществу.
         </div>
 
         {#if comun?.rules_text}

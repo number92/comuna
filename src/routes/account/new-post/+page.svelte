@@ -61,9 +61,9 @@
   let lastObservedFormSnapshot = ''
   let currentFormSnapshot = ''
   let autosaveTimeout: ReturnType<typeof setTimeout> | null = null
-  let rubricMenuOpen = false
-  let rubricSearchQuery = ''
-  let rubricMenuRef: HTMLDivElement | null = null
+  let comunMenuOpen = false
+  let comunSearchQuery = ''
+  let comunMenuRef: HTMLDivElement | null = null
   let filteredComuns: BackendComun[] = []
   let identityMenuOpen = false
   let identityMenuRef: HTMLDivElement | null = null
@@ -127,7 +127,7 @@
         : selectedComun?.allowed_template_types ?? selectedComun?.allowed_post_templates)
   )
   $: filteredComuns = (() => {
-    const query = rubricSearchQuery.trim().toLowerCase()
+    const query = comunSearchQuery.trim().toLowerCase()
     if (!query) return availableComuns
     return availableComuns.filter((comun) => {
       const name = (comun.name || '').toLowerCase()
@@ -543,9 +543,9 @@
 
     const closeOnOutsideClick = (event: MouseEvent) => {
       const target = event.target as Node | null
-      if (rubricMenuOpen && rubricMenuRef && target && !rubricMenuRef.contains(target)) {
-        rubricMenuOpen = false
-        rubricSearchQuery = ''
+      if (comunMenuOpen && comunMenuRef && target && !comunMenuRef.contains(target)) {
+        comunMenuOpen = false
+        comunSearchQuery = ''
       }
       if (identityMenuOpen && identityMenuRef && target && !identityMenuRef.contains(target)) {
         identityMenuOpen = false
@@ -667,8 +667,8 @@
   const selectComun = (slug: string) => {
     createComunSlug = slug
     createComunCategoryId = ''
-    rubricMenuOpen = false
-    rubricSearchQuery = ''
+    comunMenuOpen = false
+    comunSearchQuery = ''
   }
 
   const selectIdentity = (value: string) => {
@@ -804,16 +804,16 @@
                   Загрузка сообществ...
                 </div>
               {:else}
-                <div class="relative mt-3" bind:this={rubricMenuRef}>
+                <div class="relative mt-3" bind:this={comunMenuRef}>
                   <button
                     type="button"
                     class="flex max-w-full items-center gap-2 text-left text-sm font-medium leading-tight text-slate-800 dark:text-zinc-200"
                     aria-haspopup="listbox"
-                    aria-expanded={rubricMenuOpen}
+                    aria-expanded={comunMenuOpen}
                     on:click={() => {
-                      const nextState = !rubricMenuOpen
-                      rubricMenuOpen = nextState
-                      if (!nextState) rubricSearchQuery = ''
+                      const nextState = !comunMenuOpen
+                      comunMenuOpen = nextState
+                      if (!nextState) comunSearchQuery = ''
                     }}
                   >
                     <span class="truncate">{selectedTargetLabel}</span>
@@ -831,7 +831,7 @@
                     </svg>
                   </button>
 
-                  {#if rubricMenuOpen}
+                  {#if comunMenuOpen}
                     <div
                       class="absolute z-20 mt-3 w-full min-w-[18rem] max-w-xl overflow-auto rounded-2xl border border-slate-200 bg-white p-1 shadow-lg dark:border-zinc-800 dark:bg-zinc-900"
                       role="listbox"
@@ -839,7 +839,7 @@
                       <div class="sticky top-0 z-10 border-b border-slate-200 bg-white px-2 py-2 dark:border-zinc-800 dark:bg-zinc-900">
                         <input
                           type="text"
-                          bind:value={rubricSearchQuery}
+                          bind:value={comunSearchQuery}
                           placeholder="Поиск сообщества"
                           class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-500"
                         />

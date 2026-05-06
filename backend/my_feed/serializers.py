@@ -20,7 +20,6 @@ def _serialize_thematic_feed(
     moderators = list(feed.moderators.order_by("username"))
     authors = list(feed.authors.filter(is_blocked=False).order_by("username"))
     excluded_authors = list(feed.excluded_authors.filter(is_blocked=False).order_by("username"))
-    rubrics = list(feed.rubrics.filter(is_active=True, is_hidden=False).order_by("sort_order", "name"))
     tags = list(feed.tags.filter(is_active=True).order_by("name"))
     blocked_tags = list(feed.blocked_tags.filter(is_active=True).order_by("name"))
 
@@ -34,7 +33,6 @@ def _serialize_thematic_feed(
         "moderators_count": len(moderators),
         "authors_count": len(authors),
         "excluded_authors_count": len(excluded_authors),
-        "rubrics_count": len(rubrics),
         "tags_count": len(tags),
         "blocked_tags_count": len(blocked_tags),
         "moderators": [{"id": moderator.id, "username": moderator.username} for moderator in moderators],
@@ -50,15 +48,6 @@ def _serialize_thematic_feed(
                 "lemma": tag.lemma or _fv()._lemmatize_tag(tag.name) or tag.name,
             }
             for tag in tags
-        ],
-        "rubrics": [
-            {
-                "id": rubric.id,
-                "name": rubric.name,
-                "slug": rubric.slug,
-                "description": rubric.description,
-            }
-            for rubric in rubrics
         ],
         "blocked_tags": [
             {
@@ -81,7 +70,6 @@ def _serialize_thematic_feed(
         payload["moderator_ids"] = [moderator.id for moderator in moderators]
         payload["author_ids"] = [author.id for author in authors]
         payload["excluded_author_ids"] = [author.id for author in excluded_authors]
-        payload["rubric_ids"] = [rubric.id for rubric in rubrics]
         payload["tag_ids"] = [tag.id for tag in tags]
         payload["excluded_tag_ids"] = [tag.id for tag in blocked_tags]
     return payload
@@ -95,21 +83,16 @@ def _serialize_feed_post_card(
     now,
     is_favorite: bool = False,
 ) -> dict:
-    rubric = post.rubric
     content, poll_payload = _fv()._content_with_live_poll(post, current_user)
     author_channel_url, author_title = _fv()._author_display_fields(
         request,
         post.author,
-        rubric,
         post.channel_url,
     )
     return {
         "id": post.id,
         "title": _fv()._post_display_title(post),
         "template": _fv()._serialize_post_template(post),
-        "rubric": rubric.name if rubric else None,
-        "rubric_slug": rubric.slug if rubric else None,
-        "rubric_icon_url": _fv()._rubric_icon_url(request, rubric),
         "comun": _fv().community_service._serialize_post_comun(request, post),
         "content": content,
         "poll": poll_payload,
@@ -120,8 +103,8 @@ def _serialize_feed_post_card(
             "username": post.author.username,
             "title": author_title,
             "channel_url": author_channel_url,
-            "avatar_url": _fv()._author_avatar_for_rubric(request, post.author, rubric),
-            **_fv()._author_admin_fields_for_user(current_user, post.author, rubric),
+            "avatar_url": _fv()._author_avatar_for_display(request, post.author),
+            **_fv()._author_admin_fields_for_user(current_user, post.author),
         },
         "tags": _fv()._serialize_tags(post.tags.all()),
         "is_favorite": is_favorite,

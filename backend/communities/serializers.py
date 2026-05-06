@@ -54,7 +54,6 @@ def _serialize_comun_profile_card(
     current_user: User | None = None,
     role: str = "moderator",
 ) -> dict:
-    source_rubric = getattr(comun, "source_rubric", None)
     tags = list(comun.tags.filter(is_active=True).order_by("name"))
     return {
         "id": comun.id,
@@ -81,15 +80,6 @@ def _serialize_comun_profile_card(
                 or None
             ),
         },
-        "source_rubric": (
-            {
-                "id": source_rubric.id,
-                "name": source_rubric.name,
-                "slug": source_rubric.slug,
-            }
-            if source_rubric
-            else None
-        ),
         "tags": [
             {
                 "id": tag.id,
@@ -298,7 +288,6 @@ def _serialize_comun(
     ]
     moderators = list(comun.moderators.select_related("site_profile").order_by("username"))
     excluded_authors = list(comun.excluded_authors.filter(is_blocked=False).order_by("username"))
-    source_rubric = getattr(comun, "source_rubric", None)
     telegram_source_author = getattr(comun, "telegram_source_author", None)
     tags = list(comun.tags.filter(is_active=True).order_by("name"))
     blocked_tags = list(comun.blocked_tags.filter(is_active=True).order_by("name"))
@@ -306,7 +295,7 @@ def _serialize_comun(
     welcome_post_payload = None
     if comun.welcome_post_id:
         welcome_post = (
-            Post.objects.select_related("author", "rubric")
+            Post.objects.select_related("author")
             .prefetch_related("tags")
             .filter(id=comun.welcome_post_id, is_blocked=False, author__is_blocked=False)
             .first()
@@ -371,15 +360,6 @@ def _serialize_comun(
         "excluded_authors_count": len(excluded_authors),
         "categories": [_serialize_comun_category(category, comun) for category in categories],
         "categories_count": len(categories),
-        "source_rubric": (
-            {
-                "id": source_rubric.id,
-                "name": source_rubric.name,
-                "slug": source_rubric.slug,
-            }
-            if source_rubric
-            else None
-        ),
         "telegram_source_author": _serialize_author_source_summary(request, telegram_source_author),
         "telegram_channel_username": (
             community_service._normalize_telegram_channel_username(

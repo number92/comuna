@@ -312,11 +312,6 @@
                 <div class="mt-0.5 text-xs text-slate-500 dark:text-zinc-400 truncate">
                   @{author.username}
                 </div>
-                {#if author.rubric}
-                  <div class="mt-1 text-xs text-slate-500 dark:text-zinc-400 truncate">
-                    Сообщество: {author.rubric}
-                  </div>
-                {/if}
                 {#if author.description}
                   <div class="mt-1 text-sm text-slate-600 dark:text-zinc-300 line-clamp-2">
                     {author.description}
@@ -457,10 +452,6 @@
                   {draft.title || 'Без заголовка'}
                 </a>
                 <div class="mt-1 text-sm text-slate-500 dark:text-zinc-400">
-                  {#if draft.rubric}
-                    <span>{draft.rubric}</span>
-                    <span> · </span>
-                  {/if}
                   <span>
                     Обновлён {new Intl.DateTimeFormat('ru-RU', {
                       day: '2-digit',

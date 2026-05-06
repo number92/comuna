@@ -10,7 +10,7 @@ from django.utils.text import slugify
 from django.views.decorators.csrf import csrf_exempt
 
 from communities import views as community_views
-from feeds.models import Author, Post, Rubric, Tag
+from feeds.models import Author, Post, Tag
 from my_feed.models import ThematicFeed
 from my_feed import serializers as my_feed_serializers
 from my_feed import service as my_feed_service
@@ -88,24 +88,13 @@ def _my_feed_comun_post_membership_filter(
         combined_filter |= Q(author_id=telegram_source_author_id)
         has_source = True
 
-    source_rubric_id = getattr(comun, "source_rubric_id", None)
-    if source_rubric_id:
-        rubric_fallback = (
-            Q(rubric_id=source_rubric_id)
-            & Q(author__telegram_source_comun__isnull=True)
-            & Q(comun_category_assignments__isnull=True)
-            & ~Q(raw_data__source="manual_comun")
-        )
-        combined_filter |= rubric_fallback
-        has_source = True
-
     return combined_filter if has_source else None
 
 
 def thematic_feeds_list(request: HttpRequest) -> HttpResponse:
     feeds = (
         ThematicFeed.objects.filter(is_active=True)
-        .prefetch_related("moderators", "authors", "excluded_authors", "rubrics", "tags", "blocked_tags")
+        .prefetch_related("moderators", "authors", "excluded_authors", "tags", "blocked_tags")
         .order_by("sort_order", "name")
     )
     serialized = [_serialize_thematic_feed(feed) for feed in feeds]
@@ -163,16 +152,15 @@ def thematic_feeds_manage(request: HttpRequest) -> HttpResponse:
             folders_qs = ThematicFeed.objects.filter(moderators=user)
         folders = list(
             folders_qs.prefetch_related(
-                "moderators", "authors", "excluded_authors", "rubrics", "tags", "blocked_tags"
+                "moderators", "authors", "excluded_authors", "tags", "blocked_tags"
             ).order_by("sort_order", "name")
         )
         authors = list(
             Author.objects.filter(is_blocked=False)
-            .select_related("rubric")
+
             .order_by("username")
         )
         tags = list(Tag.objects.filter(is_active=True).order_by("name"))
-        rubrics = list(Rubric.objects.filter(is_active=True, is_hidden=False).order_by("sort_order", "name"))
         users = list(User.objects.order_by("username").values("id", "username")) if user.is_staff else []
         return JsonResponse(
             {
@@ -189,7 +177,6 @@ def thematic_feeds_manage(request: HttpRequest) -> HttpResponse:
                             "username": author.username,
                             "title": author.title,
                             "description": author.description,
-                            "rubric": author.rubric.name if author.rubric else None,
                         }
                         for author in authors
                     ],
@@ -200,15 +187,6 @@ def thematic_feeds_manage(request: HttpRequest) -> HttpResponse:
                             "lemma": tag.lemma or _fv()._lemmatize_tag(tag.name) or tag.name,
                         }
                         for tag in tags
-                    ],
-                    "rubrics": [
-                        {
-                            "id": rubric.id,
-                            "name": rubric.name,
-                            "slug": rubric.slug,
-                            "description": rubric.description,
-                        }
-                        for rubric in rubrics
                     ],
                 },
             }
@@ -252,7 +230,7 @@ def thematic_feeds_manage(request: HttpRequest) -> HttpResponse:
         folder.moderators.set(User.objects.filter(id__in=moderator_ids))
     folder = (
         ThematicFeed.objects.filter(id=folder.id)
-        .prefetch_related("moderators", "authors", "excluded_authors", "rubrics", "tags", "blocked_tags")
+        .prefetch_related("moderators", "authors", "excluded_authors", "tags", "blocked_tags")
         .get()
     )
     return JsonResponse({"ok": True, "folder": _serialize_thematic_feed(folder, include_manage_fields=True)})
@@ -266,7 +244,7 @@ def thematic_feed_manage_detail(request: HttpRequest, slug: str) -> HttpResponse
     try:
         folder = (
             ThematicFeed.objects.filter(slug=slug)
-            .prefetch_related("moderators", "authors", "excluded_authors", "rubrics", "tags", "blocked_tags")
+            .prefetch_related("moderators", "authors", "excluded_authors", "tags", "blocked_tags")
             .get()
         )
     except ThematicFeed.DoesNotExist:
@@ -313,10 +291,6 @@ def thematic_feed_manage_detail(request: HttpRequest, slug: str) -> HttpResponse
         folder.excluded_authors.set(
             Author.objects.filter(id__in=_parse_int_list(payload.get("excluded_author_ids")), is_blocked=False)
         )
-    if "rubric_ids" in payload:
-        folder.rubrics.set(
-            Rubric.objects.filter(id__in=_parse_int_list(payload.get("rubric_ids")), is_active=True, is_hidden=False)
-        )
     if "tag_ids" in payload:
         folder.tags.set(Tag.objects.filter(id__in=_parse_int_list(payload.get("tag_ids")), is_active=True))
     if "excluded_tag_ids" in payload:
@@ -326,7 +300,7 @@ def thematic_feed_manage_detail(request: HttpRequest, slug: str) -> HttpResponse
 
     folder = (
         ThematicFeed.objects.filter(id=folder.id)
-        .prefetch_related("moderators", "authors", "excluded_authors", "rubrics", "tags", "blocked_tags")
+        .prefetch_related("moderators", "authors", "excluded_authors", "tags", "blocked_tags")
         .get()
     )
     return JsonResponse({"ok": True, "folder": _serialize_thematic_feed(folder, include_manage_fields=True)})
@@ -352,20 +326,18 @@ def my_feed(request: HttpRequest) -> HttpResponse:
         )
 
     if saved_feed_settings:
-        rubric_slugs = []
         author_usernames = saved_feed_settings["my_feed_authors"]
         tag_values = []
         comun_slugs = saved_feed_settings["my_feed_comuns"]
         comun_category_selection = saved_feed_settings["my_feed_comun_categories"]
     else:
-        rubric_slugs = []
         author_usernames = _parse_string_csv(request.GET.get("authors", ""), strip_prefix="@")
         tag_values = []
         comun_slugs = _parse_string_csv(request.GET.get("comuns", ""))
         comun_category_selection = _parse_comun_category_query(
             request.GET.get("comun_categories", "")
         )
-    if not rubric_slugs and not author_usernames and not tag_values and not comun_slugs:
+    if not author_usernames and not tag_values and not comun_slugs:
         return JsonResponse({"ok": True, "posts": []})
 
     if saved_feed_settings and "hide_negative" not in request.GET:
@@ -373,14 +345,6 @@ def my_feed(request: HttpRequest) -> HttpResponse:
     else:
         hide_negative_raw = request.GET.get("hide_negative", "1").lower()
         hide_negative = hide_negative_raw not in ("0", "false", "no", "off")
-
-    rubric_ids: list[int] = []
-    if rubric_slugs:
-        rubric_ids = list(
-            Rubric.objects.filter(
-                slug__in=rubric_slugs, is_active=True, is_hidden=False
-            ).values_list("id", flat=True)
-        )
 
     author_ids: list[int] = []
     if author_usernames:
@@ -410,7 +374,6 @@ def my_feed(request: HttpRequest) -> HttpResponse:
             .only(
                 "id",
                 "slug",
-                "source_rubric_id",
                 "telegram_source_author_id",
             )
         )
@@ -437,7 +400,7 @@ def my_feed(request: HttpRequest) -> HttpResponse:
             comun_tag_selection_q |= comun_filter
             has_comun_selection = True
 
-    if not rubric_ids and not author_ids and not has_tag_selection and not has_comun_selection:
+    if not author_ids and not has_tag_selection and not has_comun_selection:
         return JsonResponse({"ok": True, "posts": []})
 
     now = timezone.now()
@@ -447,8 +410,6 @@ def my_feed(request: HttpRequest) -> HttpResponse:
     if only_read and not read_user:
         return JsonResponse({"ok": False, "error": "unauthorized"}, status=401)
     selection_filter = Q()
-    if rubric_ids:
-        selection_filter |= Q(rubric_id__in=rubric_ids)
     if author_ids:
         selection_filter |= Q(author_id__in=author_ids)
     if has_tag_selection:
@@ -505,7 +466,7 @@ def my_feed(request: HttpRequest) -> HttpResponse:
         posts_query = posts_query.exclude(reads__user=read_user)
 
     posts = list(
-        posts_query.select_related("author", "rubric")
+        posts_query.select_related("author")
         .prefetch_related("tags")
         .order_by("-created_at")[offset : offset + limit]
     )
@@ -532,7 +493,7 @@ def thematic_feed_posts(request: HttpRequest, slug: str) -> HttpResponse:
         thematic_feed = (
             ThematicFeed.objects.filter(is_active=True)
             .prefetch_related(
-                "moderators", "authors", "excluded_authors", "rubrics", "tags", "blocked_tags"
+                "moderators", "authors", "excluded_authors", "tags", "blocked_tags"
             )
             .get(slug=slug)
         )
@@ -553,9 +514,6 @@ def thematic_feed_posts(request: HttpRequest, slug: str) -> HttpResponse:
     include_author_ids = list(
         thematic_feed.authors.filter(is_blocked=False).values_list("id", flat=True)
     )
-    include_rubric_ids = list(
-        thematic_feed.rubrics.filter(is_active=True, is_hidden=False).values_list("id", flat=True)
-    )
     excluded_author_ids = list(
         thematic_feed.excluded_authors.filter(is_blocked=False).values_list("id", flat=True)
     )
@@ -566,7 +524,7 @@ def thematic_feed_posts(request: HttpRequest, slug: str) -> HttpResponse:
         for tag in include_tags
         if (tag.lemma or _fv()._lemmatize_tag(tag.name) or "").strip()
     ]
-    if not include_author_ids and not include_rubric_ids and not include_tag_ids and not include_tag_lemmas:
+    if not include_author_ids and not include_tag_ids and not include_tag_lemmas:
         return JsonResponse(
             {
                 "ok": True,
@@ -595,8 +553,6 @@ def thematic_feed_posts(request: HttpRequest, slug: str) -> HttpResponse:
     selection_filter = Q()
     if include_author_ids:
         selection_filter |= Q(author_id__in=include_author_ids)
-    if include_rubric_ids:
-        selection_filter |= Q(rubric_id__in=include_rubric_ids)
     if include_tag_ids:
         selection_filter |= Q(tags__id__in=include_tag_ids)
     if include_tag_lemmas:
@@ -635,7 +591,7 @@ def thematic_feed_posts(request: HttpRequest, slug: str) -> HttpResponse:
         posts_query = posts_query.exclude(reads__user=read_user)
 
     posts = list(
-        posts_query.select_related("author", "rubric")
+        posts_query.select_related("author")
         .prefetch_related("tags")
         .order_by("-created_at")[offset : offset + limit]
     )

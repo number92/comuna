@@ -28,13 +28,6 @@ class ThematicFeed(models.Model):
         related_name="thematic_feeds_excluded",
         help_text="Авторы, посты которых будут исключены из папки.",
     )
-    rubrics = models.ManyToManyField(
-        "feeds.Rubric",
-        blank=True,
-        related_name="thematic_feeds_included",
-        verbose_name="Рубрики",
-        help_text="Посты этих рубрик будут добавляться в папку.",
-    )
     tags = models.ManyToManyField(
         "feeds.Tag",
         blank=True,
@@ -80,7 +73,6 @@ class UserFeedSettings(models.Model):
     )
     home_feed = models.CharField(max_length=20, default="hot")
     hide_read_posts = models.BooleanField(default=False)
-    my_feed_rubrics = models.JSONField(default=list, blank=True)
     my_feed_authors = models.JSONField(default=list, blank=True)
     my_feed_tags = models.JSONField(default=list, blank=True)
     my_feed_comuns = models.JSONField(default=list, blank=True)

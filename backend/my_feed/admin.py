@@ -13,7 +13,6 @@ class ThematicFeedAdmin(admin.ModelAdmin):
         "moderators_count",
         "authors_count",
         "excluded_authors_count",
-        "rubrics_count",
         "tags_count",
         "blocked_tags_count",
     )
@@ -24,7 +23,6 @@ class ThematicFeedAdmin(admin.ModelAdmin):
         "moderators",
         "authors",
         "excluded_authors",
-        "rubrics",
         "tags",
         "blocked_tags",
     )
@@ -35,7 +33,6 @@ class ThematicFeedAdmin(admin.ModelAdmin):
         "moderators",
         "authors",
         "excluded_authors",
-        "rubrics",
         "tags",
         "blocked_tags",
         "sort_order",
@@ -56,11 +53,6 @@ class ThematicFeedAdmin(admin.ModelAdmin):
         return obj.excluded_authors.count()
 
     excluded_authors_count.short_description = "Исключено авторов"
-
-    def rubrics_count(self, obj):
-        return obj.rubrics.count()
-
-    rubrics_count.short_description = "Рубрик"
 
     def tags_count(self, obj):
         return obj.tags.count()
@@ -88,7 +80,6 @@ class UserFeedSettingsAdmin(admin.ModelAdmin):
         "user",
         "home_feed",
         "hide_read_posts",
-        "my_feed_rubrics",
         "my_feed_authors",
         "my_feed_tags",
         "my_feed_comuns",

@@ -20,8 +20,6 @@ export type SiteAuthorLink = {
   title?: string | null
   channel_url?: string | null
   avatar_url?: string | null
-  rubric?: string | null
-  rubric_slug?: string | null
   auto_publish?: boolean
   publish_delay_days?: number
   notify_comments?: boolean
@@ -59,9 +57,6 @@ export type SiteUserPost = {
   is_draft?: boolean
   draft_share_token?: string | null
   publish_at?: string | null
-  rubric?: string | null
-  rubric_slug?: string | null
-  rubric_icon_url?: string | null
   comun_slug?: string | null
   comun?: {
     id?: number
@@ -483,7 +478,6 @@ export const updateUserPost = async (
     content?: string
     author_source?: 'site'
     author_username?: string
-    rubric_slug?: string
     comun_slug?: string
     comun_category_id?: number | null
     is_draft?: boolean
@@ -543,7 +537,6 @@ export const createUserPost = async (payload: {
   content?: string
   author_source?: 'site'
   author_username?: string
-  rubric_slug?: string
   comun_slug?: string
   comun_category_id?: number | null
   is_draft?: boolean

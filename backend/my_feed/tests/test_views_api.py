@@ -13,7 +13,7 @@ from my_feed.views import (
     thematic_feeds_manage,
 )
 from communities.models import Comun, ComunCategory, ComunPostCategoryAssignment
-from feeds.models import Author, Post, Rubric
+from feeds.models import Author, Post
 from my_feed.models import UserFeedSettings
 from users.service import _issue_token
 
@@ -206,13 +206,11 @@ class UserFeedSettingsApiTests(TestCase):
         post_ids = {post["id"] for post in response.json()["posts"]}
         self.assertEqual(post_ids, {self.post.id, self.comun_post.id, self.other_comun_post.id})
 
-    def test_my_feed_source_rubric_does_not_include_other_telegram_comun_posts(self):
-        rubric = Rubric.objects.create(name="Tech", slug="tech")
+    def test_my_feed_subscribed_comun_does_not_include_other_channel_posts(self):
         source_comun = Comun.objects.create(
             name="Subscribed Tech",
             slug="subscribed-tech",
             creator=self.user,
-            source_rubric=rubric,
         )
         plain_author = Author.objects.create(username="plain-tech", title="Plain Tech")
         telegram_author = Author.objects.create(
@@ -226,18 +224,22 @@ class UserFeedSettingsApiTests(TestCase):
             creator=self.user,
             telegram_source_author=telegram_author,
         )
-        source_rubric_post = Post.objects.create(
+        source_comun_post = Post.objects.create(
             author=plain_author,
-            rubric=rubric,
             message_id=401,
-            title="Source rubric post",
+            title="Source comun post",
             content="{}",
+            raw_data={"source": "manual_comun", "comun_slug": source_comun.slug},
             is_pending=False,
             is_blocked=False,
         )
+        ComunPostCategoryAssignment.objects.create(
+            comun=source_comun,
+            post=source_comun_post,
+            assigned_by=self.user,
+        )
         other_comun_post = Post.objects.create(
             author=telegram_author,
-            rubric=rubric,
             message_id=402,
             title="Other telegram comun post",
             content="{}",
@@ -254,5 +256,5 @@ class UserFeedSettingsApiTests(TestCase):
 
         self.assertEqual(response.status_code, 200, response.content.decode())
         post_ids = {post["id"] for post in response.json()["posts"]}
-        self.assertIn(source_rubric_post.id, post_ids)
+        self.assertIn(source_comun_post.id, post_ids)
         self.assertNotIn(other_comun_post.id, post_ids)

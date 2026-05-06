@@ -13,7 +13,7 @@
   import { Plus, Icon } from 'svelte-hero-icons'
 
   type UserOption = { id: number; username: string }
-  type AuthorOption = { id: number; username: string; title?: string | null; rubric?: string | null }
+  type AuthorOption = { id: number; username: string; title?: string | null }
   type TagOption = { id: number; name: string; lemma?: string | null }
 
   let loading = true
@@ -407,7 +407,7 @@
               >
                 {#each authorOptions as author}
                   <option value={author.id} selected={(draft.author_ids ?? []).includes(author.id)}>
-                    @{author.username}{author.rubric ? ` · ${author.rubric}` : ''}
+                    @{author.username}
                   </option>
                 {/each}
               </select>
@@ -423,7 +423,7 @@
               >
                 {#each authorOptions as author}
                   <option value={author.id} selected={(draft.excluded_author_ids ?? []).includes(author.id)}>
-                    @{author.username}{author.rubric ? ` · ${author.rubric}` : ''}
+                    @{author.username}
                   </option>
                 {/each}
               </select>

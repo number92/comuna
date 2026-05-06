@@ -569,7 +569,7 @@ def _comun_logo_url(request: HttpRequest | None, comun: Comun | None) -> str | N
     explicit_logo = str(getattr(comun, "logo_url", "") or "").strip()
     if explicit_logo:
         return explicit_logo
-    return _fv()._rubric_icon_url(request, getattr(comun, "source_rubric", None))
+    return None
 
 
 def _serialize_comun_profile_card(
@@ -579,7 +579,6 @@ def _serialize_comun_profile_card(
     current_user: User | None = None,
     role: str = "moderator",
 ) -> dict:
-    source_rubric = getattr(comun, "source_rubric", None)
     tags = list(comun.tags.filter(is_active=True).order_by("name"))
     return {
         "id": comun.id,
@@ -592,15 +591,6 @@ def _serialize_comun_profile_card(
         "target_audience": comun.target_audience,
         "role": role,
         "can_moderate": _comun_is_moderator(current_user, comun),
-        "source_rubric": (
-            {
-                "id": source_rubric.id,
-                "name": source_rubric.name,
-                "slug": source_rubric.slug,
-            }
-            if source_rubric
-            else None
-        ),
         "tags": [
             {
                 "id": tag.id,
@@ -706,7 +696,6 @@ def _serialize_comun(
     ]
     moderators = list(comun.moderators.select_related("site_profile").order_by("username"))
     excluded_authors = list(comun.excluded_authors.filter(is_blocked=False).order_by("username"))
-    source_rubric = getattr(comun, "source_rubric", None)
     telegram_source_author = getattr(comun, "telegram_source_author", None)
     tags = list(comun.tags.filter(is_active=True).order_by("name"))
     blocked_tags = list(comun.blocked_tags.filter(is_active=True).order_by("name"))
@@ -714,7 +703,7 @@ def _serialize_comun(
     welcome_post_payload = None
     if comun.welcome_post_id:
         welcome_post = (
-            Post.objects.select_related("author", "rubric")
+            Post.objects.select_related("author")
             .prefetch_related("tags")
             .filter(id=comun.welcome_post_id, is_blocked=False, author__is_blocked=False)
             .first()
@@ -782,15 +771,6 @@ def _serialize_comun(
         "excluded_authors_count": len(excluded_authors),
         "categories": [_serialize_comun_category(category, comun) for category in categories],
         "categories_count": len(categories),
-        "source_rubric": (
-            {
-                "id": source_rubric.id,
-                "name": source_rubric.name,
-                "slug": source_rubric.slug,
-            }
-            if source_rubric
-            else None
-        ),
         "telegram_source_author": _serialize_author_source_summary(request, telegram_source_author),
         "telegram_channel_username": (
             _normalize_telegram_channel_username(
@@ -902,11 +882,6 @@ def _comun_source_filter(comun: Comun) -> Q | None:
     combined_filter = Q()
     has_source = False
 
-    source_rubric_id = getattr(comun, "source_rubric_id", None)
-    if source_rubric_id:
-        combined_filter |= Q(rubric_id=source_rubric_id)
-        has_source = True
-
     telegram_source_author_id = getattr(comun, "telegram_source_author_id", None)
     if telegram_source_author_id:
         combined_filter |= Q(author_id=telegram_source_author_id)
@@ -1004,7 +979,6 @@ def _comun_posts_base_queryset(comun: Comun, now=None):
         )
         .filter(_fv()._publish_ready_filter(now))
         .filter(Q(author__shadow_banned=False) | Q(author__force_home=True))
-        .filter(Q(rubric__isnull=True) | Q(rubric__is_hidden=False))
         .distinct()
     )
     excluded_author_ids = list(
@@ -1234,7 +1208,7 @@ def comun_create_from_telegram_channel(request: HttpRequest) -> HttpResponse:
     if existing_comun and existing_comun.is_active:
         existing_comun = (
             Comun.objects.filter(id=existing_comun.id)
-            .select_related("creator", "source_rubric", "welcome_post", "telegram_source_author")
+            .select_related("creator", "welcome_post", "telegram_source_author")
             .prefetch_related("moderators", "excluded_authors", "categories", "tags", "blocked_tags")
             .first()
         )
@@ -1273,7 +1247,7 @@ def comun_create_from_telegram_channel(request: HttpRequest) -> HttpResponse:
     comun.moderators.add(current_user)
     comun = (
         Comun.objects.filter(id=comun.id)
-        .select_related("creator", "source_rubric", "welcome_post", "telegram_source_author")
+        .select_related("creator", "welcome_post", "telegram_source_author")
         .prefetch_related("moderators", "excluded_authors", "categories", "tags", "blocked_tags")
         .get()
     )
@@ -1300,7 +1274,7 @@ def comuns_list_create(request: HttpRequest) -> HttpResponse:
     if request.method == "GET":
         comuns = list(
             Comun.objects.filter(is_active=True).exclude(slug__iexact="faq")
-            .select_related("creator", "source_rubric", "telegram_source_author")
+            .select_related("creator", "telegram_source_author")
             .prefetch_related("moderators", "excluded_authors", "categories", "tags", "blocked_tags")
             .order_by("-rating_score", "sort_order", "name")
         )
@@ -1401,7 +1375,7 @@ def comuns_list_create(request: HttpRequest) -> HttpResponse:
 
     comun = (
         Comun.objects.filter(id=comun.id)
-        .select_related("creator", "source_rubric", "welcome_post", "telegram_source_author")
+        .select_related("creator", "welcome_post", "telegram_source_author")
         .prefetch_related("moderators", "excluded_authors", "categories", "tags", "blocked_tags")
         .get()
     )
@@ -1414,7 +1388,7 @@ def comun_detail_manage(request: HttpRequest, slug: str) -> HttpResponse:
     try:
         comun = (
             Comun.objects.filter(slug=slug)
-            .select_related("creator", "source_rubric", "welcome_post", "telegram_source_author")
+            .select_related("creator", "welcome_post", "telegram_source_author")
             .prefetch_related("moderators", "excluded_authors", "categories", "tags", "blocked_tags")
             .get()
         )
@@ -1744,7 +1718,7 @@ def comun_detail_manage(request: HttpRequest, slug: str) -> HttpResponse:
 
     comun = (
         Comun.objects.filter(id=comun.id)
-        .select_related("creator", "source_rubric", "welcome_post", "telegram_source_author")
+        .select_related("creator", "welcome_post", "telegram_source_author")
         .prefetch_related("moderators", "excluded_authors", "categories", "tags", "blocked_tags")
         .get()
     )
@@ -1838,7 +1812,7 @@ def comun_posts(request: HttpRequest, slug: str) -> HttpResponse:
     try:
         comun = (
             Comun.objects.filter(slug=slug)
-            .select_related("creator", "source_rubric", "welcome_post", "telegram_source_author")
+            .select_related("creator", "welcome_post", "telegram_source_author")
             .prefetch_related("moderators", "excluded_authors", "categories", "blocked_tags")
             .get()
         )
@@ -1945,7 +1919,6 @@ def comun_posts(request: HttpRequest, slug: str) -> HttpResponse:
             message_id=message_id,
             title=title,
             content=content,
-            rubric=None,
             channel_url=(author.invite_url or author.channel_url or ""),
             source_url=(author.invite_url or author.channel_url or ""),
             raw_data=raw_data,
@@ -2043,7 +2016,7 @@ def comun_posts(request: HttpRequest, slug: str) -> HttpResponse:
     total_count = base_query.count()
 
     posts = list(
-        base_query.select_related("author", "rubric")
+        base_query.select_related("author")
         .prefetch_related("tags")
         .distinct()
         .order_by("-created_at")[offset : offset + limit]
@@ -2101,7 +2074,7 @@ def comun_post_category_update(request: HttpRequest, slug: str, post_id: int) ->
     try:
         comun = (
             Comun.objects.filter(slug=slug)
-            .select_related("creator", "source_rubric", "telegram_source_author")
+            .select_related("creator", "telegram_source_author")
             .prefetch_related("moderators", "categories")
             .get()
         )

@@ -196,7 +196,7 @@ def list_top_comuns(
     queryset = (
         Comun.objects.filter(is_active=True)
         .exclude(slug__iexact="faq")
-        .select_related("creator", "source_rubric", "telegram_source_author")
+        .select_related("creator", "telegram_source_author")
         .prefetch_related("categories")
         .order_by("-rating_score", "sort_order", "name")
     )

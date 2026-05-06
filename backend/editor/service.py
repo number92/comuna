@@ -51,7 +51,7 @@ from editor.models import (
     post_template_type_choices,
     template_editor_block_choices_for_template,
 )
-from feeds.models import Author, Post, PostFavorite, Rubric
+from feeds.models import Author, Post, PostFavorite
 from users.models import AuthorAdmin
 
 User = get_user_model()
@@ -1663,12 +1663,6 @@ def _template_editor_blocks_by_template() -> dict[str, list[str]]:
     return payload
 
 
-def _allowed_templates_for_rubric(rubric: Rubric | None) -> list[str]:
-    if not rubric:
-        return normalize_allowed_post_templates(None)
-    return normalize_allowed_post_templates(rubric.allowed_post_templates)
-
-
 def _allowed_templates_for_comun(comun: Comun | None) -> list[str]:
     if not comun:
         return normalize_allowed_post_templates(None)
@@ -2025,9 +2019,8 @@ def _serialize_enabled_template_editor_blocks(
 
 
 def _serialize_post_for_user(request: HttpRequest, post: Post, user: User | None = None) -> dict:
-    rubric = post.rubric
     author_channel_url, author_title = _fv()._author_display_fields(
-        request, post.author, rubric, post.channel_url
+        request, post.author, post.channel_url
     )
     content, poll_payload = _content_with_live_poll(post, user)
     template_payload = _serialize_post_template(post)
@@ -2047,9 +2040,6 @@ def _serialize_post_for_user(request: HttpRequest, post: Post, user: User | None
         "is_pending": post.is_pending,
         "is_draft": is_draft,
         "publish_at": post.publish_at.isoformat() if post.publish_at else None,
-        "rubric": rubric.name if rubric else None,
-        "rubric_slug": rubric.slug if rubric else None,
-        "rubric_icon_url": _fv()._rubric_icon_url(request, rubric),
         "comments_count": post.comments_count,
         "likes_count": post.rating,
         "views_count": _fv()._post_total_views(post),
@@ -2060,8 +2050,8 @@ def _serialize_post_for_user(request: HttpRequest, post: Post, user: User | None
             "username": post.author.username,
             "title": author_title,
             "channel_url": author_channel_url,
-            "avatar_url": _fv()._author_avatar_for_rubric(request, post.author, rubric),
-            **_fv()._author_admin_fields_for_user(user, post.author, rubric),
+            "avatar_url": _fv()._author_avatar_for_display(request, post.author),
+            **_fv()._author_admin_fields_for_user(user, post.author),
         },
     }
     if is_draft and _user_can_manage_site_post(user, post):
@@ -2148,31 +2138,6 @@ def _resolve_manual_post_author(
     return None, "author required"
 
 
-def _resolve_manual_post_rubric(
-    user: User,
-    *,
-    author: Author | None,
-    rubric_slug: str,
-    allow_empty: bool,
-) -> tuple[Rubric | None, str | None]:
-    rubric = None
-    if rubric_slug:
-        rubric = Rubric.objects.filter(slug__iexact=rubric_slug, is_active=True).first()
-        if not rubric:
-            return None, "rubric not found"
-    if not rubric:
-        rubric = author.rubric if author else None
-    if not rubric:
-        if allow_empty:
-            return None, None
-        return None, "rubric required"
-    if rubric.is_hidden and not user.is_staff:
-        if allow_empty:
-            return rubric, None
-        return None, "rubric not allowed"
-    return rubric, None
-
-
 def _user_can_manage_site_post(user: User | None, post: Post) -> bool:
     if not user:
         return False
@@ -2230,7 +2195,6 @@ __all__ = [
     "_allowed_template_overrides_for_comun_category",
     "_allowed_templates_for_comun",
     "_allowed_templates_for_comun_category",
-    "_allowed_templates_for_rubric",
     "_build_post_vote_poll_raw_poll",
     "_canonical_imdb_url",
     "_content_with_live_poll",
@@ -2254,7 +2218,6 @@ __all__ = [
     "_post_draft_share_token",
     "_requested_template_type",
     "_resolve_manual_post_author",
-    "_resolve_manual_post_rubric",
     "_resolve_site_post_author_context",
     "_serialize_enabled_template_editor_blocks",
     "_serialize_comun_custom_post_templates",

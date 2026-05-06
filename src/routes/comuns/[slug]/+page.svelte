@@ -1121,14 +1121,14 @@
             <Button
               color={isSubscribedToComun ? 'ghost' : undefined}
               on:click={toggleComunInMyFeed}
-              title={isSubscribedToComun ? 'Настроить рубрики в Моей ленте' : 'Добавить сообщество в Мою ленту'}
+              title={isSubscribedToComun ? 'Настроить категории в Моей ленте' : 'Добавить сообщество в Мою ленту'}
             >
               {isSubscribedToComun ? 'Вы подписаны' : 'Подписаться'}
             </Button>
             {#if subscriptionCategoriesOpen && isSubscribedToComun && hasComunCategories}
               <div class="absolute right-0 top-full z-30 mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-3 shadow-xl dark:border-zinc-800 dark:bg-zinc-950">
                 <div class="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-slate-500 dark:text-zinc-400">
-                  Рубрики в моей ленте
+                  Категории в моей ленте
                 </div>
                 <div class="flex max-h-72 flex-col gap-2 overflow-y-auto pr-1">
                   {#each comunCategories as category}
@@ -1320,18 +1320,14 @@
     {/if}
   {:else}
     <div class="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white/95 dark:bg-zinc-900/85 p-6 text-slate-600 dark:text-zinc-400">
-      {#if comun?.source_rubric}
-        В этом сообществе пока нет публикаций из рубрики {comun.source_rubric.name}.
-      {:else}
-        <div class="flex flex-col gap-4">
-          <div>В этом сообществе пока нет публикаций.</div>
-          {#if comun?.slug && canPostInComun()}
-            <div>
-              <Button size="sm" on:click={openComunPostEditor}>Написать</Button>
-            </div>
-          {/if}
-        </div>
-      {/if}
+      <div class="flex flex-col gap-4">
+        <div>В этом сообществе пока нет публикаций.</div>
+        {#if comun?.slug && canPostInComun()}
+          <div>
+            <Button size="sm" on:click={openComunPostEditor}>Написать</Button>
+          </div>
+        {/if}
+      </div>
     </div>
   {/if}
 </div>

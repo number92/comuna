@@ -10,7 +10,6 @@
     username: string
     title?: string | null
     description?: string | null
-    rubric?: string | null
   }
 
   type FolderManageTagOption = {
@@ -19,19 +18,9 @@
     lemma?: string | null
   }
 
-  type FolderManageRubricOption = {
-    id: number
-    name: string
-    slug?: string | null
-    description?: string | null
-  }
-
   type FolderAuthorSelectionKey = 'author_ids' | 'excluded_author_ids'
   type FolderTagSelectionKey = 'tag_ids' | 'excluded_tag_ids'
-  type FolderSettingsSelectionKey =
-    | FolderAuthorSelectionKey
-    | FolderTagSelectionKey
-    | 'rubric_ids'
+  type FolderSettingsSelectionKey = FolderAuthorSelectionKey | FolderTagSelectionKey
 
   export let open = false
   export let thematicFeedSlug = ''
@@ -48,15 +37,12 @@
   let folderSettingsDraft: BackendThematicFeed | null = null
   let folderSettingsAuthorOptions: FolderManageAuthorOption[] = []
   let folderSettingsTagOptions: FolderManageTagOption[] = []
-  let folderSettingsRubricOptions: FolderManageRubricOption[] = []
   let filteredFolderAuthorOptions: FolderManageAuthorOption[] = []
   let filteredFolderExcludedAuthorOptions: FolderManageAuthorOption[] = []
-  let filteredFolderRubricOptions: FolderManageRubricOption[] = []
   let filteredFolderTagOptions: FolderManageTagOption[] = []
   let filteredFolderExcludedTagOptions: FolderManageTagOption[] = []
   let folderSettingsAuthorSearch = ''
   let folderSettingsExcludedAuthorSearch = ''
-  let folderSettingsRubricSearch = ''
   let folderSettingsTagSearch = ''
   let folderSettingsExcludedTagSearch = ''
   let lastLoadedFolderKey = ''
@@ -72,7 +58,6 @@
       author.username,
       author.title ?? '',
       author.description ?? '',
-      author.rubric ?? '',
     ]
       .join(' ')
       .toLowerCase()
@@ -82,14 +67,6 @@
   const matchesFolderTagSearch = (tag: FolderManageTagOption, query: string) => {
     if (!query) return true
     return [tag.name, tag.lemma ?? '']
-      .join(' ')
-      .toLowerCase()
-      .includes(query)
-  }
-
-  const matchesFolderRubricSearch = (rubric: FolderManageRubricOption, query: string) => {
-    if (!query) return true
-    return [rubric.name, rubric.slug ?? '', rubric.description ?? '']
       .join(' ')
       .toLowerCase()
       .includes(query)
@@ -138,19 +115,6 @@
     candidates: FolderManageTagOption[]
   ) => candidates.filter((tag) => !isFolderTagSelected(key, tag.id))
 
-  const getFolderRubricOptionById = (id: number): FolderManageRubricOption | null =>
-    folderSettingsRubricOptions.find((rubric) => rubric.id === id) ?? null
-
-  const getFolderSelectedRubrics = (): FolderManageRubricOption[] =>
-    getFolderSelectedIds('rubric_ids')
-      .map((id) => getFolderRubricOptionById(id))
-      .filter(Boolean) as FolderManageRubricOption[]
-
-  const isFolderRubricSelected = (rubricId: number) => getFolderSelectedIds('rubric_ids').includes(rubricId)
-
-  const getFolderAvailableRubrics = (candidates: FolderManageRubricOption[]): FolderManageRubricOption[] =>
-    candidates.filter((rubric) => !isFolderRubricSelected(rubric.id))
-
   const touchFolderSettingsDraft = () => {
     if (!folderSettingsDraft) return
     folderSettingsDraft = { ...folderSettingsDraft }
@@ -188,22 +152,6 @@
     queueCurrentFolderSettingsSave()
   }
 
-  const addFolderRubricToSelection = (rubricId: number) => {
-    if (!folderSettingsDraft || !Number.isFinite(rubricId) || rubricId <= 0) return
-    const next = new Set(getFolderSelectedIds('rubric_ids'))
-    next.add(rubricId)
-    ;(folderSettingsDraft as any).rubric_ids = Array.from(next)
-    touchFolderSettingsDraft()
-    queueCurrentFolderSettingsSave()
-  }
-
-  const removeFolderRubricFromSelection = (rubricId: number) => {
-    if (!folderSettingsDraft) return
-    ;(folderSettingsDraft as any).rubric_ids = getFolderSelectedIds('rubric_ids').filter((id) => id !== rubricId)
-    touchFolderSettingsDraft()
-    queueCurrentFolderSettingsSave()
-  }
-
   const loadCurrentFolderSettings = async () => {
     if (!browser || !$siteToken || !thematicFeedSlug) return
     folderSettingsLoading = true
@@ -221,12 +169,10 @@
       }
       folderSettingsAuthorOptions = payload.options?.authors ?? []
       folderSettingsTagOptions = payload.options?.tags ?? []
-      folderSettingsRubricOptions = payload.options?.rubrics ?? []
       folderSettingsSaveQueued = false
       folderSettingsShouldRefreshFeed = false
       folderSettingsAuthorSearch = ''
       folderSettingsExcludedAuthorSearch = ''
-      folderSettingsRubricSearch = ''
       folderSettingsTagSearch = ''
       folderSettingsExcludedTagSearch = ''
       const currentFolder =
@@ -272,7 +218,6 @@
           body: JSON.stringify({
             author_ids: draft.author_ids ?? [],
             excluded_author_ids: draft.excluded_author_ids ?? [],
-            rubric_ids: draft.rubric_ids ?? [],
             tag_ids: draft.tag_ids ?? [],
             excluded_tag_ids: draft.excluded_tag_ids ?? [],
           }),
@@ -322,9 +267,6 @@
   )
   $: filteredFolderExcludedAuthorOptions = folderSettingsAuthorOptions.filter((author) =>
     matchesFolderAuthorSearch(author, normalizeFolderSearch(folderSettingsExcludedAuthorSearch))
-  )
-  $: filteredFolderRubricOptions = folderSettingsRubricOptions.filter((rubric) =>
-    matchesFolderRubricSearch(rubric, normalizeFolderSearch(folderSettingsRubricSearch))
   )
   $: filteredFolderTagOptions = folderSettingsTagOptions.filter((tag) =>
     matchesFolderTagSearch(tag, normalizeFolderSearch(folderSettingsTagSearch))
@@ -393,9 +335,6 @@
                       {author.title}
                     </div>
                   {/if}
-                  <div class="text-xs text-slate-500 dark:text-zinc-400">
-                    {author.rubric ? `Сообщество: ${author.rubric}` : 'Без сообщества'}
-                  </div>
                   {#if author.description}
                     <div class="line-clamp-2 text-xs text-slate-500 dark:text-zinc-400">
                       {author.description}
@@ -473,9 +412,6 @@
                       {author.title}
                     </div>
                   {/if}
-                  <div class="text-xs text-slate-500 dark:text-zinc-400">
-                    {author.rubric ? `Сообщество: ${author.rubric}` : 'Без сообщества'}
-                  </div>
                   {#if author.description}
                     <div class="line-clamp-2 text-xs text-slate-500 dark:text-zinc-400">
                       {author.description}
@@ -528,83 +464,6 @@
             {:else}
               <div class="text-xs text-slate-500 dark:text-zinc-400">
                 Пока никого нет в исключениях
-              </div>
-            {/each}
-          </div>
-        </label>
-
-        <label class="flex flex-col gap-1 text-sm min-w-0">
-          <span>Сообщества</span>
-          <input
-            type="text"
-            bind:value={folderSettingsRubricSearch}
-            placeholder="Поиск по названию, slug или описанию"
-            class="rounded-lg border border-slate-200 bg-white px-3 py-2 dark:border-zinc-700 dark:bg-zinc-950"
-          />
-          <div class="max-h-72 overflow-y-auto rounded-lg border border-slate-200 bg-white dark:border-zinc-700 dark:bg-zinc-950">
-            {#each getFolderAvailableRubrics(filteredFolderRubricOptions).slice(0, 30) as rubric}
-              <div class="flex items-start justify-between gap-3 border-b border-slate-100 px-3 py-2 last:border-b-0 dark:border-zinc-800">
-                <div class="min-w-0">
-                  <div class="truncate text-sm font-medium text-slate-900 dark:text-zinc-100">
-                    {rubric.name}
-                  </div>
-                  {#if rubric.slug}
-                    <div class="text-xs text-slate-500 dark:text-zinc-400">
-                      {rubric.slug}
-                    </div>
-                  {/if}
-                  {#if rubric.description}
-                    <div class="line-clamp-2 text-xs text-slate-500 dark:text-zinc-400">
-                      {rubric.description}
-                    </div>
-                  {/if}
-                </div>
-                <button
-                  type="button"
-                  class="shrink-0 rounded-md border border-slate-200 px-2 py-1 text-xs font-medium hover:bg-slate-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
-                  on:click={() => addFolderRubricToSelection(rubric.id)}
-                >
-                  Добавить
-                </button>
-              </div>
-            {:else}
-              <div class="px-3 py-3 text-xs text-slate-500 dark:text-zinc-400">
-                Ничего не найдено
-              </div>
-            {/each}
-          </div>
-          <div class="mt-2 flex flex-col gap-2">
-            <div class="text-xs uppercase tracking-wide text-slate-500 dark:text-zinc-400">
-              Выбранные сообщества
-            </div>
-            {#each getFolderSelectedRubrics() as rubric}
-              <div class="flex items-start justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-900/60">
-                <div class="min-w-0">
-                  <div class="truncate text-sm font-medium text-slate-900 dark:text-zinc-100">
-                    {rubric.name}
-                  </div>
-                  {#if rubric.slug}
-                    <div class="text-xs text-slate-500 dark:text-zinc-400">
-                      {rubric.slug}
-                    </div>
-                  {/if}
-                  {#if rubric.description}
-                    <div class="line-clamp-2 text-xs text-slate-500 dark:text-zinc-400">
-                      {rubric.description}
-                    </div>
-                  {/if}
-                </div>
-                <button
-                  type="button"
-                  class="shrink-0 rounded-md border border-slate-200 px-2 py-1 text-xs hover:bg-white dark:border-zinc-700 dark:hover:bg-zinc-800"
-                  on:click={() => removeFolderRubricFromSelection(rubric.id)}
-                >
-                  Убрать
-                </button>
-              </div>
-            {:else}
-              <div class="text-xs text-slate-500 dark:text-zinc-400">
-                Пока сообщества не выбраны
               </div>
             {/each}
           </div>

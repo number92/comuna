@@ -38,7 +38,6 @@ from feeds.models import (
     PostFavorite,
     PostLike,
     PostRead,
-    Rubric,
     Tag,
 )
 from ratings.service import author_rating_value, format_rating_value, user_max_author_rating
@@ -127,12 +126,6 @@ def _sync_comun_logo_from_author(comun: Comun | None, author: Author | None) -> 
     comun.logo_url = logo_url
     comun.save(update_fields=["logo_url", "updated_at"])
     return True
-
-
-def _rubric_icon_url(request: HttpRequest | None, rubric: Rubric | None) -> str | None:
-    if not rubric:
-        return None
-    return _media_url(request, rubric.icon_thumb) or _media_url(request, rubric.icon_url)
 
 
 def _ensure_pymorphy2_compat():
@@ -782,14 +775,6 @@ def _post_comun(post: Post) -> Comun | None:
     if _is_telegram_channel_author(author):
         return None
 
-    rubric_id = getattr(post, "rubric_id", None)
-    if rubric_id:
-        return (
-            Comun.objects.filter(source_rubric_id=rubric_id, is_active=True)
-            .order_by("sort_order", "name")
-            .first()
-        )
-
     return None
 
 
@@ -898,17 +883,12 @@ def _comun_logo_url(request: HttpRequest | None, comun: Comun | None) -> str | N
     explicit_logo = str(getattr(comun, "logo_url", "") or "").strip()
     if explicit_logo:
         return explicit_logo
-    return _rubric_icon_url(request, getattr(comun, "source_rubric", None))
+    return None
 
 
 def _comun_source_filter(comun: Comun) -> Q | None:
     combined_filter = Q()
     has_source = False
-
-    source_rubric_id = getattr(comun, "source_rubric_id", None)
-    if source_rubric_id:
-        combined_filter |= Q(rubric_id=source_rubric_id)
-        has_source = True
 
     telegram_source_author_id = getattr(comun, "telegram_source_author_id", None)
     if telegram_source_author_id:
@@ -1049,7 +1029,7 @@ def _comun_rating_value(post_rating_total: int | None, comments_total: int | Non
 def _recalculate_comun_rating(comun_id: int) -> tuple[int, int, Decimal]:
     comun = (
         Comun.objects.filter(id=comun_id)
-        .select_related("source_rubric", "telegram_source_author")
+        .select_related("telegram_source_author")
         .prefetch_related("excluded_authors", "blocked_tags")
         .first()
     )
@@ -1087,9 +1067,6 @@ def _candidate_comun_ids_for_post(post: Post | None) -> list[int]:
     comun_slug = str(raw_data.get("comun_slug") or "").strip()
     if comun_slug:
         combined_filter |= Q(slug=comun_slug)
-        has_filter = True
-    if getattr(post, "rubric_id", None):
-        combined_filter |= Q(source_rubric_id=post.rubric_id)
         has_filter = True
     if getattr(post, "author_id", None):
         combined_filter |= Q(telegram_source_author_id=post.author_id)
@@ -1285,7 +1262,6 @@ __all__ = [
     "_publish_ready_filter",
     "_recalculate_comun_rating",
     "_recalculate_comun_ratings_for_post",
-    "_rubric_icon_url",
     "_serialize_backend_post_card",
     "_serialize_post_comun",
     "_site_user_avatar_url",

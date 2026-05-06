@@ -242,7 +242,7 @@
     $page.url.pathname + (selectedCategorySlug ? `?category=${encodeURIComponent(selectedCategorySlug)}` : ''),
     (env.PUBLIC_SITE_URL || $page.url.origin).replace(/\/+$/, '') + '/'
   ).toString()
-  $: roadmapEnabled = Boolean(comun?.roadmap_enabled ?? true)
+  $: roadmapEnabled = Boolean(comun?.roadmap_enabled ?? false)
   $: if (browser) {
     if (publicRoadmapModalOpen) {
       if (publicRoadmapBodyOverflowBeforeOpen === null) {

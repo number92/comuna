@@ -193,7 +193,7 @@ class Comun(models.Model):
         help_text="Если включено, в сообществе будет доступна публичная страница глоссария и вставка терминов в публикации.",
     )
     roadmap_enabled = models.BooleanField(
-        default=True,
+        default=False,
         verbose_name="Включить дорожную карту",
         help_text="Если включено, в сообществе будет доступна публичная дорожная карта.",
     )

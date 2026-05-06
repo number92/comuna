@@ -241,7 +241,7 @@
       rules_text: (value?.rules_text ?? '').trim(),
       target_audience: (value?.target_audience ?? '').trim(),
       glossary_enabled: Boolean(value?.glossary_enabled),
-      roadmap_enabled: Boolean(value?.roadmap_enabled ?? true),
+      roadmap_enabled: Boolean(value?.roadmap_enabled ?? false),
       minimum_author_rating_to_post: Math.max(
         Number(value?.minimum_author_rating_to_post ?? 0) || 0,
         0
@@ -831,7 +831,7 @@
           rules_text: settingsDraft.rules_text ?? '',
           target_audience: settingsDraft.target_audience ?? '',
           glossary_enabled: Boolean(settingsDraft.glossary_enabled),
-          roadmap_enabled: Boolean(settingsDraft.roadmap_enabled ?? true),
+          roadmap_enabled: Boolean(settingsDraft.roadmap_enabled ?? false),
           minimum_author_rating_to_post: Math.max(
             Number(settingsDraft.minimum_author_rating_to_post ?? 0) || 0,
             0
@@ -1517,11 +1517,11 @@
               <input
                 type="checkbox"
                 class="mt-0.5"
-                checked={Boolean(settingsDraft.roadmap_enabled ?? true)}
+                checked={Boolean(settingsDraft.roadmap_enabled ?? false)}
                 on:change={() =>
                   (settingsDraft = {
                     ...settingsDraft,
-                    roadmap_enabled: !Boolean(settingsDraft.roadmap_enabled ?? true),
+                    roadmap_enabled: !Boolean(settingsDraft.roadmap_enabled ?? false),
                   })}
               />
               <span class="min-w-0">

@@ -308,12 +308,12 @@
   </div>
 
   <section class="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white/95 dark:bg-zinc-900/85 p-4 sm:p-5">
-    <label class="flex flex-col gap-2">
-      <span class="text-sm font-medium text-slate-700 dark:text-zinc-300">Поиск сообществ</span>
+    <label>
+      <span class="sr-only">Поиск сообществ</span>
       <input
         bind:value={searchQuery}
         type="text"
-        placeholder="Название, описание или тег"
+        placeholder="Поиск сообществ"
         class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-500"
       />
     </label>

@@ -130,6 +130,7 @@ SITE_BASE_URL = os.environ.get("SITE_BASE_URL", "http://localhost:5173")
 ALLOW_PASSWORD_REGISTRATION = os.environ.get("ALLOW_PASSWORD_REGISTRATION", "0") == "1"
 
 CORS_ALLOW_ALL_ORIGINS = DEBUG
+CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
     origin.strip()
     for origin in os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",")

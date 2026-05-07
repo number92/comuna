@@ -6,7 +6,8 @@
   import { buildComunsUrl, buildTagsEnsureUrl, type BackendComun } from '$lib/api/backend'
   import { refreshSiteUser, siteToken, siteUser, uploadSiteImage } from '$lib/siteAuth'
   import { goto } from '$app/navigation'
-  import { subscribeToComunBySlug, userSettings } from '$lib/settings'
+  import { feedSettingsHydrated, subscribeToComunBySlug, userSettings } from '$lib/settings'
+  import { onMount } from 'svelte'
 
   export let data
 
@@ -49,19 +50,17 @@
     return Number.isInteger(numeric) ? String(numeric) : numeric.toFixed(2).replace(/\.?0+$/, '')
   }
 
+  const normalizeComunSlug = (slug?: string | null) => String(slug ?? '').trim().toLowerCase()
+
   $: myFeedComunSlugSet = new Set(
-    ($userSettings.myFeedComuns ?? []).map((slug) => slug.trim()).filter(Boolean)
+    ($userSettings.myFeedComuns ?? []).map(normalizeComunSlug).filter(Boolean)
   )
 
-  let isSubscribedToComun = (slug?: string | null) => {
-    const normalizedSlug = String(slug ?? '').trim()
-    return Boolean(normalizedSlug && myFeedComunSlugSet.has(normalizedSlug))
-  }
-
-  $: isSubscribedToComun = (slug?: string | null) => {
-    const normalizedSlug = String(slug ?? '').trim()
-    return Boolean(normalizedSlug && myFeedComunSlugSet.has(normalizedSlug))
-  }
+  onMount(() => {
+    if ($siteToken && !$siteUser) {
+      void refreshSiteUser().catch(() => null)
+    }
+  })
 
   const comunCategorySlugs = (comun: BackendComun) =>
     (comun.categories ?? [])
@@ -83,10 +82,11 @@
     const nextComuns = new Set(
       ($userSettings.myFeedComuns ?? []).map((value) => value.trim()).filter(Boolean)
     )
+    const currentSlug = Array.from(nextComuns).find((value) => normalizeComunSlug(value) === normalizeComunSlug(slug))
     const nextCategoryMap = { ...($userSettings.myFeedComunCategories ?? {}) }
-    if (nextComuns.has(slug)) {
-      nextComuns.delete(slug)
-      delete nextCategoryMap[slug]
+    if (currentSlug) {
+      nextComuns.delete(currentSlug)
+      delete nextCategoryMap[currentSlug]
       $userSettings = {
         ...$userSettings,
         myFeedComuns: Array.from(nextComuns),
@@ -322,6 +322,8 @@
   {#if filteredComuns.length}
     <div class="grid gap-4 sm:grid-cols-2">
       {#each filteredComuns as comun}
+        {@const subscribed = myFeedComunSlugSet.has(normalizeComunSlug(comun.slug))}
+        {@const subscriptionsLoading = Boolean($siteToken && !$feedSettingsHydrated)}
         <div
           class="group rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white/95 dark:bg-zinc-900/85 p-4 sm:p-5 hover:border-blue-300 dark:hover:border-blue-700 hover:shadow-sm transition-all min-w-0"
         >
@@ -346,16 +348,17 @@
               <button
                 type="button"
                 class={`grid h-9 w-9 place-items-center rounded-full border transition ${
-                  isSubscribedToComun(comun.slug)
+                  subscribed
                     ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-900/70 dark:bg-emerald-950/40 dark:text-emerald-300'
                     : 'border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 dark:border-blue-900/70 dark:bg-blue-950/40 dark:text-blue-300'
-                }`}
-                title={isSubscribedToComun(comun.slug) ? 'Вы подписаны' : 'Подписаться'}
-                aria-label={isSubscribedToComun(comun.slug) ? `Отписаться от ${comun.name}` : `Подписаться на ${comun.name}`}
-                aria-pressed={isSubscribedToComun(comun.slug)}
+                } ${subscriptionsLoading ? 'opacity-60 cursor-wait' : ''}`}
+                title={subscriptionsLoading ? 'Загружаем подписки...' : subscribed ? 'Вы подписаны' : 'Подписаться'}
+                aria-label={subscribed ? `Отписаться от ${comun.name}` : `Подписаться на ${comun.name}`}
+                aria-pressed={subscribed}
+                disabled={subscriptionsLoading}
                 on:click={(event) => toggleComunSubscription(event, comun)}
               >
-                {#if isSubscribedToComun(comun.slug)}
+                {#if subscribed}
                   <svg class="h-4 w-4" viewBox="0 0 20 20" fill="none" aria-hidden="true">
                     <path d="M4.5 10.4 8.1 14 15.7 6" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" />
                   </svg>

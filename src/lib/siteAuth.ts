@@ -165,6 +165,15 @@ const normalizeSiteAuthError = (message?: string | null, fallback = 'Не уда
   if (value === 'username and password are required') {
     return 'Введите email или имя пользователя и пароль.'
   }
+  if (value === 'username, email and password are required') {
+    return 'Введите имя пользователя, email и пароль.'
+  }
+  if (value === 'email already exists') {
+    return 'Аккаунт с такой почтой уже существует.'
+  }
+  if (value === 'username already exists') {
+    return 'Имя пользователя уже занято.'
+  }
   return message as string
 }
 
@@ -309,7 +318,7 @@ export const login = async (username: string, password: string) => {
 
 export const register = async (payload: {
   username: string
-  email?: string
+  email: string
   password: string
   privacy_accepted?: boolean
 }) => {
@@ -322,6 +331,46 @@ export const register = async (payload: {
   const data = await parseApiResponse(response)
   if (!response.ok || !data?.token) {
     throw new Error(data?.error || 'Не удалось зарегистрироваться')
+  }
+
+  saveToken(data.token)
+  siteToken.set(data.token)
+  siteUser.set(data.user)
+  loadBackendFeedSettings(data.token).catch((error) => {
+    console.error('Failed to load feed settings:', error)
+  })
+  return data.user as SiteUser
+}
+
+export const requestPasswordReset = async (email: string) => {
+  const response = await fetch(buildUrl('/api/auth/password-reset/'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  })
+
+  const data = await parseApiResponse(response)
+  if (!response.ok || !data?.ok) {
+    throw new Error(normalizeSiteAuthError(data?.error, 'Не удалось отправить письмо'))
+  }
+
+  return true
+}
+
+export const confirmPasswordReset = async (payload: {
+  uid: string
+  token: string
+  password: string
+}) => {
+  const response = await fetch(buildUrl('/api/auth/password-reset/confirm/'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+
+  const data = await parseApiResponse(response)
+  if (!response.ok || !data?.token) {
+    throw new Error(normalizeSiteAuthError(data?.error, 'Не удалось обновить пароль'))
   }
 
   saveToken(data.token)
@@ -370,6 +419,8 @@ export type VkAuthPayload = {
   expires_in?: number
   user_id?: number
   id_token?: string
+  email?: string
+  phone?: string
   privacy_accepted?: boolean
 }
 

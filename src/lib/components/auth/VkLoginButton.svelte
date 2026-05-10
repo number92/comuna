@@ -26,7 +26,7 @@
       redirectUrl: env.PUBLIC_VK_REDIRECT_URL || window.location.origin,
       responseMode: VKID.ConfigResponseMode.Callback,
       source: VKID.ConfigSource.LOWCODE,
-      scope: '',
+      scope: 'email phone',
     })
 
     const oneTap = new VKID.OneTap()
@@ -54,6 +54,8 @@
               expires_in: data.expires_in,
               user_id: data.user_id,
               id_token: data.id_token,
+              email: data.email,
+              phone: data.phone || data.phone_number,
               privacy_accepted: privacyAccepted,
             })
             toast({ content: 'Вы успешно вошли через VK', type: 'success' })

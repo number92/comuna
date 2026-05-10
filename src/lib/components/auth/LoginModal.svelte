@@ -6,10 +6,12 @@
   import VkLoginButton from './VkLoginButton.svelte'
   import { login } from '$lib/siteAuth'
   import type { ComponentType } from 'svelte'
+  import SignupForm from './SignupForm.svelte'
+  import ResetPasswordForm from './ResetPasswordForm.svelte'
 
   export let open = false
   export let initialMode: 'login' | 'signup' = 'login'
-  let authMode: 'login' | 'signup' = initialMode
+  let authMode: 'login' | 'signup' | 'reset' = initialMode
   let wasOpen = false
   let telegramButtonModulePromise: Promise<{ default: ComponentType }> | null = null
   let signupPrivacyAccepted = false
@@ -76,7 +78,7 @@
       Вход и регистрация
     </h2>
     <p class="mt-1 text-center text-sm text-slate-500 dark:text-zinc-400">
-      Войдите в существующий аккаунт или зарегистрируйтесь через Telegram / VK
+      Войдите в существующий аккаунт или зарегистрируйтесь удобным способом
     </p>
 
     <div class="mt-4 grid grid-cols-2 rounded-xl bg-slate-100 p-1 dark:bg-zinc-900">
@@ -163,10 +165,30 @@
         >
           Войти
         </Button>
+        <button
+          type="button"
+          class="text-sm text-blue-600 hover:underline dark:text-blue-400"
+          on:click={() => (authMode = 'reset')}
+        >
+          Забыли пароль?
+        </button>
       </form>
+    {:else if authMode === 'reset'}
+      <div class="mt-4">
+        <ResetPasswordForm onBack={() => (authMode = 'login')} />
+      </div>
     {:else}
+      <div class="flex items-center gap-3 text-xs text-slate-400 dark:text-zinc-500 mt-4">
+        <span class="h-px flex-1 bg-slate-200 dark:bg-zinc-800" />
+        или по почте
+        <span class="h-px flex-1 bg-slate-200 dark:bg-zinc-800" />
+      </div>
+
+      <div class="mt-3">
+        <SignupForm onSuccess={handleSuccessfulAuth} />
+      </div>
+
       <div class="mt-4 flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
-        <p>Регистрация по email отключена. Используйте Telegram или VK.</p>
         <label class="flex items-start gap-3">
           <input
             bind:checked={signupPrivacyAccepted}

@@ -30,12 +30,12 @@
 
       await register({
         username: signupData.username.trim(),
-        email: signupData.email.trim() || undefined,
+        email: signupData.email.trim(),
         password: signupData.password,
         privacy_accepted: signupData.privacyAccepted,
       })
 
-      toast({ content: 'Регистрация успешна', type: 'success' })
+      toast({ content: 'Регистрация успешна. Мы отправили письмо на вашу почту.', type: 'success' })
       onSuccess()
     } catch (error) {
       pushError({
@@ -67,6 +67,7 @@
     bind:value={signupData.email}
     label="Электронная почта"
     class="w-full"
+    required
   />
 
   <div class="flex flex-row gap-2">

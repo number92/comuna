@@ -10,7 +10,6 @@ from django.views.decorators.csrf import csrf_exempt
 from telegram_integration import views as telegram_views
 from users import serializers as user_serializers
 from users import service as user_service
-from users.models import VkAccount
 
 User = get_user_model()
 
@@ -60,8 +59,11 @@ def register_user(request: HttpRequest) -> HttpResponse:
     except ValueError as exc:
         status = 403 if not getattr(settings, "ALLOW_PASSWORD_REGISTRATION", False) else 400
         return JsonResponse({"ok": False, "error": str(exc)}, status=status)
+    email_sent = user_service._send_registration_email(user)
     token = _issue_token(user)
-    return JsonResponse({"ok": True, "token": token, "user": _serialize_user(user)})
+    return JsonResponse(
+        {"ok": True, "token": token, "user": _serialize_user(user), "email_sent": email_sent}
+    )
 
 
 @csrf_exempt
@@ -80,6 +82,46 @@ def login_user(request: HttpRequest) -> HttpResponse:
     except ValueError as exc:
         status = 400 if "Введите email" in str(exc) else 401
         return JsonResponse({"ok": False, "error": str(exc)}, status=status)
+
+    token = _issue_token(user)
+    return JsonResponse({"ok": True, "token": token, "user": _serialize_user(user)})
+
+
+@csrf_exempt
+def password_reset_request(request: HttpRequest) -> HttpResponse:
+    if request.method != "POST":
+        return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)
+    try:
+        payload = json.loads(request.body.decode("utf-8"))
+    except json.JSONDecodeError:
+        return JsonResponse({"ok": False, "error": "invalid json"}, status=400)
+
+    try:
+        user_service._request_password_reset((payload.get("email") or "").strip())
+    except ValueError as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+
+    return JsonResponse({"ok": True})
+
+
+@csrf_exempt
+def password_reset_confirm(request: HttpRequest) -> HttpResponse:
+    if request.method != "POST":
+        return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)
+    try:
+        payload = json.loads(request.body.decode("utf-8"))
+    except json.JSONDecodeError:
+        return JsonResponse({"ok": False, "error": "invalid json"}, status=400)
+
+    password = payload.get("password") or ""
+    try:
+        user = user_service._reset_password_by_token(
+            str(payload.get("uid") or ""),
+            str(payload.get("token") or ""),
+            password,
+        )
+    except ValueError as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=400)
 
     token = _issue_token(user)
     return JsonResponse({"ok": True, "token": token, "user": _serialize_user(user)})
@@ -168,8 +210,10 @@ def vk_auth(request: HttpRequest) -> HttpResponse:
 
     try:
         vk_user = user_service._authenticate_vk_payload(payload)
-        vk_account_exists = VkAccount.objects.filter(vk_id=vk_user.get("vk_id")).exists()
-        if not vk_account_exists and not _is_privacy_accepted(payload.get("privacy_accepted")):
+        if (
+            user_service._vk_login_will_create_new_user(vk_user)
+            and not _is_privacy_accepted(payload.get("privacy_accepted"))
+        ):
             return JsonResponse({"ok": False, "error": _PRIVACY_CONSENT_ERROR}, status=400)
         user = user_service._upsert_vk_account(vk_user)
     except ValueError as exc:
@@ -193,6 +237,8 @@ __all__ = [
     "auth_me",
     "author_verification_code",
     "login_user",
+    "password_reset_confirm",
+    "password_reset_request",
     "public_user_profile",
     "register_user",
     "telegram_auth",

@@ -177,6 +177,27 @@
     })
   }
 
+  const withTelegramPopupOrigin = (openAuth: () => void) => {
+    const originalOpen = window.open.bind(window)
+    window.open = ((url?: string | URL, target?: string, features?: string) => {
+      let nextUrl = url
+      if (typeof url === 'string' && url.startsWith('https://oauth.telegram.org/auth')) {
+        const authUrl = new URL(url)
+        if (!authUrl.searchParams.get('origin')) {
+          authUrl.searchParams.set('origin', window.location.origin)
+        }
+        nextUrl = authUrl.toString()
+      }
+      return originalOpen(nextUrl as string | URL | undefined, target, features)
+    }) as typeof window.open
+
+    try {
+      openAuth()
+    } finally {
+      window.open = originalOpen as typeof window.open
+    }
+  }
+
   onMount(() => {
     if (!browser) return
     ;(window as any).onTelegramAuth = async (user: TelegramAuthPayload) => {
@@ -244,14 +265,16 @@
     loading = true
     try {
       const result = await new Promise<TelegramOidcResult>((resolve) => {
-        telegram.Login.auth!(
-          {
-            client_id: clientId,
-            request_access: ['write', 'phone'],
-            lang: 'ru',
-          },
-          resolve,
-        )
+        withTelegramPopupOrigin(() => {
+          telegram.Login.auth!(
+            {
+              client_id: clientId,
+              request_access: ['write', 'phone'],
+              lang: 'ru',
+            },
+            resolve,
+          )
+        })
       })
       if (result.error) {
         throw new Error(result.error)

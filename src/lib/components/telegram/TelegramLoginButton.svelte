@@ -24,7 +24,8 @@
   let lastPrivacyAccepted = privacyAccepted
   const botName = (env.PUBLIC_TELEGRAM_LOGIN_BOT || '').replace(/^@/, '')
   const oidcClientId = env.PUBLIC_TELEGRAM_OIDC_CLIENT_ID || env.PUBLIC_TELEGRAM_LOGIN_CLIENT_ID || ''
-  const useOidc = Boolean(oidcClientId)
+  const forceOidc = ['1', 'true', 'force'].includes((env.PUBLIC_TELEGRAM_OIDC_FORCE || '').toLowerCase())
+  const useOidc = Boolean(oidcClientId) && (!botName || forceOidc)
   const oidcScriptSources = [
     'https://telegram.org/js/telegram-login.js?3',
     'https://oauth.telegram.org/js/telegram-login.js?3',

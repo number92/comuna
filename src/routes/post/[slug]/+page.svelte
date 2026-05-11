@@ -58,6 +58,7 @@
   import { buildPostReadUrl } from '$lib/api/backend'
   import { siteToken } from '$lib/siteAuth'
   import { renderQuoteBlockHtml } from '$lib/quoteBlock'
+  import { sanitizePostHtml as sanitizePostHtmlUniversal } from '$lib/security/html'
 
   export let data
 
@@ -1225,7 +1226,7 @@
         .trim(); // Удаляем пробелы в начале и конце
     }
     
-    return html;
+    return sanitizePostHtmlUniversal(html);
   }
 
   function stripHtml(html: string | undefined): string {

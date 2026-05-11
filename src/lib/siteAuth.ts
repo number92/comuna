@@ -130,8 +130,9 @@ export type SiteStaticPageContent = {
 export type VotePollPostCandidate = PostVotePollTemplateItem
 
 const TOKEN_KEY = 'comuna.site.token'
+const COOKIE_AUTH_SENTINEL = '__cookie__'
 
-const initialToken = browser ? localStorage.getItem(TOKEN_KEY) : null
+const initialToken: string | null = null
 
 export const siteToken = writable<string | null>(initialToken)
 export const siteUser = writable<SiteUser | null>(null)
@@ -193,24 +194,15 @@ const parseApiResponse = async (response: Response) => {
 
 const saveToken = (token: string | null) => {
   if (!browser) return
-  if (token) {
-    localStorage.setItem(TOKEN_KEY, token)
-  } else {
-    localStorage.removeItem(TOKEN_KEY)
-  }
+  localStorage.removeItem(TOKEN_KEY)
 }
 
 export const refreshSiteUser = async () => {
   const token = get(siteToken)
-  if (!token) {
-    siteUser.set(null)
-    return null
-  }
 
   const response = await fetch(buildUrl('/api/auth/me/'), {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
+    credentials: 'include',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
   })
 
   if (!response.ok) {
@@ -223,8 +215,11 @@ export const refreshSiteUser = async () => {
 
   const data = await parseApiResponse(response)
   if (data?.user) {
+    if (!token) {
+      siteToken.set(COOKIE_AUTH_SENTINEL)
+    }
     siteUser.set(data.user)
-    loadBackendFeedSettings(token).catch((error) => {
+    loadBackendFeedSettings(token || COOKIE_AUTH_SENTINEL).catch((error) => {
       console.error('Failed to load feed settings:', error)
     })
     return data.user as SiteUser
@@ -243,6 +238,7 @@ export const updateSiteProfile = async (payload: {
 
   const response = await fetch(buildUrl('/api/auth/me/'), {
     method: 'PATCH',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
@@ -262,6 +258,7 @@ export const updateSiteProfile = async (payload: {
 export const fetchStaticPageContent = async (slug: string) => {
   const response = await fetch(buildUrl(`/api/content-pages/${encodeURIComponent(slug)}/`), {
     cache: 'no-store',
+    credentials: 'include',
   })
   const data = await parseApiResponse(response)
   if (!response.ok || !data?.page) {
@@ -281,6 +278,7 @@ export const updateStaticPageContent = async (slug: string, payload: {
 
   const response = await fetch(buildUrl(`/api/content-pages/${encodeURIComponent(slug)}/`), {
     method: 'PATCH',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
@@ -298,6 +296,7 @@ export const updateStaticPageContent = async (slug: string, payload: {
 export const login = async (username: string, password: string) => {
   const response = await fetch(buildUrl('/api/auth/login/'), {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, password }),
   })
@@ -324,6 +323,7 @@ export const register = async (payload: {
 }) => {
   const response = await fetch(buildUrl('/api/auth/register/'), {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   })
@@ -345,6 +345,7 @@ export const register = async (payload: {
 export const requestPasswordReset = async (email: string) => {
   const response = await fetch(buildUrl('/api/auth/password-reset/'), {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email }),
   })
@@ -364,6 +365,7 @@ export const confirmPasswordReset = async (payload: {
 }) => {
   const response = await fetch(buildUrl('/api/auth/password-reset/confirm/'), {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   })
@@ -399,6 +401,7 @@ export type TelegramAuthPayload = {
 export const loginTelegram = async (payload: TelegramAuthPayload) => {
   const response = await fetch(buildUrl('/api/auth/telegram/'), {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   })
@@ -430,6 +433,7 @@ export type VkAuthPayload = {
 export const loginVK = async (payload: VkAuthPayload) => {
   const response = await fetch(buildUrl('/api/auth/vk/'), {
     method: 'POST',
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   })
@@ -449,6 +453,14 @@ export const loginVK = async (payload: VkAuthPayload) => {
 }
 
 export const logout = () => {
+  const token = get(siteToken)
+  fetch(buildUrl('/api/auth/logout/'), {
+    method: 'POST',
+    credentials: 'include',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  }).catch((error) => {
+    console.error('Failed to revoke auth token:', error)
+  })
   saveToken(null)
   resetBackendFeedSettingsSync()
   siteToken.set(null)
@@ -463,6 +475,7 @@ export const fetchVerificationCode = async () => {
 
   const response = await fetch(buildUrl('/api/auth/verification-code/'), {
     method: 'POST',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
@@ -489,6 +502,7 @@ export const fetchUserPosts = async (limit = 20, offset = 0) => {
   })
 
   const response = await fetch(buildUrl(`/api/auth/posts/?${params.toString()}`), {
+    credentials: 'include',
     headers: {
       Authorization: `Bearer ${token}`,
     },
@@ -512,6 +526,7 @@ export const fetchUserPost = async (postId: number) => {
   }
 
   const response = await fetch(buildUrl(`/api/auth/posts/${postId}/`), {
+    credentials: 'include',
     headers: {
       Authorization: `Bearer ${token}`,
     },
@@ -549,6 +564,7 @@ export const updateUserPost = async (
 
   const response = await fetch(buildUrl(`/api/auth/posts/${postId}/`), {
     method: 'PATCH',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
@@ -573,6 +589,7 @@ export const deleteUserPost = async (postId: number) => {
 
   const response = await fetch(buildUrl(`/api/auth/posts/${postId}/`), {
     method: 'DELETE',
+    credentials: 'include',
     headers: {
       Authorization: `Bearer ${token}`,
     },
@@ -606,6 +623,7 @@ export const createUserPost = async (payload: {
 
   const response = await fetch(buildUrl('/api/auth/posts/'), {
     method: 'POST',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
@@ -631,6 +649,7 @@ export const fetchSharedDraft = async (shareToken: string) => {
   const response = await fetch(
     buildUrl(`/api/auth/drafts/shared/${encodeURIComponent(shareToken)}/`),
     {
+      credentials: 'include',
       headers: {
         Authorization: `Bearer ${token}`,
       },
@@ -666,6 +685,7 @@ export const createComunPost = async (
     buildUrl(`/api/comuns/${encodeURIComponent(comunSlug)}/posts/`),
     {
       method: 'POST',
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
@@ -700,6 +720,7 @@ export const uploadSiteImage = async (image: File) => {
 
   const response = await fetch(buildUrl('/api/auth/uploads/'), {
     method: 'POST',
+    credentials: 'include',
     headers: {
       Authorization: `Bearer ${token}`,
     },
@@ -748,6 +769,7 @@ export const autofillMovieReviewTemplateByImdb = async (imdbUrl: string) => {
   }
   const response = await fetch(buildUrl('/api/auth/post-templates/movie-review/autofill/'), {
     method: 'POST',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
@@ -806,6 +828,7 @@ export const resolveVotePollPostByReference = async (
     throw new Error('Некорректная ссылка на пост')
   }
   const response = await fetch(buildPostDetailUrl(postId), {
+    credentials: 'include',
     headers: {
       ...(get(siteToken) ? { Authorization: `Bearer ${get(siteToken)}` } : {}),
     },
@@ -830,6 +853,7 @@ export const searchPostsForVotePoll = async (
 
   const safeLimit = Math.min(Math.max(limit, 1), 20)
   const response = await fetch(buildSearchUrl(normalizedQuery, 1, safeLimit, 'Posts', 'New'), {
+    credentials: 'include',
     headers: {
       ...(get(siteToken) ? { Authorization: `Bearer ${get(siteToken)}` } : {}),
     },
@@ -871,6 +895,7 @@ export const fetchSiteNotifications = async (
   }
 
   const response = await fetch(buildUrl(`/api/auth/notifications/?${params.toString()}`), {
+    credentials: 'include',
     headers: {
       Authorization: `Bearer ${token}`,
     },
@@ -896,6 +921,7 @@ export const markSiteNotificationRead = async (notificationId: number) => {
 
   const response = await fetch(buildUrl(`/api/auth/notifications/${notificationId}/read/`), {
     method: 'POST',
+    credentials: 'include',
     headers: {
       Authorization: `Bearer ${token}`,
     },
@@ -920,6 +946,7 @@ export const markAllSiteNotificationsRead = async () => {
 
   const response = await fetch(buildUrl('/api/auth/notifications/read-all/'), {
     method: 'POST',
+    credentials: 'include',
     headers: {
       Authorization: `Bearer ${token}`,
     },
@@ -943,6 +970,7 @@ export const fetchSiteNotificationSettings = async (): Promise<SiteNotificationS
   }
 
   const response = await fetch(buildUrl('/api/auth/notifications/settings/'), {
+    credentials: 'include',
     headers: {
       Authorization: `Bearer ${token}`,
     },
@@ -987,6 +1015,7 @@ export const updateSiteNotificationSettings = async (
 
   const response = await fetch(buildUrl('/api/auth/notifications/settings/'), {
     method: 'PATCH',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
@@ -1018,6 +1047,7 @@ export const updateSiteNotificationSettings = async (
   }
 }
 
-if (browser && initialToken) {
+if (browser) {
+  saveToken(null)
   refreshSiteUser()
 }

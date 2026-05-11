@@ -57,7 +57,14 @@ _COMUN_ACTIVITY_POINTS = {
     "read": 1,
 }
 _EXTERNAL_URL_RE = re.compile(r"""https?://[^\s<>"')\]]+|www\.[^\s<>"')\]]+""", re.IGNORECASE)
-_INTERNAL_COMUNA_HOSTS = {"comuna.ru", "www.comuna.ru", "localhost", "127.0.0.1"}
+_INTERNAL_COMUNA_HOSTS = {
+    "comuna.ru",
+    "www.comuna.ru",
+    "tambur.pub",
+    "www.tambur.pub",
+    "localhost",
+    "127.0.0.1",
+}
 _COMUN_EXTERNAL_LINKS_FORBIDDEN_ERROR = (
     "В этом сообществе запрещены внешние ссылки. Удалите ссылки из текста и шаблона публикации."
 )

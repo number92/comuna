@@ -35,6 +35,16 @@ def _is_privacy_accepted(value) -> bool:
     return False
 
 
+def _auth_success_response(user: User, request: HttpRequest, extra: dict | None = None) -> JsonResponse:
+    token = _issue_token(user, request)
+    payload = {"ok": True, "token": token, "user": _serialize_user(user)}
+    if extra:
+        payload.update(extra)
+    response = JsonResponse(payload)
+    user_service._set_auth_cookie(response, token)
+    return response
+
+
 @csrf_exempt
 def register_user(request: HttpRequest) -> HttpResponse:
     if request.method != "POST":
@@ -60,10 +70,7 @@ def register_user(request: HttpRequest) -> HttpResponse:
         status = 403 if not getattr(settings, "ALLOW_PASSWORD_REGISTRATION", False) else 400
         return JsonResponse({"ok": False, "error": str(exc)}, status=status)
     email_sent = user_service._send_registration_email(user)
-    token = _issue_token(user)
-    return JsonResponse(
-        {"ok": True, "token": token, "user": _serialize_user(user), "email_sent": email_sent}
-    )
+    return _auth_success_response(user, request, {"email_sent": email_sent})
 
 
 @csrf_exempt
@@ -83,8 +90,7 @@ def login_user(request: HttpRequest) -> HttpResponse:
         status = 400 if "Введите email" in str(exc) else 401
         return JsonResponse({"ok": False, "error": str(exc)}, status=status)
 
-    token = _issue_token(user)
-    return JsonResponse({"ok": True, "token": token, "user": _serialize_user(user)})
+    return _auth_success_response(user, request)
 
 
 @csrf_exempt
@@ -123,8 +129,7 @@ def password_reset_confirm(request: HttpRequest) -> HttpResponse:
     except ValueError as exc:
         return JsonResponse({"ok": False, "error": str(exc)}, status=400)
 
-    token = _issue_token(user)
-    return JsonResponse({"ok": True, "token": token, "user": _serialize_user(user)})
+    return _auth_success_response(user, request)
 
 
 @csrf_exempt
@@ -153,6 +158,16 @@ def auth_me(request: HttpRequest) -> HttpResponse:
     except ValueError as exc:
         return JsonResponse({"ok": False, "error": str(exc)}, status=400)
     return JsonResponse({"ok": True, "user": _serialize_user(user)})
+
+
+@csrf_exempt
+def logout_user(request: HttpRequest) -> HttpResponse:
+    if request.method != "POST":
+        return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)
+    user_service._revoke_request_tokens(request)
+    response = JsonResponse({"ok": True})
+    user_service._clear_auth_cookie(response)
+    return response
 
 
 def public_user_profile(request: HttpRequest, user_id: int) -> HttpResponse:
@@ -219,8 +234,7 @@ def vk_auth(request: HttpRequest) -> HttpResponse:
     except ValueError as exc:
         return JsonResponse({"ok": False, "error": str(exc)}, status=400)
 
-    token = _issue_token(user)
-    return JsonResponse({"ok": True, "token": token, "user": _serialize_user(user)})
+    return _auth_success_response(user, request)
 
 
 telegram_auth = telegram_views.telegram_auth
@@ -237,6 +251,7 @@ __all__ = [
     "auth_me",
     "author_verification_code",
     "login_user",
+    "logout_user",
     "password_reset_confirm",
     "password_reset_request",
     "public_user_profile",

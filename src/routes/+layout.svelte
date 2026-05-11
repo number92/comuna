@@ -79,7 +79,7 @@
     const cleanPath = path.replace(/\/+$/, '')
     return `${siteBaseUrl}${cleanPath}`
   })()
-  $: defaultTitle = env.PUBLIC_SITE_TITLE || 'Comuna'
+  $: defaultTitle = env.PUBLIC_SITE_TITLE || 'Тамбур'
   $: defaultDescription = env.PUBLIC_SITE_DESCRIPTION || 'Публикуем лучшие посты из Telegram-каналов.'
   $: siteTitle = $site?.site_view?.site?.name || defaultTitle
   $: siteDescription = $site?.site_view?.site?.description || defaultDescription

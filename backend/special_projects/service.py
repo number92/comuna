@@ -129,7 +129,7 @@ def _serialize_default_letter(request: HttpRequest, letter: str) -> dict:
         "map_url": map_url_for_coordinates(lat, lng),
         "latitude": lat,
         "longitude": lng,
-        "source_name": "Comuna Landsat",
+        "source_name": "Тамбур Landsat",
         "source_url": "",
         "is_default": True,
     }

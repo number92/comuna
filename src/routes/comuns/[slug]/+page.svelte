@@ -204,7 +204,7 @@
     }).format(normalized)
   }
 
-  $: siteTitle = env.PUBLIC_SITE_TITLE || 'Comuna'
+  $: siteTitle = env.PUBLIC_SITE_TITLE || 'Тамбур'
   $: comunName = comun?.name || 'Сообщество'
   $: welcomePostView = comun?.welcome_post ? backendPostToPostView(comun.welcome_post) : null
   $: comunTopMembers = comun?.activity?.top_members ?? []

@@ -80,9 +80,31 @@ class SiteUserProfile(models.Model):
         return f"site-profile:{self.user_id}"
 
 
+class SiteAuthToken(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="site_auth_tokens")
+    token_hash = models.CharField(max_length=64, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    expires_at = models.DateTimeField()
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    user_agent = models.CharField(max_length=255, blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+
+    class Meta:
+        app_label = "feeds"
+        indexes = [
+            models.Index(fields=("user", "expires_at"), name="feeds_sitea_user_id_5f8a21_idx"),
+            models.Index(fields=("revoked_at", "expires_at"), name="feeds_sitea_revoked_8b2e0c_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return f"site-auth-token:{self.user_id}:{self.id}"
+
+
 __all__ = [
     "AuthorAdmin",
     "AuthorVerificationCode",
+    "SiteAuthToken",
     "SiteUserProfile",
     "TelegramAccount",
     "VkAccount",

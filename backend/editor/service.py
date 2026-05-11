@@ -369,7 +369,7 @@ def _http_json_request(
 ) -> dict | list | None:
     request_headers = {
         "Accept": "application/json",
-        "User-Agent": "ComunaBot/1.0 (+https://comuna.ru)",
+        "User-Agent": "TamburBot/1.0 (+https://tambur.pub)",
     }
     if headers:
         request_headers.update(headers)

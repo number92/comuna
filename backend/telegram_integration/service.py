@@ -254,7 +254,6 @@ def build_telegram_login_redirect_html(token: str, next_url: str) -> str:
         "<!doctype html><html><head><meta charset=\"utf-8\">"
         "<title>Telegram login</title></head><body>"
         "<script>"
-        f"try{{localStorage.setItem('comuna.site.token','{token}');}}catch(e){{}}"
         f"window.location.replace({next_literal});"
         "</script>"
         "</body></html>"

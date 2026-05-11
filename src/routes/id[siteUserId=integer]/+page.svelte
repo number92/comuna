@@ -108,7 +108,7 @@
   const initials = (value?: string | null) =>
     (value || '?').trim().slice(0, 1).toUpperCase() || '?'
 
-  $: siteTitle = env.PUBLIC_SITE_TITLE || 'Comuna'
+  $: siteTitle = env.PUBLIC_SITE_TITLE || 'Тамбур'
   $: profilePath = profile?.id ? `/id${profile.id}` : $page.url.pathname
   $: title = profile ? `${userDisplayName(profile)} — ${siteTitle}` : siteTitle
   $: description = profile

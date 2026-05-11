@@ -23,7 +23,7 @@
     $page.url.pathname,
     (env.PUBLIC_SITE_URL || $page.url.origin).replace(/\/+$/, '') + '/'
   ).toString()
-  $: seoTitle = `Редактирование: ${data.heading} — ${env.PUBLIC_SITE_TITLE || 'Comuna'}`
+  $: seoTitle = `Редактирование: ${data.heading} — ${env.PUBLIC_SITE_TITLE || 'Тамбур'}`
 
   onMount(async () => {
     await refreshSiteUser().catch(() => null)

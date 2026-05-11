@@ -133,9 +133,9 @@
   $: ogImage = isPreviewImageCandidate(firstImageAbsolute) ? firstImageAbsolute : ''
   $: ogImageType = imageMimeByExtension(ogImage)
   $: postDescription = buildDescription(data.post?.content || '')
-  $: metaDescription = postDescription || (env.PUBLIC_SITE_DESCRIPTION || 'Публикация на Comuna')
+  $: metaDescription = postDescription || (env.PUBLIC_SITE_DESCRIPTION || 'Публикация на Тамбур')
   $: postTitle = data.post?.title || ''
-  $: siteTitle = env.PUBLIC_SITE_TITLE || 'Comuna'
+  $: siteTitle = env.PUBLIC_SITE_TITLE || 'Тамбур'
   $: metaTitle = postTitle ? `${postTitle} — ${siteTitle}` : siteTitle
   $: articleSchema =
     data.post
@@ -158,7 +158,7 @@
           },
           publisher: {
             '@type': 'Organization',
-            name: env.PUBLIC_SITE_TITLE || 'Comuna',
+            name: env.PUBLIC_SITE_TITLE || 'Тамбур',
             url: siteBaseUrl,
             logo: {
               '@type': 'ImageObject',

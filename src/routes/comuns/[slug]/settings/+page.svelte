@@ -980,7 +980,7 @@
     void refreshComunManage()
   })
 
-  $: siteTitle = env.PUBLIC_SITE_TITLE || 'Comuna'
+  $: siteTitle = env.PUBLIC_SITE_TITLE || 'Тамбур'
   $: pageTitle = comun?.name
     ? `Настройки сообщества ${comun.name} — ${siteTitle}`
     : `Настройки сообщества — ${siteTitle}`

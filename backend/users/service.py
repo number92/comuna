@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import base64
+import hashlib
 import json
 import logging
 import os
@@ -11,17 +11,19 @@ import urllib.parse
 import urllib.request
 from datetime import timedelta
 
+import jwt
 from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.tokens import default_token_generator
 from django.core.exceptions import ValidationError
-from django.core.signing import BadSignature, SignatureExpired, TimestampSigner
 from django.db.models import Q
-from django.http import HttpRequest
+from django.http import HttpRequest, HttpResponse
 from django.utils.encoding import force_bytes, force_str
 from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
 from django.utils import timezone
+from jwt import PyJWKClient
+from jwt.exceptions import InvalidTokenError, PyJWKClientError
 
 from communities import serializers as community_serializers
 from communities import service as community_service
@@ -32,6 +34,7 @@ from telegram_integration import service as telegram_service
 from users.models import (
     AuthorAdmin,
     AuthorVerificationCode,
+    SiteAuthToken,
     SiteUserProfile,
     TelegramAccount,
     VkAccount,
@@ -40,8 +43,10 @@ from users.models import (
 User = get_user_model()
 logger = logging.getLogger(__name__)
 
-_TOKEN_SIGNER = TimestampSigner(salt="comuna-auth")
-_TOKEN_MAX_AGE = 60 * 60 * 24 * 30
+_TOKEN_MAX_AGE = int(getattr(settings, "SITE_AUTH_TOKEN_MAX_AGE_SECONDS", 60 * 60 * 24 * 30))
+_AUTH_COOKIE_NAME = str(getattr(settings, "SITE_AUTH_COOKIE_NAME", "comuna_site_token") or "comuna_site_token")
+_COOKIE_AUTH_SENTINEL = "__cookie__"
+_VK_JWKS_CLIENTS: dict[str, PyJWKClient] = {}
 
 
 def _fv():
@@ -50,32 +55,126 @@ def _fv():
     return feeds_views
 
 
-def _issue_token(user: User) -> str:
-    return _TOKEN_SIGNER.sign(str(user.id))
+def _hash_auth_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _auth_cookie_secure() -> bool:
+    return bool(getattr(settings, "SITE_AUTH_COOKIE_SECURE", not getattr(settings, "DEBUG", False)))
+
+
+def _auth_cookie_domain() -> str | None:
+    return str(getattr(settings, "SITE_AUTH_COOKIE_DOMAIN", "") or "").strip() or None
+
+
+def _auth_cookie_samesite() -> str:
+    value = str(getattr(settings, "SITE_AUTH_COOKIE_SAMESITE", "Lax") or "Lax").strip()
+    return value if value in {"Lax", "Strict", "None"} else "Lax"
+
+
+def _request_ip(request: HttpRequest | None) -> str | None:
+    if request is None:
+        return None
+    forwarded_for = (request.META.get("HTTP_X_FORWARDED_FOR") or "").split(",", 1)[0].strip()
+    return forwarded_for or request.META.get("REMOTE_ADDR") or None
+
+
+def _issue_token(user: User, request: HttpRequest | None = None) -> str:
+    token = secrets.token_urlsafe(48)
+    SiteAuthToken.objects.create(
+        user=user,
+        token_hash=_hash_auth_token(token),
+        expires_at=timezone.now() + timedelta(seconds=_TOKEN_MAX_AGE),
+        user_agent=(request.META.get("HTTP_USER_AGENT", "")[:255] if request is not None else ""),
+        ip_address=_request_ip(request),
+    )
+    return token
 
 
 def _get_user_from_token(token: str) -> User | None:
-    try:
-        unsigned = _TOKEN_SIGNER.unsign(token, max_age=_TOKEN_MAX_AGE)
-    except (BadSignature, SignatureExpired):
+    token = (token or "").strip()
+    if not token or token == _COOKIE_AUTH_SENTINEL:
         return None
-    try:
-        return User.objects.get(id=int(unsigned))
-    except (User.DoesNotExist, ValueError, TypeError):
+    auth_token = (
+        SiteAuthToken.objects.select_related("user")
+        .filter(
+            token_hash=_hash_auth_token(token),
+            revoked_at__isnull=True,
+            expires_at__gt=timezone.now(),
+            user__is_active=True,
+        )
+        .first()
+    )
+    if not auth_token:
         return None
+    if not auth_token.last_used_at or auth_token.last_used_at < timezone.now() - timedelta(minutes=5):
+        auth_token.last_used_at = timezone.now()
+        auth_token.save(update_fields=["last_used_at"])
+    return auth_token.user
+
+
+def _get_auth_tokens_from_request(request: HttpRequest) -> list[str]:
+    auth = request.headers.get("Authorization", "")
+    tokens: list[str] = []
+    if auth.lower().startswith("bearer "):
+        tokens.append(auth.split(" ", 1)[1].strip())
+    elif auth.lower().startswith("token "):
+        tokens.append(auth.split(" ", 1)[1].strip())
+    cookie_token = (request.COOKIES.get(_AUTH_COOKIE_NAME) or "").strip()
+    if cookie_token and cookie_token not in tokens:
+        tokens.append(cookie_token)
+    return [token for token in tokens if token]
+
+
+def _get_auth_token_from_request(request: HttpRequest) -> str:
+    tokens = _get_auth_tokens_from_request(request)
+    return tokens[0] if tokens else ""
 
 
 def _get_user_from_request(request: HttpRequest) -> User | None:
-    auth = request.headers.get("Authorization", "")
-    if auth.lower().startswith("bearer "):
-        token = auth.split(" ", 1)[1].strip()
-    elif auth.lower().startswith("token "):
-        token = auth.split(" ", 1)[1].strip()
-    else:
-        token = ""
-    if not token:
-        return None
-    return _get_user_from_token(token)
+    for token in _get_auth_tokens_from_request(request):
+        user = _get_user_from_token(token)
+        if user:
+            return user
+    return None
+
+
+def _revoke_token(token: str) -> None:
+    token = (token or "").strip()
+    if not token or token == _COOKIE_AUTH_SENTINEL:
+        return
+    SiteAuthToken.objects.filter(
+        token_hash=_hash_auth_token(token),
+        revoked_at__isnull=True,
+    ).update(revoked_at=timezone.now())
+
+
+def _revoke_request_tokens(request: HttpRequest) -> None:
+    for token in _get_auth_tokens_from_request(request):
+        _revoke_token(token)
+
+
+def _set_auth_cookie(response: HttpResponse, token: str) -> None:
+    response.set_cookie(
+        _AUTH_COOKIE_NAME,
+        token,
+        max_age=_TOKEN_MAX_AGE,
+        expires=timezone.now() + timedelta(seconds=_TOKEN_MAX_AGE),
+        path="/",
+        domain=_auth_cookie_domain(),
+        secure=_auth_cookie_secure(),
+        httponly=True,
+        samesite=_auth_cookie_samesite(),
+    )
+
+
+def _clear_auth_cookie(response: HttpResponse) -> None:
+    response.delete_cookie(
+        _AUTH_COOKIE_NAME,
+        path="/",
+        domain=_auth_cookie_domain(),
+        samesite=_auth_cookie_samesite(),
+    )
 
 
 def _register_password_user(username: str, password: str, email: str = "") -> User:
@@ -448,9 +547,8 @@ def _authenticate_vk_payload(payload: dict) -> dict:
     access_token = (payload.get("access_token") or "").strip()
     id_token = (payload.get("id_token") or "").strip()
     user_id_hint = payload.get("user_id")
-    email = _normalize_email(payload.get("email"))
-    phone = _normalize_phone(payload.get("phone") or payload.get("phone_number"))
     vk_user = None
+    verified_id_token_user = _parse_vk_id_token(id_token, user_id_hint=user_id_hint) if id_token else None
 
     if access_token:
         response = _fetch_vk_json(
@@ -471,14 +569,24 @@ def _authenticate_vk_payload(payload: dict) -> dict:
                     "last_name": (users[0].get("last_name") or "").strip(),
                     "avatar_url": (users[0].get("photo_200") or "").strip(),
                 }
+                if (
+                    verified_id_token_user
+                    and str(verified_id_token_user.get("vk_id")) == str(vk_user.get("vk_id"))
+                ):
+                    vk_user.update(
+                        {
+                            "email": verified_id_token_user.get("email") or "",
+                            "phone": verified_id_token_user.get("phone") or "",
+                        }
+                    )
 
-    if not vk_user and id_token:
-        vk_user = _parse_vk_id_token(id_token, user_id_hint=user_id_hint)
+    if not vk_user and verified_id_token_user:
+        vk_user = verified_id_token_user
 
     if not vk_user:
         raise ValueError("vk auth failed")
-    vk_user["email"] = email or _normalize_email(vk_user.get("email"))
-    vk_user["phone"] = phone or _normalize_phone(vk_user.get("phone"))
+    vk_user["email"] = _normalize_email(vk_user.get("email"))
+    vk_user["phone"] = _normalize_phone(vk_user.get("phone"))
     return vk_user
 
 
@@ -605,34 +713,32 @@ def _fetch_vk_json(method: str, payload: dict) -> dict | None:
         return None
 
 
-def _decode_jwt_payload(token: str) -> dict | None:
-    parts = token.split(".")
-    if len(parts) < 2:
-        return None
-    payload = parts[1]
-    padding = "=" * (-len(payload) % 4)
-    try:
-        decoded = base64.urlsafe_b64decode(payload + padding)
-        return json.loads(decoded.decode("utf-8"))
-    except (ValueError, json.JSONDecodeError):
-        return None
-
-
 def _parse_vk_id_token(id_token: str, user_id_hint: int | None = None) -> dict | None:
-    payload = _decode_jwt_payload(id_token)
-    if not payload:
+    vk_app_id = str(getattr(settings, "VK_APP_ID", "") or os.environ.get("VK_APP_ID", "")).strip()
+    jwks_url = str(getattr(settings, "VK_OIDC_JWKS_URL", "") or "").strip()
+    issuer = str(getattr(settings, "VK_OIDC_ISSUER", "") or "").strip()
+    if not vk_app_id or not jwks_url:
+        logger.warning("VK id_token rejected: VK_APP_ID or VK_OIDC_JWKS_URL is not configured")
         return None
 
-    exp = payload.get("exp")
-    if isinstance(exp, (int, float)) and exp < timezone.now().timestamp():
+    try:
+        jwks_client = _VK_JWKS_CLIENTS.setdefault(jwks_url, PyJWKClient(jwks_url, timeout=5))
+        signing_key = jwks_client.get_signing_key_from_jwt(id_token)
+        decode_kwargs: dict[str, object] = {
+            "audience": vk_app_id,
+            "algorithms": ["RS256", "ES256"],
+            "options": {"require": ["exp", "iat", "sub"]},
+        }
+        if issuer:
+            decode_kwargs["issuer"] = issuer
+        payload = jwt.decode(id_token, signing_key.key, **decode_kwargs)
+    except (InvalidTokenError, PyJWKClientError, ValueError, TypeError):
+        logger.warning("VK id_token signature or claims validation failed", exc_info=True)
         return None
 
-    aud = payload.get("aud")
-    vk_app_id = os.environ.get("VK_APP_ID")
-    if vk_app_id and aud and str(aud) != str(vk_app_id):
-        return None
-
-    sub = payload.get("sub") or payload.get("user_id") or user_id_hint
+    sub = payload.get("user_id") or payload.get("uid") or payload.get("sub")
+    if sub is None:
+        sub = user_id_hint
     try:
         vk_id = int(sub)
     except (TypeError, ValueError):
@@ -670,9 +776,12 @@ __all__ = [
     "_authenticate_vk_payload",
     "_build_public_user_profile_payload",
     "_build_telegram_login_redirect_html",
+    "_clear_auth_cookie",
     "_fetch_vk_json",
     "_generate_verification_code",
     "_generate_unique_username",
+    "_get_auth_token_from_request",
+    "_get_auth_tokens_from_request",
     "_get_user_from_request",
     "_get_user_from_token",
     "_issue_author_verification_code",
@@ -681,9 +790,12 @@ __all__ = [
     "_public_user_author_ids",
     "_register_password_user",
     "_request_password_reset",
+    "_revoke_request_tokens",
+    "_revoke_token",
     "_reset_password_by_token",
     "_send_password_reset_email",
     "_send_registration_email",
+    "_set_auth_cookie",
     "_update_site_profile",
     "_upsert_telegram_account",
     "_upsert_vk_account",

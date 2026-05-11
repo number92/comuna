@@ -73,12 +73,17 @@ def telegram_auth(request: HttpRequest) -> HttpResponse:
     except ValueError as exc:
         return JsonResponse({"ok": False, "error": str(exc)}, status=400)
 
-    token = _user_service()._issue_token(user)
+    user_service = _user_service()
+    token = user_service._issue_token(user, request)
     if request.method == "GET":
         next_url = request.GET.get("next") or "/"
         html = build_telegram_login_redirect_html(token, next_url)
-        return HttpResponse(html, content_type="text/html")
-    return JsonResponse(telegram_serializers._serialize_telegram_auth_response(user, token))
+        response = HttpResponse(html, content_type="text/html")
+        user_service._set_auth_cookie(response, token)
+        return response
+    response = JsonResponse(telegram_serializers._serialize_telegram_auth_response(user, token))
+    user_service._set_auth_cookie(response, token)
+    return response
 
 
 @csrf_exempt

@@ -138,6 +138,19 @@ PUSH_FCM_SERVICE_ACCOUNT_JSON = os.environ.get("PUSH_FCM_SERVICE_ACCOUNT_JSON", 
 PUSH_FCM_SERVICE_ACCOUNT_FILE = os.environ.get("PUSH_FCM_SERVICE_ACCOUNT_FILE", "")
 SITE_BASE_URL = os.environ.get("SITE_BASE_URL", "http://localhost:5173")
 ALLOW_PASSWORD_REGISTRATION = os.environ.get("ALLOW_PASSWORD_REGISTRATION", "0") == "1"
+SITE_AUTH_TOKEN_MAX_AGE_SECONDS = int(
+    os.environ.get("SITE_AUTH_TOKEN_MAX_AGE_SECONDS", str(60 * 60 * 24 * 30))
+)
+SITE_AUTH_COOKIE_NAME = os.environ.get("SITE_AUTH_COOKIE_NAME", "comuna_site_token")
+SITE_AUTH_COOKIE_DOMAIN = os.environ.get("SITE_AUTH_COOKIE_DOMAIN", "")
+SITE_AUTH_COOKIE_SAMESITE = os.environ.get("SITE_AUTH_COOKIE_SAMESITE", "Lax")
+SITE_AUTH_COOKIE_SECURE = os.environ.get(
+    "SITE_AUTH_COOKIE_SECURE",
+    "0" if DEBUG else "1",
+) == "1"
+VK_APP_ID = os.environ.get("VK_APP_ID", os.environ.get("PUBLIC_VK_APP_ID", ""))
+VK_OIDC_ISSUER = os.environ.get("VK_OIDC_ISSUER", "")
+VK_OIDC_JWKS_URL = os.environ.get("VK_OIDC_JWKS_URL", "")
 
 EMAIL_BACKEND = os.environ.get(
     "EMAIL_BACKEND",

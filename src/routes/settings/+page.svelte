@@ -168,7 +168,7 @@
         display_name: siteProfileDisplayName.trim(),
         avatar_url: siteProfileAvatarUrl.trim() || '',
       })
-      toast({ content: 'Профиль Comuna обновлен', type: 'success' })
+      toast({ content: 'Профиль Тамбур обновлен', type: 'success' })
     } catch (error) {
       toast({
         content: (error as Error)?.message ?? 'Не удалось обновить профиль',
@@ -355,7 +355,7 @@
     </Section>
   {/if}
   {#if $siteUser}
-    <Section id="comuna-profile" title="Профиль Comuna">
+    <Section id="comuna-profile" title="Профиль Тамбур">
       <SiteProfileSettingsSection
         siteUser={$siteUser}
         bind:displayName={siteProfileDisplayName}

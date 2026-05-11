@@ -350,7 +350,7 @@
       }
 
       this.preview.innerHTML = ''
-      this.updateStatus('Поддерживаются только внутренние материалы Comuna.', 'muted')
+      this.updateStatus('Поддерживаются только внутренние материалы Тамбур.', 'muted')
     }
 
     private applySnapshot(snapshot: PostLinkSnapshot) {

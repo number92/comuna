@@ -40,6 +40,7 @@
   import { showImage } from '$lib/components/ui/ExpandableImage.svelte'
   import { buildAuthorPublicPath, normalizeAuthorBlockData } from '$lib/authorBlocks'
   import { renderQuoteBlockHtml } from '$lib/quoteBlock'
+  import { sanitizePostHtml as sanitizePostHtmlUniversal } from '$lib/security/html'
   
   let DOMPurify: any
   let purifyConfigured = false
@@ -967,7 +968,7 @@
 
       const ogTitle = readMeta('meta[property="og:title"]')
       const rawTitle = ogTitle || doc.querySelector('h1')?.textContent?.trim() || ''
-      const title = rawTitle.replace(/\s+—\s+Comuna\s*$/i, '').trim()
+      const title = rawTitle.replace(/\s+—\s+(?:Comuna|Тамбур)\s*$/i, '').trim()
 
       const previewText =
         readMeta('meta[property="og:description"]') ||
@@ -1253,7 +1254,7 @@
       )
       const announcement = escapeHtml(normalized.announcement || '')
       const titleText = escapeHtml(
-        snapshot?.title || (resolvedPostId ? `Материал #${resolvedPostId}` : 'Материал Comuna')
+        snapshot?.title || (resolvedPostId ? `Материал #${resolvedPostId}` : 'Материал Тамбур')
       )
       const authorText = escapeHtml(snapshot?.author_title || snapshot?.author_username || '')
       const previewText = escapeHtml(snapshot?.preview_text || '')
@@ -2572,8 +2573,7 @@
         ],
       });
     }
-    // Если мы на сервере или DOMPurify еще не загружен, возвращаем исходный HTML
-    return withCompactLinks;
+    return sanitizePostHtmlUniversal(withCompactLinks);
   }
 
   function escapeHtml(value: string): string {

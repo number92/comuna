@@ -167,7 +167,14 @@ _POST_TEMPLATE_TYPE_OPTIONS = tuple(
 )
 _POST_TEMPLATE_TYPES = {value for value, _label in _POST_TEMPLATE_TYPE_OPTIONS}
 _EXTERNAL_URL_RE = re.compile(r"""https?://[^\s<>"')\]]+|www\.[^\s<>"')\]]+""", re.IGNORECASE)
-_INTERNAL_COMUNA_HOSTS = {"comuna.ru", "www.comuna.ru", "localhost", "127.0.0.1"}
+_INTERNAL_COMUNA_HOSTS = {
+    "comuna.ru",
+    "www.comuna.ru",
+    "tambur.pub",
+    "www.tambur.pub",
+    "localhost",
+    "127.0.0.1",
+}
 _COMUN_EXTERNAL_LINKS_FORBIDDEN_ERROR = (
     "В этом сообществе запрещены внешние ссылки. Удалите ссылки из текста и шаблона публикации."
 )
@@ -528,7 +535,7 @@ def _maybe_notify_author_comment(post: Post, comment: PostComment) -> None:
     commenter_name = _comment_display_username(comment)
     commenter = f"@{commenter_name}" if commenter_name else "Пользователь"
     text = (
-        "Новый комментарий к вашему посту на Comuna.\n"
+        "Новый комментарий к вашему посту на Тамбур.\n"
         f"Пост: {_post_display_title(post)}\n"
         f"Пользователь: {commenter}\n"
         f"Комментарий: {_comment_preview(comment.body)}"
@@ -961,7 +968,7 @@ def _http_json_request(
 ) -> dict | list | None:
     request_headers = {
         "Accept": "application/json",
-        "User-Agent": "ComunaBot/1.0 (+https://comuna.ru)",
+        "User-Agent": "TamburBot/1.0 (+https://tambur.pub)",
     }
     if headers:
         request_headers.update(headers)

@@ -42,7 +42,7 @@
   $: tagKey = tagLemma
   $: isBlacklisted = Boolean(tagKey && $userSettings.tagRules?.[tagKey] === 'hide')
 
-  $: siteTitle = env.PUBLIC_SITE_TITLE || 'Comuna'
+  $: siteTitle = env.PUBLIC_SITE_TITLE || 'Тамбур'
   $: title = `Посты по тегу «${tagName}» — ${siteTitle}`
   $: description = `Посты по тегу «${tagName}» на ${siteTitle}.`
   $: canonicalUrl = new URL(

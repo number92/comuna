@@ -287,6 +287,7 @@ const saveBackendFeedSettings = async (settings: Settings) => {
   if (snapshot === lastBackendFeedSettingsSnapshot) return
   const response = await fetch(buildAuthFeedSettingsUrl(), {
     method: 'PATCH',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${backendFeedSettingsToken}`,
@@ -325,6 +326,7 @@ export const loadBackendFeedSettings = async (token: string | null) => {
   const localSettings = get(userSettings)
   try {
     const response = await fetch(buildAuthFeedSettingsUrl(), {
+      credentials: 'include',
       headers: {
         Authorization: `Bearer ${token}`,
       },

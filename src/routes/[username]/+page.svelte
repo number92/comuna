@@ -44,7 +44,7 @@
     authorUsername && hiddenAuthorKeys.has(authorUsername.toLowerCase())
   )
   $: visiblePosts = authorHiddenOnPortal ? [] : posts
-  $: siteTitle = env.PUBLIC_SITE_TITLE || 'Comuna'
+  $: siteTitle = env.PUBLIC_SITE_TITLE || 'Тамбур'
   $: authorName = data.author?.title ?? data.author?.username ?? ''
   $: title = authorName ? `${authorName} — ${siteTitle}` : siteTitle
   $: description =

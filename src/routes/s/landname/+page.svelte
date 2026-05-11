@@ -934,7 +934,7 @@
           {:else}
             <form class="stack-form" on:submit|preventDefault={handleRegister}>
               <input bind:value={registerForm.username} placeholder="Имя пользователя" autocomplete="username" required />
-              <input bind:value={registerForm.email} placeholder="Email" type="email" autocomplete="email" />
+              <input bind:value={registerForm.email} placeholder="Email" type="email" autocomplete="email" required />
               <input bind:value={registerForm.password} placeholder="Пароль" type="password" minlength="8" autocomplete="new-password" required />
               <label class="checkbox-row">
                 <input type="checkbox" bind:checked={registerForm.privacyAccepted} />

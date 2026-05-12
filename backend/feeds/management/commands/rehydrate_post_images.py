@@ -19,7 +19,8 @@ from telegram_integration.media import (
     is_private_telegram_file_url,
 )
 
-IMG_SRC_RE = re.compile(r'<img[^>]+src="([^"]+)"')
+IMG_SRC_RE = re.compile(r"<img\b[^>]*\bsrc=[\"']([^\"']+)[\"'][^>]*>", re.IGNORECASE)
+ORPHAN_IMAGE_ATTR_FRAGMENT_RE = re.compile(r"(?:\s+alt=[\"'][^\"']*[\"']\s*/>)+", re.IGNORECASE)
 
 
 class Command(BaseCommand):
@@ -133,6 +134,7 @@ class Command(BaseCommand):
                     local_urls,
                     remove_extra=rebuild_from_file_ids or len(local_urls) < len(content_urls),
                 )
+                new_content = self._remove_orphan_image_attr_fragments(new_content)
                 if new_content != content:
                     changed = True
             elif not content_urls and needs_insert and local_urls:
@@ -194,6 +196,10 @@ class Command(BaseCommand):
         if content:
             return f"{media_html}<br><br>{content}"
         return media_html
+
+    @staticmethod
+    def _remove_orphan_image_attr_fragments(content: str) -> str:
+        return ORPHAN_IMAGE_ATTR_FRAGMENT_RE.sub("", content or "")
 
     @staticmethod
     def _extract_file_id(raw_data: dict) -> str | None:

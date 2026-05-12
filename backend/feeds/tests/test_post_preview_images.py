@@ -115,6 +115,20 @@ class PostPreviewImageTests(SimpleTestCase):
         )
         self.assertEqual(preview["preview_image_url"], "/media/uploads/post/one.webp")
 
+    def test_builds_text_preview_after_corrupted_gallery_tail(self) -> None:
+        content = (
+            '<div class="post-gallery">'
+            '<img src="/media/uploads/post/one.webp" alt="" /> alt="" /> alt="" />'
+            "</div><br><br>Так вот почему он так долго не может вернуться домой"
+        )
+
+        preview = build_post_preview(content, {})
+
+        self.assertEqual(
+            preview["preview_content"],
+            "<p>Так вот почему он так долго не может вернуться домой</p>",
+        )
+
     def test_prefers_image_before_gallery_for_preview_image(self) -> None:
         content = json.dumps(
             {

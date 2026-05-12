@@ -32,6 +32,8 @@ services:
     restart: unless-stopped
     env_file:
       - .env.frontend
+    environment:
+      INTERNAL_BACKEND_URL: http://backend:8000
     depends_on:
       - backend
 

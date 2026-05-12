@@ -24,6 +24,43 @@ def _fv():
     return feed_views
 
 
+def _unique_nonempty(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    unique_values: list[str] = []
+    for value in values:
+        normalized = str(value or "").strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        unique_values.append(normalized)
+    return unique_values
+
+
+def _merge_media_group_image(
+    raw_data: dict,
+    *,
+    image_url: str | None,
+    photo_file_id: str | None,
+    media_group_id: str,
+) -> dict:
+    next_raw_data = dict(raw_data or {})
+    existing_urls = _unique_nonempty(list(next_raw_data.get("gallery_urls") or []))
+    existing_file_ids = _unique_nonempty(list(next_raw_data.get("gallery_file_ids") or []))
+    photo_file_seen = bool(photo_file_id and photo_file_id in existing_file_ids)
+
+    if image_url and not photo_file_seen and image_url not in existing_urls:
+        existing_urls.append(image_url)
+    next_raw_data["gallery_urls"] = existing_urls
+
+    if photo_file_id and not photo_file_seen:
+        existing_file_ids.append(photo_file_id)
+    if existing_file_ids:
+        next_raw_data["gallery_file_ids"] = existing_file_ids
+
+    next_raw_data["media_group_id"] = media_group_id
+    return next_raw_data
+
+
 def _fetch_telegram_json(method: str, token: str, payload: dict) -> dict | None:
     return _fv()._fetch_telegram_json(method, token, payload)
 
@@ -331,17 +368,13 @@ def _handle_channel_post(message: dict, force_publish: bool = False) -> None:
                     existing_group_post.media_group_id = media_group_id
 
             if existing_group_post:
-                raw_data = existing_group_post.raw_data or {}
+                raw_data = _merge_media_group_image(
+                    existing_group_post.raw_data or {},
+                    image_url=image_url,
+                    photo_file_id=photo_file_id,
+                    media_group_id=media_group_id,
+                )
                 existing_urls = list(raw_data.get("gallery_urls") or [])
-                if image_url and image_url not in existing_urls:
-                    existing_urls.append(image_url)
-                raw_data["gallery_urls"] = existing_urls
-                if photo_file_id:
-                    existing_file_ids = list(raw_data.get("gallery_file_ids") or [])
-                    if photo_file_id not in existing_file_ids:
-                        existing_file_ids.append(photo_file_id)
-                    raw_data["gallery_file_ids"] = existing_file_ids
-                raw_data["media_group_id"] = media_group_id
                 if not raw_data.get("formatted_text") and formatted_text:
                     raw_data["formatted_text"] = formatted_text
                 if embed_html and not raw_data.get("embed_html"):

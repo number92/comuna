@@ -119,6 +119,7 @@ from .models import (
     StaticPageContent,
     Tag,
 )
+from .preview import build_post_preview
 from notifications.service import create_user_notification
 from ratings.service import (
     apply_author_rating_delta as _apply_author_rating_delta,
@@ -942,9 +943,13 @@ def _extract_post_preview_image_urls(
     template_payload: dict | None = None,
 ) -> tuple[str | None, str | None]:
     candidates: list[object] = []
-    candidates.extend(_template_image_candidates(template_payload))
-    candidates.extend(_content_image_candidates(post.content or ""))
-    candidates.extend(_raw_data_image_candidates(post.raw_data))
+    stored_preview_image_url = str(getattr(post, "preview_image_url", "") or "").strip()
+    if stored_preview_image_url:
+        candidates.append(stored_preview_image_url)
+    else:
+        candidates.extend(_template_image_candidates(template_payload))
+        candidates.extend(_content_image_candidates(post.content or ""))
+        candidates.extend(_raw_data_image_candidates(post.raw_data))
 
     for candidate in candidates:
         image_url = _normalize_public_image_url(request, candidate)
@@ -962,6 +967,13 @@ def _extract_post_preview_image_urls(
         )
         return preview_url or image_url, thumbnail_url or preview_url or image_url
     return None, None
+
+
+def _post_card_preview_content(post: Post) -> str:
+    preview_content = str(getattr(post, "preview_content", "") or "").strip()
+    if preview_content:
+        return preview_content
+    return build_post_preview(post.content or "", post.raw_data).get("preview_content", "")
 
 
 def _serialize_post_preview_image_fields(
@@ -1703,6 +1715,7 @@ def _build_content_with_images(
     embed_html: str = "",
     poll_html: str = "",
 ) -> str:
+    image_urls = list(dict.fromkeys(str(url or "").strip() for url in image_urls if str(url or "").strip()))
     parts: list[str] = []
     if image_urls:
         if len(image_urls) == 1:
@@ -2694,7 +2707,7 @@ def author_posts(request: HttpRequest, username: str) -> HttpResponse:
     author_channel_url = author.invite_url or author.channel_url
     serialized = []
     for post in posts:
-        content, poll_payload = _content_with_live_poll(post, current_user)
+        _content, poll_payload = _content_with_live_poll(post, current_user)
         template_payload = _serialize_post_template(post)
         author_channel_url, author_title = _author_display_fields(
             request, author, post.channel_url
@@ -2705,7 +2718,7 @@ def author_posts(request: HttpRequest, username: str) -> HttpResponse:
                 "title": _post_display_title(post),
                 "template": template_payload,
                 "comun": community_service._serialize_post_comun(request, post),
-                "content": content,
+                "content": _post_card_preview_content(post),
                 "poll": poll_payload,
                 **_serialize_post_preview_image_fields(request, post, template_payload),
                 "source_url": post.source_url,
@@ -2860,7 +2873,7 @@ def tag_posts(request: HttpRequest, tag: str) -> HttpResponse:
 
     serialized = []
     for post in posts:
-        content, poll_payload = _content_with_live_poll(post, current_user)
+        _content, poll_payload = _content_with_live_poll(post, current_user)
         template_payload = _serialize_post_template(post)
         author_channel_url, author_title = _author_display_fields(
             request, post.author, post.channel_url
@@ -2871,7 +2884,7 @@ def tag_posts(request: HttpRequest, tag: str) -> HttpResponse:
                 "title": _post_display_title(post),
                 "template": template_payload,
                 "comun": community_service._serialize_post_comun(request, post),
-                "content": content,
+                "content": _post_card_preview_content(post),
                 "poll": poll_payload,
                 **_serialize_post_preview_image_fields(request, post, template_payload),
                 "source_url": post.source_url,
@@ -3231,7 +3244,7 @@ def favorites_feed(request: HttpRequest) -> HttpResponse:
 
     serialized = []
     for post in posts:
-        content, poll_payload = _content_with_live_poll(post, user)
+        _content, poll_payload = _content_with_live_poll(post, user)
         template_payload = _serialize_post_template(post)
         author_channel_url, author_title = _author_display_fields(
             request, post.author, post.channel_url
@@ -3242,7 +3255,7 @@ def favorites_feed(request: HttpRequest) -> HttpResponse:
                 "title": _post_display_title(post),
                 "template": template_payload,
                 "comun": community_service._serialize_post_comun(request, post),
-                "content": content,
+                "content": _post_card_preview_content(post),
                 "poll": poll_payload,
                 **_serialize_post_preview_image_fields(request, post, template_payload),
                 "source_url": post.source_url,
@@ -3280,7 +3293,7 @@ def _serialize_backend_post_card(
     author_rating: int | float = 0,
 ) -> dict:
     now = now or timezone.now()
-    content, poll_payload = _content_with_live_poll(post, current_user)
+    _content, poll_payload = _content_with_live_poll(post, current_user)
     template_payload = _serialize_post_template(post)
     author_channel_url, author_title = _author_display_fields(
         request, post.author, post.channel_url
@@ -3291,7 +3304,7 @@ def _serialize_backend_post_card(
         "template": template_payload,
         "enabled_template_editor_blocks": _serialize_enabled_template_editor_blocks(template_payload),
         "comun": community_service._serialize_post_comun(request, post),
-        "content": content,
+        "content": _post_card_preview_content(post),
         "poll": poll_payload,
         "post_ratings": _serialize_post_ratings(post, current_user),
         "post_rating": _serialize_post_rating(post, current_user, template_payload=template_payload),
@@ -3316,42 +3329,6 @@ def _serialize_backend_post_card(
     }
 
 
-def _post_card_excerpt(content: str, *, max_length: int = 520) -> str:
-    raw = (content or "").strip()
-    if not raw:
-        return ""
-    text = raw
-    if raw.startswith("{"):
-        try:
-            payload = json.loads(raw)
-            blocks = payload.get("blocks") if isinstance(payload, dict) else None
-            parts: list[str] = []
-            if isinstance(blocks, list):
-                for block in blocks:
-                    if not isinstance(block, dict):
-                        continue
-                    data = block.get("data")
-                    if not isinstance(data, dict):
-                        continue
-                    for key in ("text", "caption", "title", "description"):
-                        value = data.get(key)
-                        if isinstance(value, str) and value.strip():
-                            parts.append(value)
-                            break
-                    if len(" ".join(parts)) >= max_length:
-                        break
-            if parts:
-                text = " ".join(parts)
-        except (TypeError, ValueError, json.JSONDecodeError):
-            text = raw
-    text = re.sub(r"<[^>]+>", " ", text)
-    text = unescape(text)
-    text = re.sub(r"\s+", " ", text).strip()
-    if len(text) <= max_length:
-        return text
-    return text[:max_length].rsplit(" ", 1)[0].strip() + "..."
-
-
 def _serialize_lightweight_post_card(
     request: HttpRequest,
     post: Post,
@@ -3363,6 +3340,7 @@ def _serialize_lightweight_post_card(
     score_override: int | None = None,
 ) -> dict:
     now = now or timezone.now()
+    _content, poll_payload = _content_with_live_poll(post, current_user)
     template_payload = _serialize_post_template(post)
     author_channel_url, author_title = _author_display_fields(
         request, post.author, post.channel_url
@@ -3370,13 +3348,13 @@ def _serialize_lightweight_post_card(
     return {
         "id": post.id,
         "title": _post_display_title(post),
-        "template": None,
-        "enabled_template_editor_blocks": [],
+        "template": template_payload,
+        "enabled_template_editor_blocks": _serialize_enabled_template_editor_blocks(template_payload),
         "comun": community_service._serialize_post_comun(request, post),
-        "content": _post_card_excerpt(post.content),
-        "poll": None,
-        "post_ratings": {},
-        "post_rating": None,
+        "content": _post_card_preview_content(post),
+        "poll": poll_payload,
+        "post_ratings": _serialize_post_ratings(post, current_user),
+        "post_rating": _serialize_post_rating(post, current_user, template_payload=template_payload),
         **_serialize_post_preview_image_fields(request, post, template_payload),
         "source_url": post.source_url,
         "channel_url": author_channel_url,
@@ -3546,7 +3524,7 @@ def search_content(request: HttpRequest) -> HttpResponse:
         posts_page = list(posts_qs[offset : offset + limit])
         favorite_post_ids = _favorite_post_ids_for_user(posts_page, current_user)
         for post in posts_page:
-            content, poll_payload = _content_with_live_poll(post, current_user)
+            _content, poll_payload = _content_with_live_poll(post, current_user)
             template_payload = _serialize_post_template(post)
             author_channel_url, author_title = _author_display_fields(
                 request, post.author, post.channel_url
@@ -3557,7 +3535,7 @@ def search_content(request: HttpRequest) -> HttpResponse:
                     "title": _post_display_title(post),
                     "template": template_payload,
                     "comun": community_service._serialize_post_comun(request, post),
-                    "content": content,
+                    "content": _post_card_preview_content(post),
                     "poll": poll_payload,
                     **_serialize_post_preview_image_fields(request, post, template_payload),
                     "source_url": post.source_url,

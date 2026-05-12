@@ -28,7 +28,9 @@
   import { HAS_LEMMY_INSTANCE } from '$lib/instance'
   import { buildComunsUrl, type BackendComun } from '$lib/api/backend'
   import { cachedJson } from '$lib/api/publicCache'
-  import { userSettings } from '$lib/settings'
+  import { feedSettingsHydrated, userSettings } from '$lib/settings'
+  import { siteToken } from '$lib/siteAuth'
+  import { selectSidebarComuns } from '$lib/communitySidebar'
 
   const PUBLIC_PROJECT_ABOUT = env.PUBLIC_PROJECT_ABOUT || '/about';
   const PUBLIC_PROJECT_ADVRTISEMENT =
@@ -64,6 +66,7 @@
   let loginModalOpen = false;
   let comuns: BackendComun[] = [];
   let sidebarComuns: BackendComun[] = [];
+  let sidebarComunsTotal = 0;
 
   function handleAuthRequired(e: MouseEvent) {
     if (!$profile?.jwt) {
@@ -150,7 +153,13 @@
 
   $: searchParams = new URLSearchParams($page.url.search);
   $: currentFeed = searchParams.get('feed') ?? ($userSettings.homeFeed ?? 'hot');
-  $: sidebarComuns = comuns.slice(0, 10);
+  $: sidebarComunsSelection = selectSidebarComuns(
+    comuns,
+    $userSettings.myFeedComuns,
+    !$siteToken || $feedSettingsHydrated
+  );
+  $: sidebarComuns = sidebarComunsSelection.items;
+  $: sidebarComunsTotal = sidebarComunsSelection.total;
 
 </script>
 
@@ -234,7 +243,7 @@
           <span slot="label">{comun.name}</span>
         </SidebarButton>
       {/each}
-          {#if comuns.length > 10}
+          {#if sidebarComunsTotal > 10}
             <SidebarButton href="/comuns" icon={ChevronDown}>
               <span slot="label">Все сообщества</span>
             </SidebarButton>

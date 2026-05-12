@@ -38,18 +38,20 @@
   import { page } from '$app/stores'
   import { env } from '$env/dynamic/public';
   import SidebarButton from '$lib/components/ui/sidebar/SidebarButton.svelte'
-  import { userSettings } from '$lib/settings'
+  import { feedSettingsHydrated, userSettings } from '$lib/settings'
   import { Badge } from 'mono-svelte'
   import { onMount } from 'svelte';
-  import { siteUser, logout as siteLogout } from '$lib/siteAuth'
+  import { siteToken, siteUser, logout as siteLogout } from '$lib/siteAuth'
   
   import { buildComunsUrl, type BackendComun } from '$lib/api/backend';
   import { cachedJson } from '$lib/api/publicCache'
+  import { selectSidebarComuns } from '$lib/communitySidebar'
   import { getRandomTaglineFromSite, hasTaglines } from '$lib/taglineUtils.js';
   import Markdown from '$lib/components/markdown/Markdown.svelte';
 
   let comuns: BackendComun[] = [];
   let sidebarComuns: BackendComun[] = [];
+  let sidebarComunsTotal = 0;
 
   const PUBLIC_TELEGRAM_URL = env.PUBLIC_TELEGRAM_URL;
 
@@ -132,7 +134,13 @@
   }
 
   $: currentFeed = $page.url.searchParams.get('feed') ?? ($userSettings.homeFeed ?? 'hot')
-  $: sidebarComuns = comuns.slice(0, 10)
+  $: sidebarComunsSelection = selectSidebarComuns(
+    comuns,
+    $userSettings.myFeedComuns,
+    !$siteToken || $feedSettingsHydrated
+  )
+  $: sidebarComuns = sidebarComunsSelection.items
+  $: sidebarComunsTotal = sidebarComunsSelection.total
 
   // Принудительное обновление при монтировании компонента
   onMount(() => {
@@ -416,7 +424,7 @@
               <span slot="label">{comun.name}</span>
             </SidebarButton>
           {/each}
-          {#if comuns.length > 10}
+          {#if sidebarComunsTotal > 10}
             <SidebarButton href="/comuns" icon={ChevronDown} on:click={() => { sidebarOpen = false; }}>
               <span slot="label">Все сообщества</span>
             </SidebarButton>

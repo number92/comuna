@@ -304,6 +304,8 @@ class Post(models.Model):
     title = models.CharField(max_length=255, blank=True)
     tags = models.ManyToManyField(Tag, blank=True, related_name="posts")
     content = models.TextField(blank=True)
+    preview_content = models.TextField(blank=True)
+    preview_image_url = models.TextField(blank=True)
     rating = models.IntegerField(default=0)
     comments_count = models.PositiveIntegerField(default=0)
     fake_views_target = models.PositiveIntegerField(default=default_post_fake_views_target)
@@ -329,6 +331,23 @@ class Post(models.Model):
 
     def __str__(self) -> str:
         return f"{self.author.username}:{self.message_id}"
+
+    def save(self, *args, **kwargs) -> None:
+        update_fields = kwargs.get("update_fields")
+        should_refresh_preview = update_fields is None or bool(
+            {"content", "raw_data"} & set(update_fields)
+        )
+        if should_refresh_preview:
+            from feeds.preview import build_post_preview
+
+            preview = build_post_preview(self.content or "", self.raw_data)
+            self.preview_content = preview["preview_content"]
+            self.preview_image_url = preview["preview_image_url"]
+            if update_fields is not None:
+                kwargs["update_fields"] = list(
+                    set(update_fields) | {"preview_content", "preview_image_url"}
+                )
+        super().save(*args, **kwargs)
 
 
 from communities.models import (

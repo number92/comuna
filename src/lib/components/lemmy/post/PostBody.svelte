@@ -489,6 +489,12 @@
       .replace(/^\s*<div\b[^>]*class=["'][^"']*\bimage-alt-text\b[^"']*["'][^>]*>[\s\S]*?<\/div>/i, '')
   }
 
+  const shouldRenderInlinePreviewImage = (url: string | null | undefined): boolean => {
+    const value = (url || '').trim()
+    if (!value) return false
+    return !externalPreviewImageUrl
+  }
+
   const setupGalleries = () => {
     if (!browser || !element) return;
     const galleries = element.querySelectorAll('.post-gallery');
@@ -2399,13 +2405,104 @@
     return '';
   }
 
+  function buildJsonCardPreview(content: any): string {
+    let previewContent = ''
+    const previewMovieCard = extractPreviewMovieCardFromJson(content)
+    const previewPostLink = extractPreviewPostLinkFromJson(content)
+    const previewParagraph = extractPreviewParagraphFromJson(content)
+    let previewText = ''
+    let previewImageUrl = content?.additional?.previewImage?.trim() || ''
+    let previewImageAlt = 'Preview image'
+    let previewImageTitle = ''
+
+    if (previewMovieCard) {
+      previewContent += previewMovieCard
+    }
+
+    if (!previewContent && previewPostLink) {
+      previewContent += previewPostLink
+    }
+
+    if (!previewMovieCard && !previewPostLink && !previewImageUrl) {
+      const fallbackImage = extractPreviewImageFromJson(content)
+      if (fallbackImage?.url) {
+        previewImageUrl = fallbackImage.url
+        previewImageAlt = fallbackImage.alt || previewImageAlt
+        previewImageTitle = fallbackImage.title || ''
+      }
+    }
+
+    if (!previewMovieCard && !previewPostLink && shouldRenderInlinePreviewImage(previewImageUrl)) {
+      previewContent += processImage(previewImageUrl, '', previewImageAlt, previewImageTitle)
+    }
+
+    if (content?.additional?.previewDescription?.trim()) {
+      previewText = buildPreviewParagraphFromText(content.additional.previewDescription.trim())
+    }
+    if (!previewText && previewParagraph) {
+      previewText = previewParagraph
+    }
+    if (previewText) {
+      previewContent += previewText
+    }
+
+    hasPreview = Boolean(previewContent)
+    return previewContent
+  }
+
+  function buildHtmlCardPreview(html: string): string {
+    const imageRegex = /<preview-image>(.*?)<\/preview-image>/is
+    const descriptionRegex = /<preview-description>(.*?)<\/preview-description>/is
+    const imageMatch = html.match(imageRegex)
+    const descriptionMatch = html.match(descriptionRegex)
+
+    let content = ''
+    let previewText = ''
+    let previewImageUrl = ''
+    let previewImageAlt = ''
+    let previewImageTitle = ''
+
+    if (imageMatch && imageMatch[1].trim()) {
+      previewImageUrl = imageMatch[1].trim()
+    } else {
+      const fallbackImage = extractFirstImageFromHtml(html)
+      if (fallbackImage?.url) {
+        previewImageUrl = fallbackImage.url
+        previewImageAlt = fallbackImage.alt || ''
+        previewImageTitle = fallbackImage.title || ''
+      }
+    }
+
+    if (shouldRenderInlinePreviewImage(previewImageUrl)) {
+      content += processImage(previewImageUrl, html, previewImageAlt, previewImageTitle)
+    }
+
+    if (descriptionMatch && descriptionMatch[1].trim()) {
+      previewText = buildPreviewParagraphFromText(descriptionMatch[1].trim())
+    }
+    if (!previewText) {
+      previewText = extractPreviewParagraphFromHtml(html)
+    }
+    if (previewText) {
+      content += previewText
+    }
+
+    hasPreview = Boolean(content)
+    return content
+  }
+
   function extractPreviewContent(html: string) {
     if (showFullBody || collapsible) {
-      const fullHtml = isJsonContent(html) ? convertJsonToHtml(html) : html
-      const contentHtml = stripLeadingTitleFromHtml(fullHtml)
+      const editorContent = parseSerializedEditorModel(html)
       if (!showFullBody && collapsible) {
-        return removeDuplicateLeadingPreviewImage(contentHtml)
+        if (!editorContent && looksLikeSerializedEditorModel(html)) return ''
+        const previewHtml = editorContent ? buildJsonCardPreview(editorContent) : buildHtmlCardPreview(html)
+        if (previewHtml) return removeDuplicateLeadingPreviewImage(stripLeadingTitleFromHtml(previewHtml))
+        return ''
       }
+
+      const fullHtml = editorContent ? convertJsonToHtml(html) : html
+      const contentHtml = stripLeadingTitleFromHtml(fullHtml)
       return contentHtml
     }
     // Проверяем, является ли контент JSON или base64
@@ -2413,61 +2510,14 @@
       try {
         const content = parseSerializedEditorModel(html)
         if (!content) return ''
-        
-        let previewContent = '';
-        const previewParagraph = extractPreviewParagraphFromJson(content);
-        const previewMovieCard = extractPreviewMovieCardFromJson(content)
-        const previewPostLink = extractPreviewPostLinkFromJson(content)
-        let previewText = '';
-        let previewImageUrl = content?.additional?.previewImage?.trim() || '';
-        let previewImageAlt = 'Preview image';
-        let previewImageTitle = '';
-
-        if (previewMovieCard) {
-          previewContent += previewMovieCard
-        }
-
-        if (!previewContent && previewPostLink) {
-          previewContent += previewPostLink
-        }
-
-        // Сначала добавляем изображение превью, если оно есть
-        if (!previewMovieCard && !previewPostLink && !previewImageUrl) {
-          const fallbackImage = extractPreviewImageFromJson(content);
-          if (fallbackImage?.url) {
-            previewImageUrl = fallbackImage.url;
-            previewImageAlt = fallbackImage.alt || previewImageAlt;
-            previewImageTitle = fallbackImage.title || '';
-          }
-        }
-
-        if (!previewMovieCard && !previewPostLink && previewImageUrl) {
-          previewContent += processImage(
-            previewImageUrl,
-            '',
-            previewImageAlt,
-            previewImageTitle
-          );
-        }
-
-        // Затем добавляем описание превью или первый абзац
-        if (content?.additional?.previewDescription?.trim()) {
-          previewText = buildPreviewParagraphFromText(content.additional.previewDescription.trim());
-        }
-        if (!previewText && previewParagraph) {
-          previewText = previewParagraph;
-        }
-        if (previewText) {
-          previewContent += previewText;
-        }
+        const previewContent = buildJsonCardPreview(content)
 
         if (previewContent) {
-          hasPreview = true;
           return previewContent;
         }
 
         hasPreview = false;
-        return previewParagraph || convertJsonToHtml(html);
+        return extractPreviewParagraphFromJson(content) || convertJsonToHtml(html);
       } catch (error) {
         console.error('Error processing JSON content:', error);
         return looksLikeSerializedEditorModel(html) ? '' : html;

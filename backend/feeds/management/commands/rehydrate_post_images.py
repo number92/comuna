@@ -27,6 +27,7 @@ class Command(BaseCommand):
 
     def add_arguments(self, parser) -> None:
         parser.add_argument("--limit", type=int, default=0)
+        parser.add_argument("--post-id", type=int, default=0)
         parser.add_argument("--dry-run", action="store_true")
 
     def handle(self, *args, **options) -> None:
@@ -36,6 +37,7 @@ class Command(BaseCommand):
             return
 
         limit = options["limit"] or 0
+        post_id = options["post_id"] or 0
         dry_run = options["dry_run"]
 
         qs = (
@@ -48,6 +50,8 @@ class Command(BaseCommand):
             )
             .order_by("-id")
         )
+        if post_id:
+            qs = qs.filter(id=post_id)
         if limit:
             qs = qs[:limit]
 
@@ -61,12 +65,28 @@ class Command(BaseCommand):
             new_content = content
 
             raw_data = dict(post.raw_data or {})
-            gallery_urls = list(raw_data.get("gallery_urls") or [])
-            gallery_file_ids = list(raw_data.get("gallery_file_ids") or [])
+            raw_gallery_urls = list(raw_data.get("gallery_urls") or [])
+            raw_gallery_file_ids = list(raw_data.get("gallery_file_ids") or [])
+            gallery_urls = self._unique_nonempty(raw_gallery_urls)
+            gallery_file_ids = self._unique_nonempty(raw_gallery_file_ids)
             content_urls = list(self._extract_img_urls(content))
             source_urls = gallery_urls or content_urls
             single_file_id = raw_data.get("photo_file_id") or self._extract_file_id(raw_data)
             needs_insert = False
+            rebuild_from_file_ids = bool(
+                gallery_file_ids
+                and (
+                    len(raw_gallery_file_ids) != len(gallery_file_ids)
+                    or len(gallery_urls) != len(gallery_file_ids)
+                )
+            )
+
+            if gallery_urls != raw_gallery_urls or gallery_file_ids != raw_gallery_file_ids:
+                changed = True
+
+            if rebuild_from_file_ids:
+                source_urls = [""] * len(gallery_file_ids)
+                needs_insert = not content_urls
 
             if not source_urls:
                 if gallery_file_ids:
@@ -108,7 +128,11 @@ class Command(BaseCommand):
                     changed = True
 
             if content_urls and local_urls:
-                new_content = self._replace_img_urls(content, local_urls)
+                new_content = self._replace_img_urls(
+                    content,
+                    local_urls,
+                    remove_extra=rebuild_from_file_ids,
+                )
                 if new_content != content:
                     changed = True
             elif not content_urls and needs_insert and local_urls:
@@ -123,8 +147,12 @@ class Command(BaseCommand):
             if changed and not dry_run:
                 if new_content != content:
                     post.content = new_content
-                if new_gallery_urls:
-                    raw_data["gallery_urls"] = new_gallery_urls
+                effective_gallery_urls = new_gallery_urls or gallery_urls
+                if effective_gallery_urls:
+                    raw_data["gallery_urls"] = effective_gallery_urls
+                if gallery_file_ids:
+                    raw_data["gallery_file_ids"] = gallery_file_ids
+                if effective_gallery_urls or gallery_file_ids:
                     post.raw_data = raw_data
                 post.updated_at = timezone.now()
                 post.save(update_fields=["content", "raw_data", "updated_at"])
@@ -137,13 +165,13 @@ class Command(BaseCommand):
         return [match.group(1) for match in IMG_SRC_RE.finditer(content)]
 
     @staticmethod
-    def _replace_img_urls(content: str, new_urls: list[str]) -> str:
+    def _replace_img_urls(content: str, new_urls: list[str], *, remove_extra: bool = False) -> str:
         index = 0
 
         def replacer(match: re.Match) -> str:
             nonlocal index
             if index >= len(new_urls):
-                return match.group(0)
+                return "" if remove_extra else match.group(0)
             next_url = new_urls[index]
             index += 1
             if not next_url:
@@ -155,7 +183,7 @@ class Command(BaseCommand):
 
     @staticmethod
     def _inject_images(content: str, urls: list[str]) -> str:
-        urls = [url for url in urls if url]
+        urls = Command._unique_nonempty(urls)
         if not urls:
             return content
         if len(urls) == 1:
@@ -185,6 +213,18 @@ class Command(BaseCommand):
         if url.startswith("/media/"):
             return True
         return url.startswith(settings.SITE_BASE_URL.rstrip("/") + settings.MEDIA_URL)
+
+    @staticmethod
+    def _unique_nonempty(values: list[str]) -> list[str]:
+        seen: set[str] = set()
+        unique_values: list[str] = []
+        for value in values:
+            normalized = str(value or "").strip()
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            unique_values.append(normalized)
+        return unique_values
 
     @staticmethod
     def _get_token() -> str:

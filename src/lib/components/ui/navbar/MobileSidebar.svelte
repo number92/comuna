@@ -26,8 +26,9 @@
   import { env } from '$env/dynamic/public'
   import { createEventDispatcher } from 'svelte'
   import { buildComunsUrl, type BackendComun } from '$lib/api/backend'
-  import { siteUser, logout as siteLogout } from '$lib/siteAuth'
-  import { userSettings } from '$lib/settings'
+  import { siteToken, siteUser, logout as siteLogout } from '$lib/siteAuth'
+  import { feedSettingsHydrated, userSettings } from '$lib/settings'
+  import { selectSidebarComuns } from '$lib/communitySidebar'
 
   const dispatch = createEventDispatcher()
 
@@ -40,6 +41,7 @@
   let loginModalOpen = false;
   let comuns: BackendComun[] = [];
   let sidebarComuns: BackendComun[] = [];
+  let sidebarComunsTotal = 0;
 
   function handleAuthRequired(e: MouseEvent) {
     if (!$profile?.jwt) {
@@ -71,7 +73,13 @@
   $: isPostFormRoute = $page.url.pathname.includes('/create/post') || 
                        $page.url.pathname.includes('/edit/post')
   $: currentFeed = $page.url.searchParams.get('feed') ?? ($userSettings.homeFeed ?? 'hot')
-  $: sidebarComuns = comuns.slice(0, 10)
+  $: sidebarComunsSelection = selectSidebarComuns(
+    comuns,
+    $userSettings.myFeedComuns,
+    !$siteToken || $feedSettingsHydrated
+  )
+  $: sidebarComuns = sidebarComunsSelection.items
+  $: sidebarComunsTotal = sidebarComunsSelection.total
 </script>
 
 <nav class="flex flex-col p-4 overflow-auto gap-2 h-auto min-h-0">
@@ -179,7 +187,7 @@
           <span slot="label">{comun.name}</span>
         </SidebarButton>
       {/each}
-      {#if comuns.length > 10}
+      {#if sidebarComunsTotal > 10}
         <SidebarButton href="/comuns" on:click={handleNavigation} icon={ChevronDown}>
           <span slot="label">Все сообщества</span>
         </SidebarButton>

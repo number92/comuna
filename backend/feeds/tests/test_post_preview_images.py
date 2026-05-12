@@ -99,6 +99,22 @@ class PostPreviewImageTests(SimpleTestCase):
             "<p>Первая строка<br>Вторая <b>строка</b></p>",
         )
 
+    def test_builds_text_preview_from_html_after_gallery(self) -> None:
+        content = (
+            '<div class="post-gallery">'
+            '<img src="/media/uploads/post/one.webp" alt="" />'
+            '<img src="/media/uploads/post/two.webp" alt="" />'
+            "</div><br><br>Так вот почему он так долго не может вернуться домой"
+        )
+
+        preview = build_post_preview(content, {})
+
+        self.assertEqual(
+            preview["preview_content"],
+            "<p>Так вот почему он так долго не может вернуться домой</p>",
+        )
+        self.assertEqual(preview["preview_image_url"], "/media/uploads/post/one.webp")
+
     def test_prefers_image_before_gallery_for_preview_image(self) -> None:
         content = json.dumps(
             {

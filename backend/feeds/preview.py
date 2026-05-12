@@ -12,6 +12,7 @@ from django.utils.html import strip_tags
 EDITOR_MODEL_BASE64_RE = re.compile(r"^[A-Za-z0-9+/_-]*={0,2}$")
 IMAGE_URL_PATH_RE = re.compile(r"\.(?:avif|gif|jpe?g|png|webp)(?:$|[?#])", re.IGNORECASE)
 IMG_SRC_RE = re.compile(r"<img\b[^>]*\bsrc=[\"']([^\"']+)[\"']", re.IGNORECASE)
+IMG_TAG_RE = re.compile(r"<img\b[^>]*>", re.IGNORECASE)
 PARAGRAPH_RE = re.compile(r"<p\b[^>]*>([\s\S]*?)</p>", re.IGNORECASE)
 PREVIEW_DESCRIPTION_RE = re.compile(
     r"<preview-description>([\s\S]*?)</preview-description>", re.IGNORECASE
@@ -200,7 +201,7 @@ def _html_preview_content(content: str, max_length: int) -> str:
     if paragraph_match and paragraph_match.group(1).strip():
         return _preview_paragraph_from_html(paragraph_match.group(1), max_length)
 
-    return _preview_paragraph_from_text(content or "", max_length)
+    return _preview_paragraph_from_text(IMG_TAG_RE.sub("", content or ""), max_length)
 
 
 def build_post_preview(

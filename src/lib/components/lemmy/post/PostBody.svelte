@@ -2291,8 +2291,9 @@
       tempDiv.innerHTML = html;
       const paragraphs = Array.from(tempDiv.querySelectorAll('p'));
       for (const paragraph of paragraphs) {
-        if (!paragraph.textContent) continue;
-        const preview = buildPreviewParagraphFromHtml(paragraph.innerHTML, paragraph.textContent);
+        const paragraphText = stripHtmlTags(paragraph.innerHTML);
+        if (!paragraphText.trim()) continue;
+        const preview = buildPreviewParagraphFromHtml(paragraph.innerHTML, paragraphText);
         if (preview) {
           return preview;
         }

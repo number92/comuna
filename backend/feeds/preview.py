@@ -16,10 +16,17 @@ PARAGRAPH_RE = re.compile(r"<p\b[^>]*>([\s\S]*?)</p>", re.IGNORECASE)
 PREVIEW_DESCRIPTION_RE = re.compile(
     r"<preview-description>([\s\S]*?)</preview-description>", re.IGNORECASE
 )
+BR_RE = re.compile(r"<br\s*/?>", re.IGNORECASE)
+BLOCK_BOUNDARY_RE = re.compile(r"</(?:p|div|li|blockquote|h[1-6])\s*>", re.IGNORECASE)
 
 
 def _normalize_text(value: str) -> str:
-    return re.sub(r"\s+", " ", unescape(strip_tags(value or ""))).strip()
+    html = BLOCK_BOUNDARY_RE.sub("\n", BR_RE.sub("\n", value or ""))
+    text = unescape(strip_tags(html))
+    text = re.sub(r"[ \t\f\v]+", " ", text)
+    text = re.sub(r" *\n *", "\n", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
 
 
 def _trim_preview_text(value: str, max_length: int) -> tuple[str, bool]:
@@ -44,7 +51,7 @@ def _preview_paragraph_from_html(value: str, max_length: int) -> str:
         return ""
     if not trimmed and html and _normalize_text(html) == text:
         return f"<p>{html}</p>"
-    return f"<p>{escape(text)}</p>"
+    return f"<p>{escape(text).replace(chr(10), '<br>')}</p>"
 
 
 def parse_editor_payload(raw_value: str) -> dict[str, Any] | None:

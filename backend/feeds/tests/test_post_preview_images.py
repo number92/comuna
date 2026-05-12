@@ -82,6 +82,23 @@ class PostPreviewImageTests(SimpleTestCase):
         self.assertEqual(preview["preview_content"], "<p>Первая <b>строка</b> поста</p>")
         self.assertEqual(preview["preview_image_url"], "/media/uploads/post/gallery-960.webp")
 
+    def test_builds_formatted_preview_from_editor_paragraph(self) -> None:
+        payload = {
+            "blocks": [
+                {
+                    "type": "paragraph",
+                    "data": {"text": "Первая строка<br>Вторая <b>строка</b>"},
+                },
+            ],
+        }
+
+        preview = build_post_preview(json.dumps(payload), {})
+
+        self.assertEqual(
+            preview["preview_content"],
+            "<p>Первая строка<br>Вторая <b>строка</b></p>",
+        )
+
     def test_prefers_image_before_gallery_for_preview_image(self) -> None:
         content = json.dumps(
             {

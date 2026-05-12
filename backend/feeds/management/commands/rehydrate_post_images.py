@@ -131,7 +131,7 @@ class Command(BaseCommand):
                 new_content = self._replace_img_urls(
                     content,
                     local_urls,
-                    remove_extra=rebuild_from_file_ids,
+                    remove_extra=rebuild_from_file_ids or len(local_urls) < len(content_urls),
                 )
                 if new_content != content:
                     changed = True

@@ -15,6 +15,7 @@
   let wasOpen = false
   let telegramButtonModulePromise: Promise<{ default: ComponentType }> | null = null
   let signupPrivacyAccepted = false
+  let signupMethod: 'options' | 'email' = 'options'
 
   let loginData = {
     username: '',
@@ -30,6 +31,7 @@
       loading: false,
     }
     signupPrivacyAccepted = false
+    signupMethod = 'options'
   }
 
   async function handleLogin() {
@@ -59,16 +61,22 @@
       loading: false,
     }
     signupPrivacyAccepted = false
+    signupMethod = 'options'
   }
 
   $: if (open && !wasOpen) {
     authMode = initialMode
+    signupMethod = 'options'
     wasOpen = true
     telegramButtonModulePromise ??= import('$lib/components/telegram/TelegramLoginButton.svelte')
   }
 
   $: if (!open && wasOpen) {
     wasOpen = false
+  }
+
+  $: if (authMode !== 'signup' && signupMethod !== 'options') {
+    signupMethod = 'options'
   }
 </script>
 
@@ -89,7 +97,10 @@
             ? 'bg-white text-slate-900 shadow-sm dark:bg-zinc-800 dark:text-zinc-100'
             : 'text-slate-500 dark:text-zinc-400'
         }`}
-        on:click={() => (authMode = 'login')}
+        on:click={() => {
+          authMode = 'login'
+          signupMethod = 'options'
+        }}
       >
         Авторизация
       </button>
@@ -100,7 +111,10 @@
             ? 'bg-white text-slate-900 shadow-sm dark:bg-zinc-800 dark:text-zinc-100'
             : 'text-slate-500 dark:text-zinc-400'
         }`}
-        on:click={() => (authMode = 'signup')}
+        on:click={() => {
+          authMode = 'signup'
+          signupMethod = 'options'
+        }}
       >
         Регистрация
       </button>
@@ -176,16 +190,6 @@
         <ResetPasswordForm onBack={() => (authMode = 'login')} />
       </div>
     {:else}
-      <div class="mt-4">
-        <SignupForm onSuccess={handleSuccessfulAuth} />
-      </div>
-
-      <div class="flex items-center gap-3 text-xs text-slate-400 dark:text-zinc-500 mt-4">
-        <span class="h-px flex-1 bg-slate-200 dark:bg-zinc-800"></span>
-        или через Telegram / VK
-        <span class="h-px flex-1 bg-slate-200 dark:bg-zinc-800"></span>
-      </div>
-
       <div class="mt-3 flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300">
         <label class="flex items-start gap-3">
           <input
@@ -207,26 +211,50 @@
         </label>
       </div>
 
-      <div class="mt-3 flex flex-col gap-3">
-        {#if telegramButtonModulePromise}
-          {#await telegramButtonModulePromise then module}
-            <svelte:component
-              this={module.default}
-              onSuccess={handleSuccessfulAuth}
-              active={open}
-              disabled={!signupPrivacyAccepted}
-              privacyAccepted={signupPrivacyAccepted}
-              label="Зарегистрироваться через Telegram"
-            />
-          {/await}
-        {/if}
-        <VkLoginButton
-          onSuccess={handleSuccessfulAuth}
-          disabled={!signupPrivacyAccepted}
-          privacyAccepted={signupPrivacyAccepted}
-          label="Зарегистрироваться через VK"
-        />
-      </div>
+      {#if signupMethod === 'email'}
+        <div class="mt-4 flex flex-col gap-3">
+          <button
+            type="button"
+            class="w-fit text-sm text-slate-500 transition hover:text-slate-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+            on:click={() => (signupMethod = 'options')}
+          >
+            ← Назад к способам регистрации
+          </button>
+
+          <SignupForm
+            onSuccess={handleSuccessfulAuth}
+            externalPrivacyAccepted={signupPrivacyAccepted}
+          />
+        </div>
+      {:else}
+        <div class="mt-4 flex flex-col gap-3">
+          {#if telegramButtonModulePromise}
+            {#await telegramButtonModulePromise then module}
+              <svelte:component
+                this={module.default}
+                onSuccess={handleSuccessfulAuth}
+                active={open}
+                disabled={!signupPrivacyAccepted}
+                privacyAccepted={signupPrivacyAccepted}
+                label="Зарегистрироваться через Telegram"
+              />
+            {/await}
+          {/if}
+          <VkLoginButton
+            onSuccess={handleSuccessfulAuth}
+            disabled={!signupPrivacyAccepted}
+            privacyAccepted={signupPrivacyAccepted}
+            label="Зарегистрироваться через VK"
+          />
+          <button
+            type="button"
+            class="inline-flex w-full items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-900 transition hover:border-slate-300 hover:bg-slate-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:border-zinc-700 dark:hover:bg-zinc-900"
+            on:click={() => (signupMethod = 'email')}
+          >
+            Зарегистрироваться через почту
+          </button>
+        </div>
+      {/if}
     {/if}
   </div>
 </Modal>

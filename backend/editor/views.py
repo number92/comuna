@@ -625,12 +625,15 @@ def user_post_update(request: HttpRequest, post_id: int) -> HttpResponse:
             return JsonResponse({"ok": False, "error": template_error}, status=400)
 
     next_content = str(content).strip() if content is not None else str(post.content or "").strip()
+    current_template_payload, _current_template_error = _normalize_post_template_payload(
+        post.raw_data.get("template")
+        if isinstance(post.raw_data, dict) and isinstance(post.raw_data.get("template"), dict)
+        else None
+    )
     effective_template_payload_for_validation = (
         template_payload
         if template_in_payload
-        else post.raw_data.get("template")
-        if isinstance(post.raw_data, dict) and isinstance(post.raw_data.get("template"), dict)
-        else None
+        else current_template_payload
     )
     template_content_error = editor_service._validate_template_content_constraints(
         effective_template_payload_for_validation,
@@ -692,7 +695,9 @@ def user_post_update(request: HttpRequest, post_id: int) -> HttpResponse:
         raw_data_changed = True
 
     if content is not None or template_in_payload:
-        effective_template_payload = raw_data.get("template") if isinstance(raw_data.get("template"), dict) else None
+        effective_template_payload, _effective_template_sync_error = _normalize_post_template_payload(
+            raw_data.get("template") if isinstance(raw_data.get("template"), dict) else None
+        )
         _sync_template_derived_raw_data(raw_data, effective_template_payload, post.content)
         raw_data_changed = True
 
@@ -710,7 +715,9 @@ def user_post_update(request: HttpRequest, post_id: int) -> HttpResponse:
         return JsonResponse({"ok": False, "error": "community required"}, status=400)
 
     if next_comun and not target_is_draft:
-        effective_template_payload = raw_data.get("template") if isinstance(raw_data.get("template"), dict) else None
+        effective_template_payload, _effective_template_error = _normalize_post_template_payload(
+            raw_data.get("template") if isinstance(raw_data.get("template"), dict) else None
+        )
         if bool(getattr(next_comun, "forbid_external_links", False)) and community_views._payload_contains_external_links(
             title=post.title,
             content=post.content,

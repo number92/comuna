@@ -40,11 +40,9 @@ def _content_with_live_poll(post: Post, user: User | None = None) -> tuple[str, 
         return content, None
 
     raw_data = post.raw_data if isinstance(post.raw_data, dict) else {}
-    template_payload = raw_data.get("template") if isinstance(raw_data, dict) else None
+    template_payload = _serialize_post_template(post)
     template_type = (
-        str(template_payload.get("type") or "").strip().lower()
-        if isinstance(template_payload, dict)
-        else ""
+        str(template_payload.get("type") or "").strip().lower() if isinstance(template_payload, dict) else ""
     )
     if template_type == POST_TEMPLATE_TYPE_POST_VOTE_POLL:
         return content, live_poll["poll"]
@@ -149,7 +147,7 @@ def _serialize_enabled_template_editor_blocks(
 ) -> list[str]:
     template_type = editor_service._template_type_from_payload(template_payload)
     config = (
-        PostTemplateConfig.objects.filter(template_type=template_type)
+        PostTemplateConfig.objects.filter(template_type=template_type, is_active=True)
         .values("enabled_editor_blocks")
         .first()
     )

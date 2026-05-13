@@ -76,18 +76,26 @@ class PostTemplateConfigAdmin(admin.ModelAdmin):
         "description",
         "custom_template",
         "enabled_editor_blocks",
+        "is_active",
     )
     readonly_fields = ("template_type", "custom_template")
 
     def get_queryset(self, request):
         PostTemplateConfig.ensure_defaults()
-        return super().get_queryset(request)
+        return super().get_queryset(request).filter(is_active=True)
 
     def has_add_permission(self, request):
         return False
 
     def has_delete_permission(self, request, obj=None):
-        return False
+        return True
+
+    def delete_model(self, request, obj):
+        obj.is_active = False
+        obj.save(update_fields=["is_active", "updated_at"])
+
+    def delete_queryset(self, request, queryset):
+        queryset.update(is_active=False)
 
     def enabled_editor_blocks_display(self, obj):
         choices = dict(template_editor_block_choices_for_template(obj.template_type))

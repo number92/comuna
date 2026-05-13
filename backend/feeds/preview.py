@@ -8,6 +8,8 @@ from typing import Any
 
 from django.utils.html import strip_tags
 
+from editor import service as editor_service
+
 
 EDITOR_MODEL_BASE64_RE = re.compile(r"^[A-Za-z0-9+/_-]*={0,2}$")
 IMAGE_URL_PATH_RE = re.compile(r"\.(?:avif|gif|jpe?g|png|webp)(?:$|[?#])", re.IGNORECASE)
@@ -214,7 +216,9 @@ def build_post_preview(
     max_length: int = 250,
 ) -> dict[str, str]:
     raw_data = raw_data if isinstance(raw_data, dict) else {}
-    template_payload = raw_data.get("template") if isinstance(raw_data.get("template"), dict) else None
+    template_payload, _template_error = editor_service._normalize_post_template_payload(
+        raw_data.get("template") if isinstance(raw_data.get("template"), dict) else None
+    )
     editor_payload = parse_editor_payload(content)
 
     image_candidates: list[str] = []

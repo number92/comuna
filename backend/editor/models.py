@@ -144,6 +144,18 @@ COMUN_CUSTOM_TEMPLATE_FIELD_PLACEMENT_OPTION_ITEMS = [
 
 
 def default_allowed_post_templates() -> list[str]:
+    try:
+        active_values = configured_post_template_type_values()
+        if POST_TEMPLATE_TYPE_BASIC in active_values:
+            return [POST_TEMPLATE_TYPE_BASIC]
+        if active_values:
+            for template_type, _label in post_template_type_choices():
+                if template_type in active_values:
+                    return [template_type]
+        if PostTemplateConfig.objects.exists():
+            return []
+    except (OperationalError, ProgrammingError):
+        pass
     return [POST_TEMPLATE_TYPE_BASIC]
 
 
@@ -155,19 +167,24 @@ def normalize_post_template_type_code(value: object) -> str:
 
 
 def configured_post_template_type_values() -> set[str]:
-    values = set(POST_TEMPLATE_TYPE_VALUES)
     try:
-        values.update(
+        values = {
             code
             for code in (
                 normalize_post_template_type_code(item)
-                for item in PostTemplateConfig.objects.values_list("template_type", flat=True)
+                for item in PostTemplateConfig.objects.filter(is_active=True).values_list(
+                    "template_type", flat=True
+                )
             )
             if code
-        )
+        }
+        if values:
+            return values
+        if PostTemplateConfig.objects.exists():
+            return set()
     except (OperationalError, ProgrammingError):
-        return values
-    return values
+        return set(POST_TEMPLATE_TYPE_VALUES)
+    return set(POST_TEMPLATE_TYPE_VALUES)
 
 
 def is_post_template_type_configured(value: object) -> bool:
@@ -179,41 +196,54 @@ def post_template_type_label(template_type: object) -> str:
     code = normalize_post_template_type_code(template_type)
     if not code:
         return ""
-    if code in POST_TEMPLATE_TYPE_LABELS:
-        return POST_TEMPLATE_TYPE_LABELS[code]
     try:
-        config = (
-            PostTemplateConfig.objects.select_related("custom_template")
-            .filter(template_type=code)
-            .first()
+        configs = list(
+            PostTemplateConfig.objects.select_related("custom_template").filter(template_type=code)[:2]
         )
     except (OperationalError, ProgrammingError):
-        config = None
-    if config:
-        return config.display_label
+        return POST_TEMPLATE_TYPE_LABELS.get(code, code)
+    active_config = next((item for item in configs if item.is_active), None)
+    if active_config:
+        return active_config.display_label
+    if configs:
+        return code
+    if code in POST_TEMPLATE_TYPE_LABELS:
+        return POST_TEMPLATE_TYPE_LABELS[code]
     return code
 
 
 def post_template_type_choices() -> tuple[tuple[str, str], ...]:
-    choices: list[tuple[str, str]] = [
-        (str(value), str(label)) for value, label in POST_TEMPLATE_TYPE_CHOICES
-    ]
-    seen = {value for value, _label in choices}
     try:
-        configs = (
+        configs = list(
             PostTemplateConfig.objects.select_related("custom_template")
-            .all()
+            .filter(is_active=True)
             .order_by("template_type")
         )
-        for config in configs:
-            code = normalize_post_template_type_code(config.template_type)
-            if not code or code in seen:
-                continue
-            seen.add(code)
-            choices.append((code, config.display_label))
+        if configs:
+            configs_by_code = {
+                normalize_post_template_type_code(config.template_type): config for config in configs
+            }
+            choices: list[tuple[str, str]] = []
+            seen: set[str] = set()
+            for value, _label in POST_TEMPLATE_TYPE_CHOICES:
+                code = normalize_post_template_type_code(value)
+                config = configs_by_code.get(code)
+                if not code or not config:
+                    continue
+                seen.add(code)
+                choices.append((code, config.display_label))
+            for config in configs:
+                code = normalize_post_template_type_code(config.template_type)
+                if not code or code in seen:
+                    continue
+                seen.add(code)
+                choices.append((code, config.display_label))
+            return tuple(choices)
+        if PostTemplateConfig.objects.exists():
+            return ()
     except (OperationalError, ProgrammingError):
-        pass
-    return tuple(choices)
+        return tuple((str(value), str(label)) for value, label in POST_TEMPLATE_TYPE_CHOICES)
+    return tuple((str(value), str(label)) for value, label in POST_TEMPLATE_TYPE_CHOICES)
 
 
 def normalize_allowed_post_templates(raw_value: object) -> list[str]:
@@ -341,6 +371,11 @@ class PostTemplateConfig(models.Model):
         blank=True,
         verbose_name="Доступные блоки редактора",
         help_text="Блоки редактора, которые можно использовать внутри шаблона.",
+    )
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name="Активен",
+        help_text="Неактивный шаблон скрыт из выбора и не применяется к постам.",
     )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

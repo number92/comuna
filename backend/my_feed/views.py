@@ -224,8 +224,13 @@ def my_feed(request: HttpRequest) -> HttpResponse:
         return JsonResponse({"ok": True, "posts": []})
 
     now = timezone.now()
-    hide_read = request.GET.get("hide_read") in ("1", "true", "yes")
     only_read = request.GET.get("only_read") in ("1", "true", "yes")
+    if only_read:
+        hide_read = False
+    elif saved_feed_settings and "hide_read" not in request.GET:
+        hide_read = bool(saved_feed_settings["hide_read_posts"])
+    else:
+        hide_read = request.GET.get("hide_read") in ("1", "true", "yes")
     read_user = current_user if (hide_read or only_read) else None
     if only_read and not read_user:
         return JsonResponse({"ok": False, "error": "unauthorized"}, status=401)

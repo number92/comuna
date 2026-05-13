@@ -9,7 +9,7 @@ from my_feed.views import (
     my_feed,
 )
 from communities.models import Comun, ComunCategory, ComunPostCategoryAssignment
-from feeds.models import Author, Post
+from feeds.models import Author, Post, PostRead
 from my_feed.models import UserFeedSettings
 from users.service import _issue_token
 
@@ -208,6 +208,22 @@ class UserFeedSettingsApiTests(TestCase):
 
         self.assertEqual(response.status_code, 200, response.content.decode())
         self.assertEqual([post["id"] for post in response.json()["posts"]], [self.comun_post.id])
+
+    def test_my_feed_uses_saved_hide_read_setting_without_query_flag(self):
+        UserFeedSettings.objects.create(
+            user=self.user,
+            home_feed="mine",
+            hide_read_posts=True,
+            my_feed_comuns=[self.comun.slug],
+        )
+        PostRead.objects.create(user=self.user, post=self.comun_post)
+
+        response = self.client.get(reverse("my-feed"), {"limit": "10"}, **self.auth_headers)
+
+        self.assertEqual(response.status_code, 200, response.content.decode())
+        payload = response.json()
+        self.assertEqual(payload["posts"], [])
+        self.assertEqual(payload["hidden_read_count"], 1)
 
     def test_my_feed_ignores_query_comun_override_for_authenticated_user(self):
         UserFeedSettings.objects.create(

@@ -1142,7 +1142,9 @@ def _comun_posts_base_queryset(comun: Comun, now=None):
         blocked_post_ids: list[int] = []
         for row in base_query.values("id", "title", "content", "raw_data").iterator(chunk_size=200):
             raw_data = row.get("raw_data") if isinstance(row, dict) else {}
-            template_payload = raw_data.get("template") if isinstance(raw_data, dict) else None
+            template_payload, _template_error = editor_service._normalize_post_template_payload(
+                raw_data.get("template") if isinstance(raw_data, dict) else None
+            )
             if _payload_contains_external_links(
                 title=row.get("title") if isinstance(row, dict) else None,
                 content=row.get("content") if isinstance(row, dict) else None,

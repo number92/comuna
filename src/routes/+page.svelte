@@ -55,6 +55,7 @@
             undefined,
             undefined,
             undefined,
+            hideNegativeMyFeed,
             effectiveHideRead,
             readOnly
           )

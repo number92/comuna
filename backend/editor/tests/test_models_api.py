@@ -7,11 +7,14 @@ from editor.models import (
     ComunCustomPostTemplate,
     ComunCustomPostTemplateBlock,
     ComunCustomPostTemplateField,
+    POST_TEMPLATE_TYPE_MOVIE_REVIEW,
     PostPollVote,
     PostRatingVote,
     POST_TEMPLATE_EDITOR_BLOCK_OPTION_ITEMS,
     PostTemplateConfig,
+    configured_post_template_type_values,
     normalize_allowed_post_templates,
+    post_template_type_choices,
 )
 
 
@@ -71,6 +74,35 @@ class DynamicPostTemplateConfigTests(TestCase):
         )
         blocks_by_template = editor_service._template_editor_blocks_by_template()
         self.assertEqual(blocks_by_template["custom_123"], ["header", "table"])
+
+    def test_inactive_template_is_removed_from_choices_and_payload_normalization(self):
+        config, _created = PostTemplateConfig.objects.get_or_create(
+            template_type=POST_TEMPLATE_TYPE_MOVIE_REVIEW,
+            defaults={
+                "label": "Кинообзор",
+                "enabled_editor_blocks": ["header", "image"],
+            },
+        )
+        config.is_active = False
+        config.save(update_fields=["is_active", "updated_at"])
+
+        PostTemplateConfig.ensure_defaults()
+        config.refresh_from_db()
+
+        self.assertFalse(config.is_active)
+        self.assertNotIn(POST_TEMPLATE_TYPE_MOVIE_REVIEW, configured_post_template_type_values())
+        self.assertNotIn(
+            POST_TEMPLATE_TYPE_MOVIE_REVIEW,
+            {value for value, _label in post_template_type_choices()},
+        )
+        normalized_template, template_error = editor_service._normalize_post_template_payload(
+            {
+                "type": POST_TEMPLATE_TYPE_MOVIE_REVIEW,
+                "data": {"title": "Test"},
+            }
+        )
+        self.assertIsNone(normalized_template)
+        self.assertEqual(template_error, "unsupported template type")
 
 
 class TweetTemplateTests(SimpleTestCase):

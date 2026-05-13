@@ -1332,9 +1332,9 @@ def _serialize_post_template_type_options() -> list[dict]:
         POST_TEMPLATE_TYPE_TWEET: "До 280 символов и один медиаблок с изображениями.",
     }
     try:
-        for template_type, description in PostTemplateConfig.objects.values_list(
-            "template_type", "description"
-        ):
+        for template_type, description in PostTemplateConfig.objects.filter(
+            is_active=True
+        ).values_list("template_type", "description"):
             code = normalize_post_template_type_code(template_type)
             normalized_description = re.sub(r"\s+", " ", str(description or "").strip())[:500]
             if code and normalized_description:
@@ -1604,10 +1604,15 @@ def _serialize_comun_custom_post_template(template: ComunCustomPostTemplate) -> 
 def _serialize_comun_custom_post_templates(comun: Comun) -> list[dict]:
     templates = (
         ComunCustomPostTemplate.objects.filter(comun=comun)
+        .select_related("post_template_config")
         .prefetch_related("block_rules", "fields")
         .order_by("sort_order", "name", "id")
     )
-    return [_serialize_comun_custom_post_template(template) for template in templates]
+    return [
+        _serialize_comun_custom_post_template(template)
+        for template in templates
+        if getattr(getattr(template, "post_template_config", None), "is_active", True)
+    ]
 
 
 def _custom_post_template_config_type(template: ComunCustomPostTemplate) -> str:
@@ -1638,6 +1643,7 @@ def _sync_post_template_config_for_custom_template(
     config.label = template.name
     config.custom_template = template
     config.enabled_editor_blocks = _enabled_editor_blocks_for_custom_template(blocks)
+    config.is_active = True
     config.save()
     return template_type
 
@@ -1710,9 +1716,11 @@ def _sync_comun_custom_post_templates(
 def _template_editor_blocks_by_template() -> dict[str, list[str]]:
     payload: dict[str, list[str]] = {
         template_type: default_enabled_template_editor_blocks(template_type)
-        for template_type, _template_label in _POST_TEMPLATE_TYPE_OPTIONS
+        for template_type, _template_label in post_template_type_choices()
     }
-    for item in PostTemplateConfig.objects.values("template_type", "enabled_editor_blocks"):
+    for item in PostTemplateConfig.objects.filter(is_active=True).values(
+        "template_type", "enabled_editor_blocks"
+    ):
         template_type = normalize_post_template_type_code(item.get("template_type"))
         if not template_type:
             continue
@@ -1780,6 +1788,8 @@ def _normalize_post_template_payload(
         return None, None
     if template_type == POST_TEMPLATE_TYPE_BASIC:
         return None, None
+    if not is_post_template_type_configured(template_type):
+        return None, "unsupported template type"
     if template_type == POST_TEMPLATE_TYPE_MOVIE_REVIEW:
         template_data_input = raw_template.get("data")
         if template_data_input is None:
@@ -1882,14 +1892,11 @@ def _normalize_post_template_payload(
             "data": normalized_data,
         }, None
 
-    if is_post_template_type_configured(template_type):
-        return {
-            "type": template_type,
-            "version": 1,
-            "data": {},
-        }, None
-
-    return None, "unsupported template type"
+    return {
+        "type": template_type,
+        "version": 1,
+        "data": {},
+    }, None
 
 
 def _serialize_post_template(post: Post) -> dict | None:
@@ -1906,11 +1913,9 @@ def _content_with_live_poll(post: Post, user: User | None = None) -> tuple[str, 
         return content, None
 
     raw_data = post.raw_data if isinstance(post.raw_data, dict) else {}
-    template_payload = raw_data.get("template") if isinstance(raw_data, dict) else None
+    template_payload = _serialize_post_template(post)
     template_type = (
-        str(template_payload.get("type") or "").strip().lower()
-        if isinstance(template_payload, dict)
-        else ""
+        str(template_payload.get("type") or "").strip().lower() if isinstance(template_payload, dict) else ""
     )
     if template_type == POST_TEMPLATE_TYPE_POST_VOTE_POLL:
         return content, live_poll["poll"]
@@ -2066,7 +2071,7 @@ def _serialize_enabled_template_editor_blocks(
 ) -> list[str]:
     template_type = _template_type_from_payload(template_payload)
     config = (
-        PostTemplateConfig.objects.filter(template_type=template_type)
+        PostTemplateConfig.objects.filter(template_type=template_type, is_active=True)
         .values("enabled_editor_blocks")
         .first()
     )

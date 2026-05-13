@@ -253,7 +253,8 @@ export const normalizePostTemplateTypeOptions = (value: unknown): PostTemplateTy
   const normalized: PostTemplateTypeOption[] = []
   const seen = new Set<string>()
   for (const item of source) {
-    const rawCode = normalizeTemplateCode((item as any)?.value)
+    const rawValue = (item as any)?.value
+    const rawCode = rawValue === '' ? 'basic' : normalizeTemplateCode(rawValue)
     const label = typeof (item as any)?.label === 'string' ? (item as any).label.trim() : ''
     const description =
       typeof (item as any)?.description === 'string' ? (item as any).description.trim() : ''

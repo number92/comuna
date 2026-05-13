@@ -937,14 +937,28 @@
                 {/if}
 
                 {#if selectedComun?.rules_text}
-                  <div class="mt-3 rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm dark:border-zinc-800 dark:bg-zinc-900/80">
-                    <div class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-zinc-500">
-                      Правила сообщества
-                    </div>
-                    <div class="mt-2 whitespace-pre-line leading-relaxed text-slate-700 dark:text-zinc-300">
-                      {selectedComun.rules_text}
-                    </div>
-                  </div>
+                  {#key selectedComun.slug}
+                    <details class="group mt-3 rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm dark:border-zinc-800 dark:bg-zinc-900/80">
+                      <summary class="flex cursor-pointer list-none items-center justify-between gap-3 text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-zinc-500 [&::-webkit-details-marker]:hidden">
+                        <span>Правила сообщества</span>
+                        <svg
+                          class="h-4 w-4 shrink-0 transition-transform group-open:rotate-180"
+                          viewBox="0 0 20 20"
+                          fill="currentColor"
+                          aria-hidden="true"
+                        >
+                          <path
+                            fill-rule="evenodd"
+                            d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.24 4.5a.75.75 0 01-1.08 0l-4.24-4.5a.75.75 0 01.02-1.06z"
+                            clip-rule="evenodd"
+                          />
+                        </svg>
+                      </summary>
+                      <div class="mt-2 whitespace-pre-line leading-relaxed text-slate-700 dark:text-zinc-300">
+                        {selectedComun.rules_text}
+                      </div>
+                    </details>
+                  {/key}
                 {/if}
 
                 {#if hasTemplateTypeChoice}

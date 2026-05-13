@@ -25,8 +25,8 @@
   const disabledMessage = 'Сначала примите политику обработки персональных данных.'
   const botName = (env.PUBLIC_TELEGRAM_LOGIN_BOT || '').replace(/^@/, '')
   const oidcClientId = env.PUBLIC_TELEGRAM_OIDC_CLIENT_ID || env.PUBLIC_TELEGRAM_LOGIN_CLIENT_ID || ''
-  const forceOidc = ['1', 'true', 'force'].includes((env.PUBLIC_TELEGRAM_OIDC_FORCE || '').toLowerCase())
-  const useOidc = Boolean(oidcClientId) && (!botName || forceOidc)
+  const oidcRedirectUri = env.PUBLIC_TELEGRAM_REDIRECT_URI || env.PUBLIC_TELEGRAM_OIDC_REDIRECT_URI || ''
+  const useOidc = Boolean(oidcClientId)
   const oidcScriptSources = [
     'https://telegram.org/js/telegram-login.js?3',
     'https://oauth.telegram.org/js/telegram-login.js?3',
@@ -179,7 +179,18 @@
     })
   }
 
-  const withTelegramPopupOrigin = (openAuth: () => void) => {
+  const getTelegramRedirectUri = () => {
+    const fallback = `${window.location.origin}/login`
+    const configured = oidcRedirectUri.trim()
+    if (!configured) return fallback
+    try {
+      return new URL(configured, window.location.origin).toString()
+    } catch {
+      return fallback
+    }
+  }
+
+  const withTelegramPopupCompatibility = (openAuth: () => void) => {
     const originalOpen = window.open.bind(window)
     window.open = ((url?: string | URL, target?: string, features?: string) => {
       let nextUrl = url
@@ -187,8 +198,11 @@
       if (rawUrl?.startsWith('https://oauth.telegram.org/auth')) {
         try {
           const authUrl = new URL(rawUrl)
-          if (!authUrl.searchParams.get('origin')) {
-            authUrl.searchParams.set('origin', window.location.origin)
+          const redirectUri = getTelegramRedirectUri()
+          authUrl.searchParams.set('redirect_uri', redirectUri)
+          authUrl.searchParams.set('origin', window.location.origin)
+          if (!authUrl.searchParams.get('return_to')) {
+            authUrl.searchParams.set('return_to', redirectUri)
           }
           nextUrl = authUrl.toString()
         } catch {
@@ -277,7 +291,7 @@
     loading = true
     try {
       const result = await new Promise<TelegramOidcResult>((resolve) => {
-        withTelegramPopupOrigin(() => {
+        withTelegramPopupCompatibility(() => {
           telegramAuth(
             {
               client_id: clientId,

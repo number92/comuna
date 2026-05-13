@@ -49,6 +49,25 @@ class TelegramOidcAuthTests(TestCase):
         self.assertEqual(payload["username"], "reader")
         self.assertEqual(payload["phone"], "+79991234567")
 
+    def test_oidc_payload_accepts_sub_as_telegram_id(self):
+        with patch("telegram_integration.service._telegram_oidc_jwks_client") as jwks_client:
+            jwks_client.return_value.get_signing_key_from_jwt.return_value.key = "public-key"
+            with patch(
+                "telegram_integration.service.jwt.decode",
+                return_value={
+                    "iss": "https://oauth.telegram.org",
+                    "aud": "123456789",
+                    "sub": "987654321",
+                    "iat": 1700000000,
+                    "exp": 1700003600,
+                },
+            ):
+                from telegram_integration.service import validate_telegram_oidc_token
+
+                claims = validate_telegram_oidc_token("token")
+
+        self.assertEqual(claims["id"], 987654321)
+
     def test_oidc_login_links_existing_phone_user_without_new_account_privacy(self):
         user = User.objects.create_user(username="reader")
         SiteUserProfile.objects.create(user=user, phone="+79991234567")

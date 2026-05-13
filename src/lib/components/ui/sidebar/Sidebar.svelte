@@ -26,7 +26,7 @@
   import LoginModal from '$lib/components/auth/LoginModal.svelte'
   import { env } from '$env/dynamic/public'
   import { HAS_LEMMY_INSTANCE } from '$lib/instance'
-  import { buildComunsUrl, type BackendComun } from '$lib/api/backend'
+  import { buildComunsSidebarUrl, type BackendComun } from '$lib/api/backend'
   import { cachedJson } from '$lib/api/publicCache'
   import { feedSettingsHydrated, userSettings } from '$lib/settings'
   import { siteToken } from '$lib/siteAuth'
@@ -115,9 +115,9 @@
   async function loadComuns() {
     try {
       const data = await cachedJson<{ comuns?: BackendComun[] }>(
-        'public:comuns',
-        buildComunsUrl(),
-        { ttlMs: 120_000 }
+        'public:sidebar-comuns',
+        buildComunsSidebarUrl(),
+        { ttlMs: 21_600_000 }
       );
       comuns = data.comuns ?? [];
     } catch (e) {

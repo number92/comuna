@@ -10,6 +10,7 @@ from communities.views import (
     comun_posts,
     comun_vote,
     comuns_list_create,
+    comuns_sidebar,
 )
 from editor.views import (
     auth_movie_review_autofill,
@@ -104,6 +105,7 @@ urlpatterns = [
     path("api/home/favorites/", favorites_feed, name="favorites-feed"),
     path("api/home/my/", my_feed, name="my-feed"),
     path("api/comuns/", comuns_list_create, name="comuns-list-create"),
+    path("api/comuns/sidebar/", comuns_sidebar, name="comuns-sidebar"),
     path(
         "api/comuns/from-telegram-channel/",
         comun_create_from_telegram_channel,

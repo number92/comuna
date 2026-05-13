@@ -42,7 +42,7 @@ def top_authors_month(request: HttpRequest) -> HttpResponse:
     return _top_authors_response(request, default_period="month")
 
 
-@anonymous_cache(prefix="top-comuns", seconds=120)
+@anonymous_cache(prefix="top-comuns", seconds=21_600, cache_authenticated=True)
 def top_comuns(request: HttpRequest) -> HttpResponse:
     limit = _parse_top_authors_limit(request.GET.get("limit"), default=5)
     comuns, total_comuns = _list_top_comuns(limit=limit)

@@ -1,8 +1,10 @@
 import json
+from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.test import SimpleTestCase, TestCase
 from django.urls import resolve, reverse
+from django.utils import timezone
 
 from my_feed.views import (
     auth_feed_settings,
@@ -223,7 +225,22 @@ class UserFeedSettingsApiTests(TestCase):
         self.assertEqual(response.status_code, 200, response.content.decode())
         payload = response.json()
         self.assertEqual(payload["posts"], [])
-        self.assertEqual(payload["hidden_read_count"], 1)
+        self.assertNotIn("hidden_read_count", payload)
+
+    def test_my_feed_hide_read_only_checks_recent_reads(self):
+        UserFeedSettings.objects.create(
+            user=self.user,
+            home_feed="mine",
+            hide_read_posts=True,
+            my_feed_comuns=[self.comun.slug],
+        )
+        read = PostRead.objects.create(user=self.user, post=self.comun_post)
+        PostRead.objects.filter(id=read.id).update(read_at=timezone.now() - timedelta(days=21))
+
+        response = self.client.get(reverse("my-feed"), {"limit": "10"}, **self.auth_headers)
+
+        self.assertEqual(response.status_code, 200, response.content.decode())
+        self.assertEqual([post["id"] for post in response.json()["posts"]], [self.comun_post.id])
 
     def test_my_feed_ignores_query_comun_override_for_authenticated_user(self):
         UserFeedSettings.objects.create(

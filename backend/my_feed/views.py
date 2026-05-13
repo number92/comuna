@@ -1,16 +1,18 @@
 from __future__ import annotations
 
 import json
+from datetime import timedelta
 
-from django.db.models import Q
+from django.db.models import Exists, OuterRef, Q
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 
 from communities import views as community_views
-from feeds.models import Author, Post
+from feeds.models import Author, Post, PostRead
 from my_feed import serializers as my_feed_serializers
 from my_feed import service as my_feed_service
+from rabotaem_backend.cache import bump_public_cache_prefix
 
 def _fv():
     from feeds import views as feeds_views
@@ -23,6 +25,8 @@ _apply_user_feed_settings_payload = my_feed_service._apply_user_feed_settings_pa
 _feed_settings_have_customizations = my_feed_service._feed_settings_have_customizations
 _get_or_create_user_feed_settings = my_feed_service._get_or_create_user_feed_settings
 _serialize_user_feed_settings = my_feed_service._serialize_user_feed_settings
+
+_READ_FILTER_LOOKBACK_DAYS = 14
 
 
 def _parse_string_csv(value: str, *, strip_prefix: str = "") -> list[str]:
@@ -106,11 +110,20 @@ def auth_feed_settings(request: HttpRequest) -> HttpResponse:
     if not isinstance(payload, dict):
         return JsonResponse({"ok": False, "error": "invalid payload"}, status=400)
 
+    previous_settings = _serialize_user_feed_settings(settings)
     settings = _apply_user_feed_settings_payload(settings, payload)
+    next_settings = _serialize_user_feed_settings(settings)
+    if (
+        previous_settings.get("my_feed_comuns") != next_settings.get("my_feed_comuns")
+        or previous_settings.get("my_feed_comun_categories")
+        != next_settings.get("my_feed_comun_categories")
+    ):
+        bump_public_cache_prefix("comuns-sidebar")
+        bump_public_cache_prefix("top-comuns")
     return JsonResponse(
         {
             "ok": True,
-            "settings": _serialize_user_feed_settings(settings),
+            "settings": next_settings,
             "has_customizations": _feed_settings_have_customizations(settings),
         }
     )
@@ -280,15 +293,18 @@ def my_feed(request: HttpRequest) -> HttpResponse:
             if hidden_tag_filter:
                 base_query = base_query.exclude(hidden_tag_filter).distinct()
 
-    hidden_read_count = 0
-    if hide_read and read_user:
-        hidden_read_count = base_query.filter(reads__user=read_user).count()
-
     posts_query = base_query
-    if only_read:
-        posts_query = posts_query.filter(reads__user=read_user)
-    elif hide_read and read_user:
-        posts_query = posts_query.exclude(reads__user=read_user)
+    if read_user and (only_read or hide_read):
+        recent_read_marker = PostRead.objects.filter(
+            post_id=OuterRef("pk"),
+            user=read_user,
+            read_at__gte=now - timedelta(days=_READ_FILTER_LOOKBACK_DAYS),
+        )
+        posts_query = posts_query.annotate(recently_read=Exists(recent_read_marker))
+        if only_read:
+            posts_query = posts_query.filter(recently_read=True)
+        elif hide_read:
+            posts_query = posts_query.filter(recently_read=False)
 
     posts = list(
         posts_query.select_related("author")
@@ -308,9 +324,7 @@ def my_feed(request: HttpRequest) -> HttpResponse:
         for post in posts
     ]
 
-    return JsonResponse(
-        {"ok": True, "posts": serialized, "hidden_read_count": hidden_read_count}
-    )
+    return JsonResponse({"ok": True, "posts": serialized})
 
 
 __all__ = [

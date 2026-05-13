@@ -3090,13 +3090,19 @@ def home_feed(request: HttpRequest) -> HttpResponse:
             comun_category_assignments__category_id__isnull=False,
         ).values("id")
         base_query = base_query.exclude(id__in=hidden_home_comun_post_ids)
-    hidden_read_count = 0
-    if hide_read and read_user:
-        hidden_read_count = base_query.filter(reads__user=read_user).count()
+    if only_read and not read_user:
+        return JsonResponse({"ok": True, "posts": []})
+    if read_user and (only_read or hide_read):
+        recent_read_marker = PostRead.objects.filter(
+            post_id=OuterRef("pk"),
+            user=read_user,
+            read_at__gte=now - timedelta(days=14),
+        )
+        base_query = base_query.annotate(recently_read=Exists(recent_read_marker))
 
     if only_read:
         posts_page = list(
-            base_query.filter(reads__user=read_user)
+            base_query.filter(recently_read=True)
             .select_related("author")
             .prefetch_related("tags")
             .order_by("-created_at")[offset : offset + limit]
@@ -3127,13 +3133,11 @@ def home_feed(request: HttpRequest) -> HttpResponse:
                     author_rating=author_rating,
                 )
             )
-        return JsonResponse(
-            {"ok": True, "posts": serialized, "hidden_read_count": hidden_read_count}
-        )
+        return JsonResponse({"ok": True, "posts": serialized})
 
     posts_query = base_query
     if hide_read and read_user:
-        posts_query = posts_query.exclude(reads__user=read_user)
+        posts_query = posts_query.filter(recently_read=False)
     posts = list(
         posts_query.select_related("author")
         .prefetch_related("tags")
@@ -3195,7 +3199,6 @@ def home_feed(request: HttpRequest) -> HttpResponse:
         {
             "ok": True,
             "posts": serialized_posts[offset : offset + limit],
-            "hidden_read_count": hidden_read_count,
         }
     )
 
@@ -3234,8 +3237,6 @@ def favorites_feed(request: HttpRequest) -> HttpResponse:
         .order_by("-created_at")
     )
 
-    # "Favorites" always shows all favorited posts, regardless of read-status filters.
-    hidden_read_count = 0
     filtered_favorites = favorites_qs
 
     favorite_rows = list(filtered_favorites[offset : offset + limit])
@@ -3278,9 +3279,7 @@ def favorites_feed(request: HttpRequest) -> HttpResponse:
             }
         )
 
-    return JsonResponse(
-        {"ok": True, "posts": serialized, "hidden_read_count": hidden_read_count}
-    )
+    return JsonResponse({"ok": True, "posts": serialized})
 
 
 def _serialize_backend_post_card(
@@ -3405,7 +3404,6 @@ def _materialized_home_feed_response(
         {
             "ok": True,
             "posts": serialized,
-            "hidden_read_count": 0,
             "materialized": True,
         }
     )

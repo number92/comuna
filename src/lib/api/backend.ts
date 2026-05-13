@@ -84,6 +84,10 @@ export const buildComunsUrl = (): string => {
   return `${getBackendBaseUrl()}/api/comuns/`
 }
 
+export const buildComunsSidebarUrl = (): string => {
+  return `${getBackendBaseUrl()}/api/comuns/sidebar/`
+}
+
 export const buildComunFromTelegramChannelUrl = (): string => {
   return `${getBackendBaseUrl()}/api/comuns/from-telegram-channel/`
 }

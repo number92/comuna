@@ -43,7 +43,7 @@
   import { onMount } from 'svelte';
   import { siteToken, siteUser, logout as siteLogout } from '$lib/siteAuth'
   
-  import { buildComunsUrl, type BackendComun } from '$lib/api/backend';
+  import { buildComunsSidebarUrl, type BackendComun } from '$lib/api/backend';
   import { cachedJson } from '$lib/api/publicCache'
   import { selectSidebarComuns } from '$lib/communitySidebar'
   import { getRandomTaglineFromSite, hasTaglines } from '$lib/taglineUtils.js';
@@ -67,9 +67,9 @@
   async function loadComuns() {
     try {
       const data = await cachedJson<{ comuns?: BackendComun[] }>(
-        'public:comuns',
-        buildComunsUrl(),
-        { ttlMs: 120_000 }
+        'public:sidebar-comuns',
+        buildComunsSidebarUrl(),
+        { ttlMs: 21_600_000 }
       );
       comuns = data.comuns ?? [];
     } catch (e) {

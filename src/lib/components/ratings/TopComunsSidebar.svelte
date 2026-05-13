@@ -16,7 +16,7 @@
       const data = await cachedJson<{ comuns?: BackendTopComun[] }>(
         'public:top-comuns:5',
         buildTopComunsUrl({ limit: 5 }),
-        { ttlMs: 120_000 }
+        { ttlMs: 21_600_000 }
       )
       comuns = data.comuns ?? []
     } catch (e: unknown) {

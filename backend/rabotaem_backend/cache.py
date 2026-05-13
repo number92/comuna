@@ -10,6 +10,18 @@ from django.http import HttpRequest, HttpResponse
 from django.utils.cache import patch_vary_headers
 
 
+def _cache_prefix_version_key(prefix: str) -> str:
+    return f"public-api:{prefix}:version"
+
+
+def bump_public_cache_prefix(prefix: str) -> None:
+    version_key = _cache_prefix_version_key(prefix)
+    try:
+        cache.incr(version_key)
+    except ValueError:
+        cache.set(version_key, 2, timeout=None)
+
+
 def has_auth_context(request: HttpRequest) -> bool:
     auth_cookie_name = str(
         getattr(settings, "SITE_AUTH_COOKIE_NAME", "comuna_site_token")
@@ -33,19 +45,23 @@ def anonymous_cache(
     *,
     prefix: str,
     seconds: int | None = None,
+    cache_authenticated: bool = False,
 ) -> Callable[[Callable[..., HttpResponse]], Callable[..., HttpResponse]]:
     timeout = int(seconds if seconds is not None else getattr(settings, "PUBLIC_API_CACHE_SECONDS", 60))
 
     def decorator(view_func: Callable[..., HttpResponse]) -> Callable[..., HttpResponse]:
         @wraps(view_func)
         def wrapped(request: HttpRequest, *args, **kwargs) -> HttpResponse:
-            if request.method not in {"GET", "HEAD"} or has_auth_context(request):
+            if request.method not in {"GET", "HEAD"} or (
+                has_auth_context(request) and not cache_authenticated
+            ):
                 response = view_func(request, *args, **kwargs)
                 patch_vary_headers(response, ["Cookie", "Authorization"])
                 return response
 
+            version = cache.get(_cache_prefix_version_key(prefix)) or 1
             key_digest = sha256(request.get_full_path().encode("utf-8")).hexdigest()
-            cache_key = f"public-api:{prefix}:{key_digest}"
+            cache_key = f"public-api:{prefix}:v{version}:{key_digest}"
             cached = cache.get(cache_key)
             if cached is not None:
                 response = HttpResponse(
@@ -59,7 +75,8 @@ def anonymous_cache(
                 return response
 
             response = view_func(request, *args, **kwargs)
-            patch_vary_headers(response, ["Cookie", "Authorization"])
+            if not cache_authenticated:
+                patch_vary_headers(response, ["Cookie", "Authorization"])
             if response.status_code == 200:
                 public_cache_control(response, seconds=timeout)
                 cache.set(

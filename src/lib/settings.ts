@@ -5,6 +5,7 @@ import { locale } from './translations'
 import { browser } from '$app/environment'
 import type { Link } from './components/ui/navbar/link'
 import { buildAuthFeedSettingsUrl } from './api/backend'
+import { invalidateCachedJson } from './api/publicCache'
 
 export type View = 'card' | 'cozy' | 'list' | 'compact'
 
@@ -275,6 +276,12 @@ let backendFeedSettingsHydrated = false
 let applyingBackendFeedSettings = false
 let backendFeedSettingsSaveTimer: ReturnType<typeof setTimeout> | null = null
 let lastBackendFeedSettingsSnapshot = ''
+let lastCommunitySubscriptionSnapshot = ''
+
+const invalidateCommunityChromeCaches = () => {
+  invalidateCachedJson('public:sidebar-comuns')
+  invalidateCachedJson('public:top-comuns')
+}
 
 const saveBackendFeedSettings = async (settings: Settings) => {
   if (!browser || !backendFeedSettingsToken || !backendFeedSettingsHydrated) return
@@ -520,6 +527,19 @@ if (typeof window != 'undefined') {
 }
 
 userSettings.subscribe((settings) => {
+  const communitySubscriptionSnapshot = JSON.stringify({
+    myFeedComuns: settings.myFeedComuns ?? [],
+    myFeedComunCategories: settings.myFeedComunCategories ?? {},
+  })
+  if (
+    browser &&
+    lastCommunitySubscriptionSnapshot &&
+    communitySubscriptionSnapshot !== lastCommunitySubscriptionSnapshot
+  ) {
+    invalidateCommunityChromeCaches()
+  }
+  lastCommunitySubscriptionSnapshot = communitySubscriptionSnapshot
+
   if (typeof window != 'undefined') {
     localStorage.setItem(
       'settings',

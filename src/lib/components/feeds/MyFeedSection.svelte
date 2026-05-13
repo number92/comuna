@@ -14,6 +14,7 @@
     userSettings,
   } from '$lib/settings'
   import { Button } from 'mono-svelte'
+  import { cachedJson } from '$lib/api/publicCache'
 
   export let posts: BackendPost[] = []
   export let loadingMore = false
@@ -34,11 +35,11 @@
     recommendedComunsLoading = true
     recommendedComunsError = ''
     try {
-      const response = await fetch(buildTopComunsUrl({ limit: 50 }))
-      const payload = await response.json().catch(() => ({}))
-      if (!response.ok) {
-        throw new Error(payload?.error || 'Не удалось загрузить рекомендации')
-      }
+      const payload = await cachedJson<{ comuns?: BackendTopComun[] }>(
+        'public:top-comuns:50',
+        buildTopComunsUrl({ limit: 50 }),
+        { ttlMs: 21_600_000 }
+      )
       topComuns = payload.comuns ?? []
       recommendedComunsLoaded = true
     } catch (error) {

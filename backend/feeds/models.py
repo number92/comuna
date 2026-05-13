@@ -416,6 +416,7 @@ class PostRead(models.Model):
         unique_together = ("post", "user")
         indexes = [
             models.Index(fields=["user", "-read_at"], name="postread_user_recent_idx"),
+            models.Index(fields=["user", "post"], name="postread_user_post_idx"),
         ]
 
     def __str__(self) -> str:

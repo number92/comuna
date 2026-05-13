@@ -5,6 +5,14 @@ type CacheEntry<T> = {
 
 const cache = new Map<string, CacheEntry<unknown>>()
 
+export const invalidateCachedJson = (keyOrPrefix: string): void => {
+  for (const key of Array.from(cache.keys())) {
+    if (key === keyOrPrefix || key.startsWith(keyOrPrefix)) {
+      cache.delete(key)
+    }
+  }
+}
+
 export const cachedJson = async <T>(
   key: string,
   url: string,

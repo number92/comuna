@@ -865,6 +865,53 @@ def _serialize_comun(
     return payload
 
 
+def _serialize_comun_sidebar_item(request: HttpRequest, comun: Comun) -> dict:
+    try:
+        rating_score = round(float(getattr(comun, "rating_score", 0) or 0), 2)
+    except (TypeError, ValueError):
+        rating_score = 0.0
+    return {
+        "id": comun.id,
+        "name": comun.name,
+        "slug": comun.slug,
+        "logo_url": _comun_logo_url(request, comun),
+        "sort_order": comun.sort_order,
+        "rating": {
+            "score": rating_score,
+            "upvotes": getattr(comun, "votes_up", 0) or 0,
+            "downvotes": getattr(comun, "votes_down", 0) or 0,
+        },
+    }
+
+
+@anonymous_cache(prefix="comuns-sidebar", seconds=21_600, cache_authenticated=True)
+def comuns_sidebar(request: HttpRequest) -> HttpResponse:
+    if request.method not in {"GET", "HEAD"}:
+        return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)
+
+    comuns = list(
+        Comun.objects.filter(is_active=True)
+        .exclude(slug__iexact="faq")
+        .only(
+            "id",
+            "name",
+            "slug",
+            "logo_url",
+            "sort_order",
+            "rating_score",
+            "votes_up",
+            "votes_down",
+        )
+        .order_by("-rating_score", "sort_order", "name")
+    )
+    return JsonResponse(
+        {
+            "ok": True,
+            "comuns": [_serialize_comun_sidebar_item(request, comun) for comun in comuns],
+        }
+    )
+
+
 def _comun_source_filter(comun: Comun) -> Q | None:
     combined_filter = Q()
     has_source = False

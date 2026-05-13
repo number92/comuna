@@ -22,8 +22,6 @@
   type LazyModule = { default: ComponentType }
 
   const pageSize = 10
-  const myFeedInitialBatchSize = 2
-  const myFeedInitialTarget = 10
   const scrollThreshold = 400
 
   let feedType = data.feedType ?? 'hot'
@@ -31,7 +29,6 @@
   let offset = posts.length
   let hasMore = posts.length === pageSize
   let loadingMore = false
-  let hiddenReadCount = 0
   let feedParam: string | null = null
   let readParam: string | null = null
   let readOnly = false
@@ -39,7 +36,6 @@
   let lastFeedType = feedType
   let lastFeedKey: string | null = null
   let lastMyFeedKey = ''
-  let myFeedLoadGeneration = 0
   let scrollRaf: number | null = null
   let myFeedSectionModulePromise: Promise<LazyModule> | null = null
 
@@ -104,9 +100,6 @@
         return
       }
       const payload = await response.json()
-      if (typeof payload.hidden_read_count === 'number') {
-        hiddenReadCount = payload.hidden_read_count
-      }
       const nextPosts = payload.posts ?? []
       if (nextPosts.length) {
         posts = [...posts, ...nextPosts]
@@ -120,20 +113,6 @@
       console.error('Failed to load more posts:', error)
     } finally {
       loadingMore = false
-    }
-  }
-
-  const loadInitialMyFeed = async (generation: number) => {
-    while (
-      browser &&
-      generation === myFeedLoadGeneration &&
-      feedType === 'mine' &&
-      canLoadMyFeed &&
-      hasMore &&
-      posts.length < myFeedInitialTarget
-    ) {
-      const loaded = await loadMore(myFeedInitialBatchSize)
-      if (!loaded) break
     }
   }
 
@@ -228,14 +207,12 @@
       offset = 0
       hasMore = false
       loadingMore = false
-      hiddenReadCount = 0
       lastMyFeedKey = ''
     } else {
       posts = data.posts ?? []
       offset = posts.length
       hasMore = posts.length === pageSize
       loadingMore = false
-      hiddenReadCount = 0
     }
   }
 
@@ -249,14 +226,12 @@
         offset = 0
         hasMore = false
         loadingMore = false
-        hiddenReadCount = 0
         lastMyFeedKey = ''
       } else {
         posts = []
         offset = 0
         hasMore = true
         loadingMore = false
-        hiddenReadCount = 0
         if (browser) {
           void loadMore()
         }
@@ -277,7 +252,6 @@
         offset = 0
         hasMore = true
         loadingMore = false
-        hiddenReadCount = 0
         void loadMore()
       }
     } else if (feedKey !== lastFeedKey) {
@@ -286,7 +260,6 @@
       offset = 0
       hasMore = true
       loadingMore = false
-      hiddenReadCount = 0
       if (browser) {
         void loadMore()
       }
@@ -303,11 +276,9 @@
       offset = 0
       hasMore = false
       loadingMore = false
-      hiddenReadCount = 0
-      myFeedLoadGeneration += 1
       if (canLoadMyFeed) {
         hasMore = true
-        void loadInitialMyFeed(myFeedLoadGeneration)
+        void loadMore()
       }
     }
   }
@@ -321,7 +292,6 @@
       offset = 0
       hasMore = !!$siteUser
       loadingMore = false
-      hiddenReadCount = 0
       if ($siteUser && browser) {
         void loadMore()
       }
@@ -358,10 +328,10 @@
         Вернуться
       </button>
     </div>
-  {:else if $siteUser && feedType !== 'favorites' && effectiveHideRead && hiddenReadCount > 0}
+  {:else if $siteUser && feedType !== 'favorites' && effectiveHideRead}
     <div class="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900">
       <div class="text-sm text-slate-600 dark:text-zinc-300">
-        {hiddenReadCount} прочитанных постов скрыто
+        Прочитанные посты скрыты
       </div>
       <button
         type="button"

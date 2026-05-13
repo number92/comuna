@@ -16,6 +16,12 @@
   let scriptLoaded = false
   let vkidSdk: typeof import('@vkid/sdk') | null = null
   const appId = env.PUBLIC_VK_APP_ID
+  const disabledMessage = 'Сначала примите политику обработки персональных данных.'
+
+  const handleDisabledClick = () => {
+    if (!disabled || loading) return
+    toast({ content: disabledMessage, type: 'info' })
+  }
 
   const renderWidget = () => {
     if (!browser || !container || !appId || disabled) return
@@ -115,6 +121,7 @@
         class:dark:hover:bg-zinc-800={!disabled}
         title={label}
         aria-hidden="true"
+        on:click={handleDisabledClick}
       >
         <span class="flex items-center gap-3">
           <span class="flex h-9 w-9 items-center justify-center rounded-full bg-blue-100 text-blue-700 font-semibold dark:bg-blue-900/40 dark:text-blue-300">
@@ -140,10 +147,6 @@
 
     {#if loading}
       <p class="text-xs text-slate-500 dark:text-zinc-400">Вход через VK…</p>
-    {:else if disabled}
-      <p class="text-xs text-slate-500 dark:text-zinc-400">
-        Сначала примите политику обработки персональных данных.
-      </p>
     {:else if !scriptLoaded}
       <p class="text-xs text-slate-500 dark:text-zinc-400">Загрузка VK виджета…</p>
     {/if}

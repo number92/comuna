@@ -22,6 +22,7 @@
   let lastActive = active
   let lastDisabled = disabled
   let lastPrivacyAccepted = privacyAccepted
+  const disabledMessage = 'Сначала примите политику обработки персональных данных.'
   const botName = (env.PUBLIC_TELEGRAM_LOGIN_BOT || '').replace(/^@/, '')
   const oidcClientId = env.PUBLIC_TELEGRAM_OIDC_CLIENT_ID || env.PUBLIC_TELEGRAM_LOGIN_CLIENT_ID || ''
   const forceOidc = ['1', 'true', 'force'].includes((env.PUBLIC_TELEGRAM_OIDC_FORCE || '').toLowerCase())
@@ -251,7 +252,11 @@
   }
 
   const handleOidcLogin = async () => {
-    if (!browser || disabled || loading || !oidcClientId) return
+    if (!browser || loading || !oidcClientId) return
+    if (disabled) {
+      toast({ content: disabledMessage, type: 'info' })
+      return
+    }
     const clientId = Number(oidcClientId)
     if (!Number.isFinite(clientId)) {
       toast({ content: 'Telegram Login настроен неверно', type: 'error' })
@@ -328,8 +333,10 @@
   <div class="flex flex-col gap-2">
     <button
       type="button"
-      disabled={disabled || loading}
-      class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-left transition disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900"
+      disabled={loading}
+      class="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-left transition dark:border-zinc-700 dark:bg-zinc-900"
+      class:cursor-not-allowed={disabled}
+      class:opacity-60={disabled || loading}
       class:hover:border-slate-300={!disabled && !loading}
       class:hover:bg-slate-50={!disabled && !loading}
       class:dark:hover:border-zinc-600={!disabled && !loading}
@@ -356,10 +363,6 @@
       <p class="text-xs text-slate-500 dark:text-zinc-400">Загружаем Telegram Login…</p>
     {:else if oidcLoadError}
       <p class="text-xs text-red-600 dark:text-red-400">{oidcLoadError}</p>
-    {:else if disabled}
-      <p class="text-xs text-slate-500 dark:text-zinc-400">
-        Сначала примите политику обработки персональных данных.
-      </p>
     {/if}
   </div>
 {:else}
@@ -374,6 +377,11 @@
         class:dark:hover:bg-zinc-800={!disabled}
         title={label}
         aria-hidden="true"
+        on:click={() => {
+          if (disabled && !loading) {
+            toast({ content: disabledMessage, type: 'info' })
+          }
+        }}
       >
         <span class="flex items-center gap-3">
           <span class="flex h-9 w-9 items-center justify-center rounded-full bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300">
@@ -399,10 +407,6 @@
 
     {#if loading}
       <p class="text-xs text-slate-500 dark:text-zinc-400">Вход через Telegram…</p>
-    {:else if disabled}
-      <p class="text-xs text-slate-500 dark:text-zinc-400">
-        Сначала примите политику обработки персональных данных.
-      </p>
     {:else if scriptFailed}
       <p class="text-xs text-slate-500 dark:text-zinc-400">
         Не удалось загрузить Telegram-вход. Проверьте блокировщики в браузере.

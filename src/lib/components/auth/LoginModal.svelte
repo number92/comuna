@@ -241,6 +241,21 @@
         </div>
       {:else}
         <div class="mt-4 flex flex-col gap-3">
+          <button
+            type="button"
+            class="inline-flex w-full items-center justify-start gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-left text-sm font-medium text-slate-900 transition dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100"
+            class:opacity-60={!signupPrivacyAccepted}
+            class:hover:border-slate-300={signupPrivacyAccepted}
+            class:hover:bg-slate-50={signupPrivacyAccepted}
+            class:dark:hover:border-zinc-700={signupPrivacyAccepted}
+            class:dark:hover:bg-zinc-900={signupPrivacyAccepted}
+            on:click={() => requireSignupPrivacyAcceptance(() => (signupMethod = 'email'))}
+          >
+            <span class="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-700 dark:bg-zinc-800 dark:text-zinc-200">
+              <Icon src={Envelope} size="18" solid />
+            </span>
+            <span>Зарегистрироваться через почту</span>
+          </button>
           {#if telegramButtonModulePromise}
             {#await telegramButtonModulePromise then module}
               <svelte:component
@@ -259,16 +274,6 @@
             privacyAccepted={signupPrivacyAccepted}
             label="Зарегистрироваться через VK"
           />
-          <button
-            type="button"
-            class="inline-flex w-full items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-medium text-slate-900 transition hover:border-slate-300 hover:bg-slate-50 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:border-zinc-700 dark:hover:bg-zinc-900"
-            on:click={() => requireSignupPrivacyAcceptance(() => (signupMethod = 'email'))}
-          >
-            <span class="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-700 dark:bg-zinc-800 dark:text-zinc-200">
-              <Icon src={Envelope} size="18" solid />
-            </span>
-            <span>Зарегистрироваться через почту</span>
-          </button>
         </div>
       {/if}
     {/if}

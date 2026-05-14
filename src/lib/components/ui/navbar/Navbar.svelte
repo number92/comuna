@@ -247,8 +247,8 @@
         {#if $profile?.jwt}
           <Menu placement="bottom-end">
             <Button
-              color="none"
-              class_="!rounded-full !bg-[var(--btn-primary-background)] hover:!bg-[var(--btn-primary-background-hover)] !text-[var(--btn-primary-color)] !border-[var(--btn-primary-border)] font-normal py-2 px-4 !text-base md:py-2 md:px-4"
+              color="primary"
+              class="!rounded-full font-normal py-2 px-4 !text-base md:py-2 md:px-4 dark:!bg-primary-900 dark:!text-white dark:!border-transparent dark:hover:!brightness-110"
               slot="target"
               title={$t('nav.create.label')}
             >
@@ -277,8 +277,8 @@
         {:else}
           {#if $siteUser}
             <Button
-              color="none"
-              class_="!rounded-full !bg-[var(--btn-primary-background)] hover:!bg-[var(--btn-primary-background-hover)] !text-[var(--btn-primary-color)] !border-[var(--btn-primary-border)] font-normal py-2 px-4 !text-base md:py-2 md:px-4"
+              color="primary"
+              class="!rounded-full font-normal py-2 px-4 !text-base md:py-2 md:px-4 dark:!bg-primary-900 dark:!text-white dark:!border-transparent dark:hover:!brightness-110"
               href="/account/new-post?new=1"
             >
               Написать

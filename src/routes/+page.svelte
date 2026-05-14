@@ -9,10 +9,8 @@
     buildMyFeedUrl,
   } from '$lib/api/backend'
   import FeedPostsList from '$lib/components/feeds/FeedPostsList.svelte'
-  import Header from '$lib/components/ui/layout/pages/Header.svelte'
   import { siteToken, siteUser } from '$lib/siteAuth'
   import { feedSettingsHydrated, userSettings } from '$lib/settings'
-  import { t } from '$lib/translations.js'
   import { onDestroy, onMount } from 'svelte'
   import type { ComponentType } from 'svelte'
   import type { BackendPost } from '$lib/api/backend'
@@ -303,17 +301,13 @@
 </script>
 
 <div class="flex max-w-full min-w-0 w-full flex-col gap-2">
-  <header class="relative flex flex-col gap-2">
-    {#if feedType === 'favorites'}
+  {#if feedType === 'favorites'}
+    <header class="relative flex flex-col gap-2">
       <h1 class="text-2xl font-semibold text-slate-900 dark:text-zinc-100">
         Избранное
       </h1>
-    {:else if feedType !== 'mine'}
-      <Header pageHeader>
-        {$t('routes.frontpage.title')}
-      </Header>
-    {/if}
-  </header>
+    </header>
+  {/if}
 
   {#if $siteUser && readOnly && feedType !== 'favorites'}
     <div class="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 dark:border-zinc-800 dark:bg-zinc-900">

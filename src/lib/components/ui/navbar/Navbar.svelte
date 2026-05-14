@@ -248,7 +248,7 @@
           <Menu placement="bottom-end">
             <Button
               color="none"
-              class="!rounded-full bg-orange-600 hover:bg-orange-700 text-white font-normal py-2 px-4 !text-base md:py-2 md:px-4"
+              class_="!rounded-full !bg-[var(--btn-primary-background)] hover:!bg-[var(--btn-primary-background-hover)] !text-[var(--btn-primary-color)] !border-[var(--btn-primary-border)] font-normal py-2 px-4 !text-base md:py-2 md:px-4"
               slot="target"
               title={$t('nav.create.label')}
             >
@@ -278,7 +278,7 @@
           {#if $siteUser}
             <Button
               color="none"
-              class="!rounded-full bg-orange-600 hover:bg-orange-700 text-white font-normal py-2 px-4 !text-base md:py-2 md:px-4"
+              class_="!rounded-full !bg-[var(--btn-primary-background)] hover:!bg-[var(--btn-primary-background-hover)] !text-[var(--btn-primary-color)] !border-[var(--btn-primary-border)] font-normal py-2 px-4 !text-base md:py-2 md:px-4"
               href="/account/new-post?new=1"
             >
               Написать

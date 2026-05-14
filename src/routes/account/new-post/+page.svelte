@@ -19,6 +19,7 @@
   } from '$lib/siteAuth'
   import {
     buildComunsUrl,
+    buildTagsListUrl,
     type BackendComun,
   } from '$lib/api/backend'
   import PostTemplateFields from '$lib/components/site/post-templates/PostTemplateFields.svelte'
@@ -98,6 +99,14 @@
   let draftSavedNoticeHideTimer: ReturnType<typeof setTimeout> | null = null
   let comuns: BackendComun[] = []
   let tweetCharacterCountValue = 0
+  let tagOptions: TagSuggestion[] = []
+  let tagsLoading = false
+  let tagInputFocused = false
+  let tagInputRef: HTMLInputElement | null = null
+  let parsedCreateTags: string[] = []
+  let selectedTagKeySet = new Set<string>()
+  let currentTagQuery = ''
+  let tagSuggestions: TagSuggestion[] = []
 
   const DRAFT_NOTICE_DELAY_MS = 10_000
   const DRAFT_NOTICE_VISIBLE_MS = 5_000
@@ -111,6 +120,11 @@
     kind: 'site'
     username?: string
     avatar_url?: string | null
+  }
+
+  type TagSuggestion = {
+    name: string
+    lemma?: string | null
   }
 
   $: availableComuns = comuns.filter((comun) => Boolean(comun.can_post))
@@ -185,6 +199,10 @@
   $: tweetCharacterCountValue = isTweetTemplateType(createTemplateType)
     ? tweetTemplateCharacterCount(createContent)
     : 0
+  $: parsedCreateTags = buildTags()
+  $: selectedTagKeySet = new Set(parsedCreateTags.map((tag) => normalizeTagToken(tag)))
+  $: currentTagQuery = getCurrentTagQuery(createTags)
+  $: tagSuggestions = buildTagSuggestions()
 
   const isEditorContentEmpty = (value: string) => {
     if (!value || value.trim() === '') return true
@@ -196,11 +214,79 @@
     }
   }
 
-  const buildTags = () =>
-    createTags
-      .split(',')
-      .map((tag) => tag.trim())
-      .filter((tag) => tag.length > 0)
+  const cleanTagValue = (value: string) =>
+    value
+      .replace(/^#+/, '')
+      .trim()
+      .replace(/\s+/g, ' ')
+
+  const normalizeTagToken = (value: string) => cleanTagValue(value).toLowerCase()
+
+  const getCurrentTagQuery = (value: string) => {
+    const parts = value.split(',')
+    return normalizeTagToken(parts[parts.length - 1] ?? '')
+  }
+
+  const buildTags = () => {
+    const seen = new Set<string>()
+    const tags: string[] = []
+    for (const rawTag of createTags.split(',')) {
+      const tag = cleanTagValue(rawTag)
+      const key = normalizeTagToken(tag)
+      if (!key || seen.has(key)) continue
+      seen.add(key)
+      tags.push(tag)
+      if (tags.length >= 5) break
+    }
+    return tags
+  }
+
+  const buildTagSuggestions = () => {
+    if (!currentTagQuery) return [] as TagSuggestion[]
+    const seen = new Set<string>()
+    const suggestions: TagSuggestion[] = []
+    for (const tag of tagOptions) {
+      const name = cleanTagValue(tag.name)
+      if (!name) continue
+      const nameKey = normalizeTagToken(name)
+      const lemmaKey = normalizeTagToken(tag.lemma || name)
+      if (selectedTagKeySet.has(nameKey) || selectedTagKeySet.has(lemmaKey)) continue
+      if (seen.has(lemmaKey)) continue
+      if (!nameKey.includes(currentTagQuery) && !lemmaKey.includes(currentTagQuery)) continue
+      seen.add(lemmaKey)
+      suggestions.push({ name, lemma: tag.lemma ?? null })
+      if (suggestions.length >= 8) break
+    }
+    return suggestions
+  }
+
+  const insertTagSuggestion = async (tag: TagSuggestion) => {
+    const tagName = cleanTagValue(tag.name)
+    if (!tagName) return
+    const parts = createTags.split(',')
+    parts[parts.length - 1] = tagName
+
+    const seen = new Set<string>()
+    const nextTags: string[] = []
+    for (const rawTag of parts) {
+      const value = cleanTagValue(rawTag)
+      const key = normalizeTagToken(value)
+      if (!key || seen.has(key)) continue
+      seen.add(key)
+      nextTags.push(value)
+      if (nextTags.length >= 5) break
+    }
+    createTags = nextTags.join(', ')
+    tagInputFocused = true
+    await tick()
+    tagInputRef?.focus()
+  }
+
+  const onTagInputKeydown = (event: KeyboardEvent) => {
+    if ((event.key !== 'Enter' && event.key !== 'Tab') || !tagSuggestions.length) return
+    event.preventDefault()
+    void insertTagSuggestion(tagSuggestions[0])
+  }
 
   const buildTemplate = () =>
     buildPostTemplatePayload(
@@ -456,6 +542,27 @@
     }
   }
 
+  const loadTagOptions = async () => {
+    if (tagsLoading || tagOptions.length) return
+    tagsLoading = true
+    try {
+      const response = await fetch(buildTagsListUrl(), { cache: 'no-store' })
+      const data = await response.json().catch(() => ({}))
+      tagOptions = Array.isArray(data?.tags)
+        ? data.tags
+            .map((tag: TagSuggestion) => ({
+              name: cleanTagValue(String(tag?.name || '')),
+              lemma: tag?.lemma ? cleanTagValue(String(tag.lemma)) : null,
+            }))
+            .filter((tag: TagSuggestion) => Boolean(tag.name))
+        : []
+    } catch {
+      tagOptions = []
+    } finally {
+      tagsLoading = false
+    }
+  }
+
   const queueDraftSave = () => {
     if (!autosavePrimed || !$siteUser || creating || draftCreating) return
     if (currentFormSnapshot === lastSavedFormSnapshot) return
@@ -510,6 +617,7 @@
         await refreshSiteUser()
         if ($siteUser) {
           await loadComuns()
+          void loadTagOptions()
           await tick()
           initialFormSnapshot = JSON.stringify(buildLocalDraftState())
           lastSavedFormSnapshot = initialFormSnapshot
@@ -658,11 +766,13 @@
     }
     creating = true
     try {
+      const tags = buildTags()
       await createComunPost(createComunSlug, {
         title: createTitle.trim(),
         content: createContent.trim(),
         author_source: 'site' as const,
         comun_category_id: createComunCategoryId ? Number(createComunCategoryId) : null,
+        tags: tags.length ? tags : undefined,
         template: template ?? undefined,
       })
       clearLocalDraftBuffer()
@@ -1057,7 +1167,71 @@
             </div>
           </div>
         {/if}
-        <TextInput label="Теги (через запятую)" bind:value={createTags} />
+        <div class="relative">
+          <label
+            for="new-post-tags"
+            class="mb-1 block text-sm font-medium text-slate-700 dark:text-zinc-300"
+          >
+            Теги
+          </label>
+          <input
+            id="new-post-tags"
+            bind:this={tagInputRef}
+            bind:value={createTags}
+            type="text"
+            autocomplete="off"
+            placeholder="Например: кино, автомобили, зарубежные фильмы"
+            class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-500"
+            on:focus={() => {
+              tagInputFocused = true
+              void loadTagOptions()
+            }}
+            on:blur={() => {
+              tagInputFocused = false
+            }}
+            on:keydown={onTagInputKeydown}
+          />
+          <div class="mt-1 text-xs text-slate-500 dark:text-zinc-400">
+            Вводите через запятую. Сохраняются первые 5 тегов.
+          </div>
+
+          {#if parsedCreateTags.length}
+            <div class="mt-2 flex flex-wrap gap-2">
+              {#each parsedCreateTags as tag}
+                <span class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-700 dark:bg-zinc-800 dark:text-zinc-200">
+                  #{tag}
+                </span>
+              {/each}
+            </div>
+          {/if}
+
+          {#if tagInputFocused && currentTagQuery}
+            <div class="absolute z-30 mt-2 w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-lg dark:border-zinc-800 dark:bg-zinc-900">
+              {#if tagsLoading}
+                <div class="px-3 py-3 text-sm text-slate-500 dark:text-zinc-400">
+                  Ищем теги...
+                </div>
+              {:else if tagSuggestions.length}
+                {#each tagSuggestions as tag}
+                  <button
+                    type="button"
+                    class="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left text-sm hover:bg-slate-50 dark:hover:bg-zinc-800"
+                    on:mousedown|preventDefault={() => void insertTagSuggestion(tag)}
+                  >
+                    <span class="font-medium text-slate-800 dark:text-zinc-100">#{tag.name}</span>
+                    {#if tag.lemma && tag.lemma !== tag.name}
+                      <span class="text-xs text-slate-500 dark:text-zinc-400">{tag.lemma}</span>
+                    {/if}
+                  </button>
+                {/each}
+              {:else}
+                <div class="px-3 py-3 text-sm text-slate-500 dark:text-zinc-400">
+                  Совпадений нет. Новый тег будет создан при публикации.
+                </div>
+              {/if}
+            </div>
+          {/if}
+        </div>
         {#if createError}
           <p class="text-sm text-red-600">{createError}</p>
         {/if}

@@ -1448,9 +1448,12 @@ def _apply_post_tags(post: Post, explicit_tags: list[str] | None = None) -> None
         for tag in existing_tags.values():
             if not tag.is_active or tag.id in seen_ids:
                 continue
-            count = _count_tag_occurrences(text, tag.name.lower())
+            tag_name = tag.name.strip()
+            if len(tag_name) < 2:
+                continue
+            count = _count_tag_occurrences(text, tag_name.lower())
             if count:
-                candidates.append((count, len(tag.name), tag.name.lower(), tag))
+                candidates.append((count, len(tag_name), tag_name.lower(), tag))
         candidates.sort(key=lambda item: (-item[0], -item[1], item[2]))
         for _, __, ___, tag in candidates:
             selected_tags.append(tag)

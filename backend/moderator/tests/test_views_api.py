@@ -38,22 +38,37 @@ class ModeratorAnalyticsApiTests(TestCase):
         self.assertEqual(response.status_code, 403)
 
     def test_returns_period_analytics_for_staff(self):
-        author = Author.objects.create(username="channel", channel_url="https://t.me/channel")
+        author = Author.objects.create(
+            username="channel",
+            channel_id=-1001,
+            channel_url="https://t.me/channel",
+        )
         site_author = Author.objects.create(username="site-author")
         comun = Comun.objects.create(name="Community", slug="community", creator=self.staff)
         telegram_post = Post.objects.create(
             author=author,
             message_id=1,
             title="Telegram post",
-            source_url="https://t.me/channel/1",
+            source_url="",
             channel_url="https://t.me/channel",
-            raw_data={"message_id": 1},
+            raw_data={
+                "message_id": 1,
+                "chat": {"id": -1001, "type": "channel", "username": "channel"},
+            },
         )
         site_post = Post.objects.create(
-            author=site_author,
+            author=author,
             message_id=2,
             title="Site post",
+            source_url="https://t.me/channel",
+            channel_url="https://t.me/channel",
             raw_data={"source": "manual"},
+        )
+        manual_comun_post = Post.objects.create(
+            author=site_author,
+            message_id=3,
+            title="Site comun post",
+            raw_data={"source": "manual_comun", "comun_slug": comun.slug},
         )
         comment = PostComment.objects.create(post=telegram_post, user=self.user, body="Comment")
         PostLike.objects.create(post=telegram_post, user=self.user, value=1)
@@ -62,6 +77,7 @@ class ModeratorAnalyticsApiTests(TestCase):
         older = timezone.now() - timedelta(days=10)
         Post.objects.filter(id=site_post.id).update(created_at=older)
         Post.objects.filter(id=telegram_post.id).update(created_at=older)
+        Post.objects.filter(id=manual_comun_post.id).update(created_at=older)
         Author.objects.filter(id__in=[author.id, site_author.id]).update(created_at=older)
         Comun.objects.filter(id=comun.id).update(created_at=older)
         PostComment.objects.filter(id=comment.id).update(created_at=older)
@@ -86,7 +102,7 @@ class ModeratorAnalyticsApiTests(TestCase):
                 "comments": 1,
                 "likes": 2,
                 "posts_telegram": 1,
-                "posts_site": 1,
+                "posts_site": 2,
             },
         )
         self.assertEqual(data["breakdown"]["post_likes"], 1)

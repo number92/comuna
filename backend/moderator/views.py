@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, time, timedelta
 
+from django.db.models import Q
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.utils import timezone
 
@@ -57,6 +58,14 @@ def _serialize_period(starts_at: datetime, ends_at: datetime) -> dict[str, str]:
     }
 
 
+def _telegram_channel_post_query() -> Q:
+    return (
+        Q(raw_data__chat__type="channel")
+        | Q(author__channel_id__isnull=False)
+        | Q(source_url__icontains="t.me/")
+    )
+
+
 def moderator_analytics(request: HttpRequest) -> HttpResponse:
     if request.method != "GET":
         return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)
@@ -80,8 +89,8 @@ def moderator_analytics(request: HttpRequest) -> HttpResponse:
         **post_period,
     )
     site_posts = public_posts.filter(raw_data__source__in=_SITE_POST_SOURCES)
-    telegram_posts = public_posts.filter(source_url__icontains="t.me/").exclude(
-        raw_data__source__in=_SITE_POST_SOURCES
+    telegram_posts = public_posts.exclude(raw_data__source__in=_SITE_POST_SOURCES).filter(
+        _telegram_channel_post_query()
     )
 
     post_likes_count = PostLike.objects.filter(

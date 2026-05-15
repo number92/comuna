@@ -346,7 +346,7 @@
 </div>
 
 <div
-  class="flex flex-col *:py-2 divide-y divide-slate-200 dark:divide-zinc-800"
+  class="flex flex-col gap-4"
   style="scroll-behavior: smooth;"
 >
   {#if $profile?.jwt}

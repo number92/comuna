@@ -9,7 +9,7 @@ from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 
 from users import service as user_service
-from users.models import SiteUserProfile, VkAccount
+from users.models import SiteUserProfile, TelegramAccount, VkAccount
 
 
 User = get_user_model()
@@ -88,6 +88,47 @@ class EmailAuthApiTests(TestCase):
         self.assertTrue(verify_response.json()["user"]["email_verified"])
         user = User.objects.get(username="reader")
         self.assertIsNotNone(SiteUserProfile.objects.get(user=user).email_verified_at)
+
+    def test_update_profile_email_sends_verification_link(self):
+        user = User.objects.create_user(username="reader")
+        token = user_service._issue_token(user)
+
+        response = self.client.patch(
+            "/api/auth/me/",
+            data=json.dumps({"email": "reader@example.test"}),
+            content_type="application/json",
+            HTTP_AUTHORIZATION=f"Bearer {token}",
+        )
+
+        payload = response.json()
+        user.refresh_from_db()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(user.email, "reader@example.test")
+        self.assertFalse(payload["user"]["email_verified"])
+        self.assertTrue(payload["email_verification_sent"])
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn("/verify_email/", mail.outbox[0].body)
+
+    def test_verify_email_merges_duplicate_account_with_same_email(self):
+        target = User.objects.create_user(username="target", email="reader@example.test")
+        duplicate = User.objects.create_user(username="duplicate", email="reader@example.test")
+        TelegramAccount.objects.create(user=duplicate, telegram_id=123456)
+        SiteUserProfile.objects.create(user=duplicate, display_name="Old profile")
+        secret = (
+            f"{urlsafe_base64_encode(force_bytes(target.pk))}:"
+            f"{default_token_generator.make_token(target)}"
+        )
+
+        response = self.client.get("/api/auth/verify-email/", {"token": secret})
+
+        target.refresh_from_db()
+        duplicate.refresh_from_db()
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["user"]["email_verified"])
+        self.assertFalse(duplicate.is_active)
+        self.assertEqual(duplicate.email, "")
+        self.assertEqual(TelegramAccount.objects.get(telegram_id=123456).user_id, target.id)
+        self.assertEqual(SiteUserProfile.objects.get(user=target).display_name, "Old profile")
 
     def test_verify_email_rejects_bad_secret(self):
         response = self.client.get(
@@ -170,7 +211,7 @@ class EmailAuthApiTests(TestCase):
         self.assertEqual(account.email, "reader@example.test")
         self.assertEqual(User.objects.count(), 1)
 
-    def test_vk_login_new_account_does_not_show_privacy_consent_error(self):
+    def test_vk_login_new_account_creates_user_without_privacy_checkbox(self):
         with patch(
             "users.service._authenticate_vk_payload",
             return_value={
@@ -189,11 +230,10 @@ class EmailAuthApiTests(TestCase):
             )
 
         payload = response.json()
-        self.assertEqual(response.status_code, 404)
-        self.assertIn("Аккаунт не найден", payload["error"])
-        self.assertNotIn("политик", payload["error"].lower())
-        self.assertEqual(User.objects.count(), 0)
-        self.assertEqual(VkAccount.objects.count(), 0)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(payload["token"])
+        self.assertEqual(User.objects.count(), 1)
+        self.assertEqual(VkAccount.objects.get(vk_id=12345).user_id, payload["user"]["id"])
 
     def test_vk_signup_new_account_requires_privacy_consent(self):
         with patch(
@@ -246,6 +286,42 @@ class EmailAuthApiTests(TestCase):
         self.assertTrue(payload["token"])
         self.assertEqual(User.objects.count(), 1)
         self.assertEqual(VkAccount.objects.get(vk_id=12345).user_id, payload["user"]["id"])
+
+    def test_authenticated_vk_link_merges_existing_vk_account(self):
+        target = User.objects.create_user(username="target")
+        duplicate = User.objects.create_user(username="duplicate")
+        VkAccount.objects.create(
+            user=duplicate,
+            vk_id=12345,
+            username="reader_vk",
+        )
+        token = user_service._issue_token(target)
+
+        with patch(
+            "users.service._authenticate_vk_payload",
+            return_value={
+                "vk_id": 12345,
+                "screen_name": "reader_vk",
+                "email": "",
+                "phone": "",
+                "first_name": "Reader",
+                "last_name": "",
+                "avatar_url": "",
+            },
+        ):
+            response = self.client.post(
+                "/api/auth/vk/",
+                data=json.dumps({"access_token": "token", "auth_intent": "login"}),
+                content_type="application/json",
+                HTTP_AUTHORIZATION=f"Bearer {token}",
+            )
+
+        payload = response.json()
+        duplicate.refresh_from_db()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(payload["user"]["id"], target.id)
+        self.assertFalse(duplicate.is_active)
+        self.assertEqual(VkAccount.objects.get(vk_id=12345).user_id, target.id)
 
     def test_register_email_does_not_claim_existing_vk_only_user(self):
         user = User.objects.create_user(

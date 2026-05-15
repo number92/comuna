@@ -25,7 +25,6 @@ from telegram_integration.service import (
 )
 User = get_user_model()
 _PRIVACY_CONSENT_ERROR = "Для регистрации нужно согласиться с политикой обработки персональных данных."
-_OAUTH_ACCOUNT_NOT_FOUND_ERROR = "Аккаунт не найден. Перейдите на вкладку регистрации."
 
 
 def _user_service():
@@ -82,16 +81,19 @@ def telegram_auth(request: HttpRequest) -> HttpResponse:
             }
         else:
             validate_telegram_login(payload)
-        if telegram_login_will_create_new_user(payload):
-            if not _is_registration_intent(payload):
-                return JsonResponse({"ok": False, "error": _OAUTH_ACCOUNT_NOT_FOUND_ERROR}, status=404)
-            if not _is_privacy_accepted(payload.get("privacy_accepted")):
-                return JsonResponse({"ok": False, "error": _PRIVACY_CONSENT_ERROR}, status=400)
-        user = upsert_telegram_account(payload)
+        user_service = _user_service()
+        current_user = user_service._get_user_from_request(request)
+        if (
+            telegram_login_will_create_new_user(payload)
+            and not current_user
+            and _is_registration_intent(payload)
+            and not _is_privacy_accepted(payload.get("privacy_accepted"))
+        ):
+            return JsonResponse({"ok": False, "error": _PRIVACY_CONSENT_ERROR}, status=400)
+        user = upsert_telegram_account(payload, link_user=current_user)
     except ValueError as exc:
         return JsonResponse({"ok": False, "error": str(exc)}, status=400)
 
-    user_service = _user_service()
     token = user_service._issue_token(user, request)
     if request.method == "GET":
         next_url = request.GET.get("next") or "/"

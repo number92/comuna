@@ -15,7 +15,6 @@ from users import service as user_service
 User = get_user_model()
 
 _PRIVACY_CONSENT_ERROR = "Для регистрации нужно согласиться с политикой обработки персональных данных."
-_OAUTH_ACCOUNT_NOT_FOUND_ERROR = "Аккаунт не найден. Перейдите на вкладку регистрации."
 
 _get_user_from_request = user_service._get_user_from_request
 _get_user_from_token = user_service._get_user_from_token
@@ -203,15 +202,23 @@ def auth_me(request: HttpRequest) -> HttpResponse:
 
     display_name = payload.get("display_name")
     avatar_url = payload.get("avatar_url")
+    email = payload.get("email") if "email" in payload else None
     try:
-        user_service._update_site_profile(
+        user, email_verification_sent = user_service._update_site_profile(
             user,
             display_name=display_name,
             avatar_url=avatar_url,
+            email=email,
         )
     except ValueError as exc:
         return JsonResponse({"ok": False, "error": str(exc)}, status=400)
-    return JsonResponse({"ok": True, "user": _serialize_user(user)})
+    return JsonResponse(
+        {
+            "ok": True,
+            "user": _serialize_user(user),
+            "email_verification_sent": email_verification_sent,
+        }
+    )
 
 
 @csrf_exempt
@@ -281,12 +288,15 @@ def vk_auth(request: HttpRequest) -> HttpResponse:
 
     try:
         vk_user = user_service._authenticate_vk_payload(payload)
-        if user_service._vk_login_will_create_new_user(vk_user):
-            if not _is_registration_intent(payload):
-                return JsonResponse({"ok": False, "error": _OAUTH_ACCOUNT_NOT_FOUND_ERROR}, status=404)
-            if not _is_privacy_accepted(payload.get("privacy_accepted")):
-                return JsonResponse({"ok": False, "error": _PRIVACY_CONSENT_ERROR}, status=400)
-        user = user_service._upsert_vk_account(vk_user)
+        current_user = _get_user_from_request(request)
+        if (
+            user_service._vk_login_will_create_new_user(vk_user)
+            and not current_user
+            and _is_registration_intent(payload)
+            and not _is_privacy_accepted(payload.get("privacy_accepted"))
+        ):
+            return JsonResponse({"ok": False, "error": _PRIVACY_CONSENT_ERROR}, status=400)
+        user = user_service._upsert_vk_account(vk_user, link_user=current_user)
     except ValueError as exc:
         return JsonResponse({"ok": False, "error": str(exc)}, status=400)
 

@@ -13,11 +13,14 @@ import urllib.request
 from datetime import timedelta
 
 import jwt
+from django.apps import apps
 from django.conf import settings
 from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth.tokens import default_token_generator
 from django.core.exceptions import ValidationError
+from django.core.validators import validate_email
+from django.db import transaction
 from django.db.models import Q
 from django.http import HttpRequest, HttpResponse
 from django.utils.encoding import force_bytes, force_str
@@ -268,6 +271,249 @@ def _send_registration_email(user: User) -> bool:
         return False
 
 
+def _model_class(app_label: str, model_name: str):
+    return apps.get_model(app_label, model_name)
+
+
+def _identity_lookup(obj, fields: tuple[str, ...]) -> dict:
+    lookup: dict[str, object] = {}
+    for field_name in fields:
+        field = obj._meta.get_field(field_name)
+        if field.is_relation and hasattr(obj, f"{field_name}_id"):
+            lookup[f"{field_name}_id"] = getattr(obj, f"{field_name}_id")
+        else:
+            lookup[field_name] = getattr(obj, field_name)
+    return lookup
+
+
+def _move_unique_user_rows(
+    model,
+    source: User,
+    target: User,
+    *,
+    user_field: str = "user",
+    identity_fields: tuple[str, ...] = (),
+    merge_existing=None,
+) -> None:
+    source_filter = {f"{user_field}_id": source.id}
+    for obj in model.objects.filter(**source_filter).order_by("id").iterator():
+        target_lookup = {f"{user_field}_id": target.id, **_identity_lookup(obj, identity_fields)}
+        existing = model.objects.filter(**target_lookup).first()
+        if existing:
+            if merge_existing is not None:
+                merge_existing(existing, obj)
+            obj.delete()
+            continue
+        setattr(obj, f"{user_field}_id", target.id)
+        obj.save(update_fields=[user_field])
+
+
+def _merge_site_profiles(target: User, source: User) -> None:
+    source_profile = SiteUserProfile.objects.filter(user=source).first()
+    if not source_profile:
+        return
+    target_profile, _ = SiteUserProfile.objects.get_or_create(user=target)
+    update_fields: list[str] = []
+    if source_profile.display_name and not target_profile.display_name:
+        target_profile.display_name = source_profile.display_name
+        update_fields.append("display_name")
+    if source_profile.avatar_url and not target_profile.avatar_url:
+        target_profile.avatar_url = source_profile.avatar_url
+        update_fields.append("avatar_url")
+    if source_profile.phone and not target_profile.phone:
+        target_profile.phone = source_profile.phone
+        update_fields.append("phone")
+    if source_profile.email_verified_at and (
+        target_profile.email_verified_at is None
+        or source_profile.email_verified_at < target_profile.email_verified_at
+    ):
+        target_profile.email_verified_at = source_profile.email_verified_at
+        update_fields.append("email_verified_at")
+    if update_fields:
+        target_profile.save(update_fields=[*set(update_fields), "updated_at"])
+    source_profile.delete()
+
+
+def _merge_telegram_accounts(target: User, source: User) -> None:
+    target_account = TelegramAccount.objects.filter(user=target).first()
+    source_account = TelegramAccount.objects.filter(user=source).first()
+    if not source_account:
+        return
+    if not target_account:
+        source_account.user = target
+        source_account.save(update_fields=["user", "updated_at"])
+        return
+
+    update_fields: list[str] = []
+    if not target_account.oidc_sub:
+        source_oidc_sub = getattr(source_account, "oidc_sub", None) or (
+            str(source_account.telegram_id) if source_account.telegram_id != target_account.telegram_id else ""
+        )
+        if source_oidc_sub and not TelegramAccount.objects.filter(oidc_sub=source_oidc_sub).exclude(pk=target_account.pk).exists():
+            target_account.oidc_sub = source_oidc_sub
+            update_fields.append("oidc_sub")
+    for field in ("username", "first_name", "last_name", "avatar_url"):
+        if getattr(source_account, field) and not getattr(target_account, field):
+            setattr(target_account, field, getattr(source_account, field))
+            update_fields.append(field)
+    if update_fields:
+        target_account.save(update_fields=[*set(update_fields), "updated_at"])
+    source_account.delete()
+
+
+def _merge_vk_accounts(target: User, source: User) -> None:
+    target_account = VkAccount.objects.filter(user=target).first()
+    source_account = VkAccount.objects.filter(user=source).first()
+    if not source_account:
+        return
+    if not target_account:
+        source_account.user = target
+        source_account.save(update_fields=["user", "updated_at"])
+        return
+    update_fields: list[str] = []
+    for field in ("username", "email", "phone", "first_name", "last_name", "avatar_url"):
+        if getattr(source_account, field) and not getattr(target_account, field):
+            setattr(target_account, field, getattr(source_account, field))
+            update_fields.append(field)
+    if update_fields:
+        target_account.save(update_fields=[*set(update_fields), "updated_at"])
+    source_account.delete()
+
+
+def _merge_feed_settings(target: User, source: User) -> None:
+    UserFeedSettings = _model_class("feeds", "UserFeedSettings")
+    source_settings = UserFeedSettings.objects.filter(user=source).first()
+    if not source_settings:
+        return
+    target_settings = UserFeedSettings.objects.filter(user=target).first()
+    if not target_settings:
+        source_settings.user = target
+        source_settings.save(update_fields=["user", "updated_at"])
+        return
+    for field in ("my_feed_authors", "my_feed_tags", "my_feed_comuns", "hidden_authors"):
+        merged = list(dict.fromkeys([*(getattr(target_settings, field) or []), *(getattr(source_settings, field) or [])]))
+        setattr(target_settings, field, merged)
+    target_settings.my_feed_comun_categories = {
+        **(source_settings.my_feed_comun_categories or {}),
+        **(target_settings.my_feed_comun_categories or {}),
+    }
+    target_settings.tag_rules = {
+        **(source_settings.tag_rules or {}),
+        **(target_settings.tag_rules or {}),
+    }
+    target_settings.save()
+    source_settings.delete()
+
+
+def _merge_notification_preferences(target: User, source: User) -> None:
+    SiteNotificationPreference = _model_class("feeds", "SiteNotificationPreference")
+
+    def merge_pref(existing, duplicate) -> None:
+        existing.site_enabled = existing.site_enabled or duplicate.site_enabled
+        existing.telegram_enabled = existing.telegram_enabled or duplicate.telegram_enabled
+        existing.push_enabled = existing.push_enabled or duplicate.push_enabled
+        existing.save(update_fields=["site_enabled", "telegram_enabled", "push_enabled", "updated_at"])
+
+    _move_unique_user_rows(
+        SiteNotificationPreference,
+        source,
+        target,
+        identity_fields=("event_key",),
+        merge_existing=merge_pref,
+    )
+
+
+def _merge_user_accounts(target: User, source: User, *, reason: str = "") -> User:
+    if not target or not source or target.id == source.id:
+        return target
+    if not target.is_active:
+        raise ValueError("target account is inactive")
+
+    with transaction.atomic():
+        target = User.objects.select_for_update().get(pk=target.pk)
+        source = User.objects.select_for_update().get(pk=source.pk)
+        if target.id == source.id:
+            return target
+
+        if not target.email and source.email:
+            target.email = source.email
+        if not target.first_name and source.first_name:
+            target.first_name = source.first_name
+        if not target.last_name and source.last_name:
+            target.last_name = source.last_name
+        target.save(update_fields=["email", "first_name", "last_name"])
+
+        _merge_site_profiles(target, source)
+        _merge_telegram_accounts(target, source)
+        _merge_vk_accounts(target, source)
+        _merge_feed_settings(target, source)
+        _merge_notification_preferences(target, source)
+
+        _move_unique_user_rows(AuthorAdmin, source, target, identity_fields=("author",))
+        AuthorVerificationCode.objects.filter(user=source).update(user=target)
+        SiteAuthToken.objects.filter(user=source).update(user=target)
+
+        Comun = _model_class("feeds", "Comun")
+        Comun.objects.filter(creator=source).update(creator=target)
+        for comun in Comun.objects.filter(moderators=source).iterator():
+            comun.moderators.add(target)
+            comun.moderators.remove(source)
+
+        ComunVote = _model_class("feeds", "ComunVote")
+        _move_unique_user_rows(ComunVote, source, target, identity_fields=("comun",))
+        ComunPostCategoryAssignment = _model_class("feeds", "ComunPostCategoryAssignment")
+        ComunPostCategoryAssignment.objects.filter(assigned_by=source).update(assigned_by=target)
+
+        PostComment = _model_class("feeds", "PostComment")
+        PostComment.objects.filter(user=source).update(user=target)
+        _move_unique_user_rows(_model_class("feeds", "PostCommentLike"), source, target, identity_fields=("comment",))
+        _move_unique_user_rows(_model_class("feeds", "PostLike"), source, target, identity_fields=("post",))
+        _move_unique_user_rows(_model_class("feeds", "PostRead"), source, target, identity_fields=("post",))
+        _move_unique_user_rows(_model_class("feeds", "PostFavorite"), source, target, identity_fields=("post",))
+        _move_unique_user_rows(_model_class("feeds", "PostPollVote"), source, target, identity_fields=("post",))
+        _move_unique_user_rows(
+            _model_class("feeds", "PostRatingVote"),
+            source,
+            target,
+            identity_fields=("post", "block_id"),
+        )
+
+        _model_class("feeds", "SiteNotification").objects.filter(user=source).update(user=target)
+        _model_class("feeds", "MobilePushDevice").objects.filter(user=source).update(user=target)
+        _model_class("feeds", "AuthorRatingEvent").objects.filter(actor=source).update(actor=target)
+
+        _model_class("special_projects", "SpecialProjectLetterImage").objects.filter(created_by=source).update(created_by=target)
+        _model_class("special_projects", "SpecialProjectLetterSuggestion").objects.filter(submitted_by=source).update(submitted_by=target)
+        _model_class("special_projects", "SpecialProjectLetterSuggestion").objects.filter(reviewed_by=source).update(reviewed_by=target)
+        _model_class("special_projects", "SpecialProjectGeneratedPhrase").objects.filter(generated_by=source).update(generated_by=target)
+
+        source.email = ""
+        source.is_active = False
+        source.set_unusable_password()
+        source.save(update_fields=["email", "is_active", "password"])
+
+    logger.info("Merged user account %s into %s (%s)", source.id, target.id, reason)
+    target.refresh_from_db()
+    return target
+
+
+def _merge_accounts_with_verified_email(user: User) -> User:
+    email = _normalize_email(getattr(user, "email", ""))
+    if not email:
+        return user
+    duplicate_ids = list(
+        User.objects.filter(email__iexact=email, is_active=True)
+        .exclude(pk=user.pk)
+        .order_by("id")
+        .values_list("id", flat=True)
+    )
+    for duplicate_id in duplicate_ids:
+        duplicate = User.objects.filter(pk=duplicate_id, is_active=True).first()
+        if duplicate:
+            user = _merge_user_accounts(user, duplicate, reason="verified_email")
+    return user
+
+
 def _verify_email_by_secret(secret: str) -> User:
     value = str(secret or "").strip()
     if ":" not in value:
@@ -288,7 +534,7 @@ def _verify_email_by_secret(secret: str) -> User:
     if profile.email_verified_at is None:
         profile.email_verified_at = timezone.now()
         profile.save(update_fields=["email_verified_at", "updated_at"])
-    return user
+    return _merge_accounts_with_verified_email(user)
 
 
 def _send_password_reset_email(user: User) -> bool:
@@ -383,11 +629,13 @@ def _update_site_profile(
     *,
     display_name: object = None,
     avatar_url: object = None,
-) -> User:
-    if display_name is None and avatar_url is None:
+    email: object = None,
+) -> tuple[User, bool]:
+    if display_name is None and avatar_url is None and email is None:
         raise ValueError("nothing to update")
 
     profile, _ = SiteUserProfile.objects.get_or_create(user=user)
+    email_verification_sent = False
 
     if display_name is not None:
         next_display_name = str(display_name or "").strip()
@@ -405,8 +653,23 @@ def _update_site_profile(
             raise ValueError("avatar_url too long")
         profile.avatar_url = next_avatar_url
 
+    if email is not None:
+        next_email = _normalize_email(email)
+        if next_email:
+            try:
+                validate_email(next_email)
+            except ValidationError as exc:
+                raise ValueError("Введите корректный email.") from exc
+        current_email = _normalize_email(getattr(user, "email", ""))
+        if next_email != current_email:
+            user.email = next_email
+            user.save(update_fields=["email"])
+            profile.email_verified_at = None
+        if next_email and profile.email_verified_at is None:
+            email_verification_sent = _send_registration_email(user)
+
     profile.save()
-    return user
+    return user, email_verification_sent
 
 
 def _generate_unique_username(base: str, suffix: str) -> str:
@@ -720,7 +983,7 @@ def _find_user_by_verified_contact(*, email: str = "", phone: str = "") -> User 
     return None
 
 
-def _upsert_vk_account(vk_user: dict) -> User:
+def _upsert_vk_account(vk_user: dict, link_user: User | None = None) -> User:
     try:
         vk_id = int(vk_user.get("vk_id"))
     except (TypeError, ValueError):
@@ -736,8 +999,20 @@ def _upsert_vk_account(vk_user: dict) -> User:
     account = VkAccount.objects.select_related("user").filter(vk_id=vk_id).first()
     if account:
         user = account.user
+        if link_user and account.user_id != link_user.id:
+            user = _merge_user_accounts(link_user, account.user, reason="vk_link")
+            account = VkAccount.objects.filter(vk_id=vk_id).first() or VkAccount.objects.filter(user=user).first()
     else:
-        user = _find_user_by_verified_contact(email=email, phone=phone)
+        user = link_user or _find_user_by_verified_contact(email=email, phone=phone)
+        if link_user:
+            contact_user = _find_user_by_verified_contact(email=email, phone=phone)
+            if contact_user and contact_user.id != link_user.id:
+                user = _merge_user_accounts(link_user, contact_user, reason="vk_contact_link")
+        existing_user_account = VkAccount.objects.filter(user=user).first() if user else None
+        if existing_user_account:
+            if existing_user_account.vk_id != vk_id:
+                raise ValueError("К этому профилю уже привязан другой VK.")
+            account = existing_user_account
         if user:
             updates: list[str] = []
             if email and not (user.email or "").strip():
@@ -769,16 +1044,17 @@ def _upsert_vk_account(vk_user: dict) -> User:
             if not profile.phone:
                 profile.phone = phone
                 profile.save(update_fields=["phone", "updated_at"])
-        account = VkAccount.objects.create(
-            user=user,
-            vk_id=vk_id,
-            username=screen_name,
-            email=email,
-            phone=phone,
-            first_name=first_name,
-            last_name=last_name,
-            avatar_url=avatar_url,
-        )
+        if account is None:
+            account = VkAccount.objects.create(
+                user=user,
+                vk_id=vk_id,
+                username=screen_name,
+                email=email,
+                phone=phone,
+                first_name=first_name,
+                last_name=last_name,
+                avatar_url=avatar_url,
+            )
 
     account.username = screen_name
     if email:

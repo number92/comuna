@@ -9,6 +9,7 @@ User = get_user_model()
 class TelegramAccount(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="telegram_account")
     telegram_id = models.BigIntegerField(unique=True)
+    oidc_sub = models.CharField(max_length=64, unique=True, null=True, blank=True)
     username = models.CharField(max_length=255, blank=True)
     first_name = models.CharField(max_length=255, blank=True)
     last_name = models.CharField(max_length=255, blank=True)

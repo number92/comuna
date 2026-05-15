@@ -35,6 +35,10 @@ export type SiteUser = {
   display_name?: string | null
   email?: string | null
   email_verified?: boolean
+  telegram_linked?: boolean
+  telegram_username?: string | null
+  vk_linked?: boolean
+  vk_username?: string | null
   avatar_url?: string | null
   is_staff?: boolean
   is_author: boolean
@@ -251,6 +255,7 @@ export const scheduleRefreshSiteUser = () => {
 export const updateSiteProfile = async (payload: {
   display_name?: string
   avatar_url?: string | null
+  email?: string | null
 }) => {
   const token = get(siteToken)
   if (!token) {
@@ -273,7 +278,10 @@ export const updateSiteProfile = async (payload: {
   }
 
   siteUser.set(data.user)
-  return data.user as SiteUser
+  return {
+    user: data.user as SiteUser,
+    emailVerificationSent: Boolean(data?.email_verification_sent),
+  }
 }
 
 export const fetchStaticPageContent = async (slug: string) => {
@@ -438,10 +446,14 @@ export type TelegramAuthPayload = {
 }
 
 export const loginTelegram = async (payload: TelegramAuthPayload) => {
+  const token = get(siteToken)
   const response = await fetch(buildUrl('/api/auth/telegram/'), {
     method: 'POST',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     body: JSON.stringify(payload),
   })
 
@@ -471,10 +483,14 @@ export type VkAuthPayload = {
 }
 
 export const loginVK = async (payload: VkAuthPayload) => {
+  const token = get(siteToken)
   const response = await fetch(buildUrl('/api/auth/vk/'), {
     method: 'POST',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     body: JSON.stringify(payload),
   })
 

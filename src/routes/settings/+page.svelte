@@ -43,6 +43,7 @@
   let tagLemmaMap = new Map<string, string>()
   let siteProfileDisplayName = ''
   let siteProfileAvatarUrl = ''
+  let siteProfileEmail = ''
   let siteProfileSaving = false
   let siteProfileAvatarUploading = false
   let lastSiteUserSnapshot: string | null = null
@@ -131,11 +132,14 @@
       id: $siteUser?.id ?? null,
       display_name: $siteUser?.display_name ?? '',
       avatar_url: $siteUser?.avatar_url ?? '',
+      email: $siteUser?.email ?? '',
+      email_verified: $siteUser?.email_verified ?? false,
     })
     if (nextSnapshot === lastSiteUserSnapshot) return
     lastSiteUserSnapshot = nextSnapshot
     siteProfileDisplayName = $siteUser?.display_name ?? ''
     siteProfileAvatarUrl = $siteUser?.avatar_url ?? ''
+    siteProfileEmail = $siteUser?.email ?? ''
   }
 
   $: syncSiteProfileForm()
@@ -164,11 +168,17 @@
     }
     siteProfileSaving = true
     try {
-      await updateSiteProfile({
+      const result = await updateSiteProfile({
         display_name: siteProfileDisplayName.trim(),
         avatar_url: siteProfileAvatarUrl.trim() || '',
+        email: siteProfileEmail.trim(),
       })
-      toast({ content: 'Профиль Тамбур обновлен', type: 'success' })
+      toast({
+        content: result.emailVerificationSent
+          ? 'Профиль обновлен. Проверьте почту и подтвердите email.'
+          : 'Профиль Тамбур обновлен',
+        type: 'success',
+      })
     } catch (error) {
       toast({
         content: (error as Error)?.message ?? 'Не удалось обновить профиль',
@@ -360,10 +370,12 @@
         siteUser={$siteUser}
         bind:displayName={siteProfileDisplayName}
         bind:avatarUrl={siteProfileAvatarUrl}
+        bind:email={siteProfileEmail}
         saving={siteProfileSaving}
         uploading={siteProfileAvatarUploading}
         on:avatarSelected={(event) => onSiteProfileAvatarSelected(event.detail)}
         on:clearAvatar={() => (siteProfileAvatarUrl = '')}
+        on:externalLinked={() => refreshSiteUser().catch(() => {})}
         on:save={saveSiteProfileSettings}
       />
     </Section>

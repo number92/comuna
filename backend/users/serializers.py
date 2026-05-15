@@ -62,6 +62,18 @@ def _serialize_user(user: User) -> dict:
         "email_verified": bool(
             getattr(site_profile, "email_verified_at", None) if site_profile else None
         ),
+        "telegram_linked": hasattr(user, "telegram_account"),
+        "telegram_username": (
+            getattr(getattr(user, "telegram_account", None), "username", "") or None
+            if hasattr(user, "telegram_account")
+            else None
+        ),
+        "vk_linked": hasattr(user, "vk_account"),
+        "vk_username": (
+            getattr(getattr(user, "vk_account", None), "username", "") or None
+            if hasattr(user, "vk_account")
+            else None
+        ),
         "display_name": (site_profile.display_name if site_profile else "") or None,
         "avatar_url": safe_public_url(site_profile.avatar_url if site_profile else "") or avatar_url,
         "is_staff": user.is_staff,

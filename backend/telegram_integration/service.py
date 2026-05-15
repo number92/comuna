@@ -141,11 +141,15 @@ def validate_telegram_oidc_token(id_token: str) -> dict:
     except PyJWTError as exc:
         raise ValueError("invalid Telegram id_token") from exc
 
-    telegram_id = claims.get("id") or claims.get("sub")
-    try:
-        claims["id"] = int(telegram_id)
-    except (TypeError, ValueError):
-        raise ValueError("invalid Telegram id_token") from None
+    oidc_sub = str(claims.get("sub") or "").strip()
+    if not oidc_sub:
+        raise ValueError("invalid Telegram id_token")
+    claims["oidc_sub"] = oidc_sub
+    if claims.get("id") not in (None, ""):
+        try:
+            claims["id"] = int(claims.get("id"))
+        except (TypeError, ValueError):
+            raise ValueError("invalid Telegram id_token") from None
     return claims
 
 
@@ -154,8 +158,12 @@ def telegram_payload_from_oidc_claims(claims: dict) -> dict:
     last_name = (claims.get("family_name") or "").strip()
     if not first_name:
         first_name, last_name = _split_full_name(claims.get("name"))
+    oidc_sub = str(claims.get("oidc_sub") or claims.get("sub") or "").strip()
+    has_bot_api_id = claims.get("id") not in (None, "")
     return {
-        "id": claims.get("id"),
+        "id": claims.get("id") if has_bot_api_id else oidc_sub,
+        "telegram_id_source": "id" if has_bot_api_id else "sub",
+        "oidc_sub": oidc_sub,
         "first_name": first_name,
         "last_name": last_name,
         "username": (claims.get("preferred_username") or "").strip(),
@@ -182,11 +190,61 @@ def validate_telegram_login(payload: dict) -> None:
         raise ValueError(error_message or "invalid telegram auth")
 
 
-def upsert_telegram_account(payload: dict):
+def _parse_telegram_id(value) -> int:
     try:
-        telegram_id = int(payload.get("id"))
+        return int(value)
     except (TypeError, ValueError):
         raise ValueError("invalid telegram id") from None
+
+
+def _telegram_oidc_sub(payload: dict) -> str:
+    return str(payload.get("oidc_sub") or payload.get("sub") or "").strip()
+
+
+def _find_existing_telegram_account(telegram_id: int, oidc_sub: str) -> TelegramAccount | None:
+    account = TelegramAccount.objects.select_related("user").filter(telegram_id=telegram_id).first()
+    if account:
+        return account
+    if oidc_sub:
+        account = TelegramAccount.objects.select_related("user").filter(oidc_sub=oidc_sub).first()
+        if account:
+            return account
+        try:
+            legacy_oidc_id = int(oidc_sub)
+        except (TypeError, ValueError):
+            legacy_oidc_id = None
+        if legacy_oidc_id and legacy_oidc_id != telegram_id:
+            account = TelegramAccount.objects.select_related("user").filter(telegram_id=legacy_oidc_id).first()
+            if account:
+                return account
+    return None
+
+
+def _find_legacy_oidc_sub_account(
+    telegram_id: int,
+    oidc_sub: str,
+    *,
+    exclude_pk: int | None = None,
+) -> TelegramAccount | None:
+    if not oidc_sub:
+        return None
+    try:
+        legacy_oidc_id = int(oidc_sub)
+    except (TypeError, ValueError):
+        return None
+    if legacy_oidc_id == telegram_id:
+        return None
+    queryset = TelegramAccount.objects.select_related("user").filter(telegram_id=legacy_oidc_id)
+    if exclude_pk:
+        queryset = queryset.exclude(pk=exclude_pk)
+    return queryset.first()
+
+
+def upsert_telegram_account(payload: dict, link_user: User | None = None):
+    telegram_id = _parse_telegram_id(payload.get("id"))
+    oidc_sub = _telegram_oidc_sub(payload)
+    telegram_id_source = str(payload.get("telegram_id_source") or "id").strip().lower()
+    telegram_id_is_oidc_sub = bool(oidc_sub and telegram_id_source == "sub")
 
     username = (payload.get("username") or "").strip()
     first_name = (payload.get("first_name") or "").strip()
@@ -194,11 +252,33 @@ def upsert_telegram_account(payload: dict):
     avatar_url = (payload.get("photo_url") or "").strip()
     phone = _normalize_phone(payload.get("phone") or payload.get("phone_number"))
 
-    account = TelegramAccount.objects.select_related("user").filter(telegram_id=telegram_id).first()
+    account = _find_existing_telegram_account(telegram_id, oidc_sub)
     if account:
         user = account.user
+        if link_user and account.user_id != link_user.id:
+            from users import service as user_service
+
+            user = user_service._merge_user_accounts(link_user, account.user, reason="telegram_link")
+            account = _find_existing_telegram_account(telegram_id, oidc_sub) or TelegramAccount.objects.filter(user=user).first()
+        legacy_account = _find_legacy_oidc_sub_account(telegram_id, oidc_sub, exclude_pk=account.pk if account else None)
+        if legacy_account and legacy_account.user_id != user.id:
+            from users import service as user_service
+
+            user = user_service._merge_user_accounts(user, legacy_account.user, reason="telegram_legacy_oidc")
+            account = _find_existing_telegram_account(telegram_id, oidc_sub) or TelegramAccount.objects.filter(user=user).first()
     else:
-        user = _find_user_by_phone(phone)
+        user = link_user or _find_user_by_phone(phone)
+        if link_user and phone:
+            phone_user = _find_user_by_phone(phone)
+            if phone_user and phone_user.id != link_user.id:
+                from users import service as user_service
+
+                user = user_service._merge_user_accounts(link_user, phone_user, reason="telegram_phone_link")
+        existing_user_account = TelegramAccount.objects.filter(user=user).first() if user else None
+        if existing_user_account:
+            if existing_user_account.telegram_id != telegram_id and existing_user_account.oidc_sub != oidc_sub:
+                raise ValueError("К этому профилю уже привязан другой Telegram.")
+            account = existing_user_account
         if user:
             updates: list[str] = []
             if first_name and not user.first_name:
@@ -219,30 +299,44 @@ def upsert_telegram_account(payload: dict):
             if last_name:
                 user.last_name = last_name
             user.save(update_fields=["password", "first_name", "last_name"])
-        account = TelegramAccount.objects.create(
-            user=user,
-            telegram_id=telegram_id,
-            username=username,
-            first_name=first_name,
-            last_name=last_name,
-            avatar_url=avatar_url,
-        )
+        if account is None:
+            account = TelegramAccount.objects.create(
+                user=user,
+                telegram_id=telegram_id,
+                oidc_sub=oidc_sub or None,
+                username=username,
+                first_name=first_name,
+                last_name=last_name,
+                avatar_url=avatar_url,
+            )
 
     _remember_user_phone(user, phone)
+    update_fields = ["username", "first_name", "last_name", "avatar_url", "updated_at"]
+    if oidc_sub and account.oidc_sub != oidc_sub:
+        oidc_conflict = TelegramAccount.objects.filter(oidc_sub=oidc_sub).exclude(pk=account.pk).exists()
+        if not oidc_conflict:
+            account.oidc_sub = oidc_sub
+            update_fields.append("oidc_sub")
+    if not telegram_id_is_oidc_sub and account.telegram_id != telegram_id:
+        telegram_id_conflict = TelegramAccount.objects.filter(telegram_id=telegram_id).exclude(pk=account.pk).exists()
+        if not telegram_id_conflict:
+            account.telegram_id = telegram_id
+            update_fields.append("telegram_id")
     account.username = username
     account.first_name = first_name
     account.last_name = last_name
     account.avatar_url = avatar_url
-    account.save(update_fields=["username", "first_name", "last_name", "avatar_url", "updated_at"])
+    account.save(update_fields=update_fields)
     return user
 
 
 def telegram_login_will_create_new_user(payload: dict) -> bool:
     try:
-        telegram_id = int(payload.get("id"))
-    except (TypeError, ValueError):
+        telegram_id = _parse_telegram_id(payload.get("id"))
+    except ValueError:
         return True
-    if TelegramAccount.objects.filter(telegram_id=telegram_id).exists():
+    oidc_sub = _telegram_oidc_sub(payload)
+    if _find_existing_telegram_account(telegram_id, oidc_sub):
         return False
     phone = _normalize_phone(payload.get("phone") or payload.get("phone_number"))
     return _find_user_by_phone(phone) is None

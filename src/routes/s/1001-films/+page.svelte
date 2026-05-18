@@ -197,14 +197,24 @@
 <LoginModal bind:open={authOpen} initialMode="signup" />
 
 <section class="films-page">
+  <div class="film-rail" aria-hidden="true"></div>
   <div class="hero">
     <div class="hero-copy">
+      <div class="cinema-kicker">
+        <span aria-hidden="true"></span>
+        <p>Спецпроект сообщества «После титров»</p>
+      </div>
       <h1>1001 фильм, который должен посмотреть каждый</h1>
       <p class="lead">
         Каждый день вы получаете один фильм, только посмотрев и оценив его вы переходите
         к следующему, пропускать нельзя, выбирать нельзя — погрузиться в мир разных жанров,
         культур и эпох — нужно!
       </p>
+      <div class="cinema-tags" aria-label="Особенности маршрута">
+        <span>1 фильм в день</span>
+        <span>без выбора</span>
+        <span>обсуждение после просмотра</span>
+      </div>
       <div class="actions">
         {#if loading}
           <Button size="lg" disabled>
@@ -289,6 +299,7 @@
     </div>
 
     <div class="project-panel" aria-label="Статус проекта">
+      <div class="panel-caption">Личная программа показа</div>
       <div class="film-stack">
         {#each landingImages as image}
           <span class:has-image={Boolean(image.image_url)}>
@@ -355,7 +366,7 @@
         </span>
         <h3>Оцениваете и комментируете</h3>
         <p>
-          Вы ставите оценку фильму, комментриуете, читаете мнение сообщества,
+          Вы ставите оценку фильму, комментируете, читаете мнение сообщества,
           обсуждаете и после этого на следующий день получите ссылку на новый.
         </p>
       </article>
@@ -411,16 +422,38 @@
 
 <style>
   .films-page {
+    --film-ink: #121216;
+    --film-red: #be123c;
+    --film-gold: #f59e0b;
+
+    position: relative;
+    overflow: hidden;
     min-height: auto;
     margin-top: -1rem;
-    background: rgb(248 250 252 / 1);
+    background:
+      linear-gradient(90deg, rgb(18 18 22 / 0.035) 1px, transparent 1px) 0 0 / 3.5rem 100%,
+      linear-gradient(135deg, #fbfbfc 0 58%, #f1f5f9 58% 100%);
     color: #0f172a;
-    padding: clamp(0.25rem, 1.2vw, 0.9rem) clamp(1rem, 4vw, 3rem) 10px;
+    padding: clamp(0.75rem, 1.8vw, 1.35rem) clamp(1rem, 4vw, 3rem) 10px;
     display: flex;
     align-items: flex-start;
   }
 
+  .film-rail {
+    position: absolute;
+    inset: 0 0 auto;
+    height: 1.35rem;
+    pointer-events: none;
+    background:
+      radial-gradient(circle, #fbfbfc 0 0.18rem, transparent 0.2rem) 0.45rem 0.24rem / 1.6rem 0.44rem repeat-x,
+      radial-gradient(circle, #fbfbfc 0 0.18rem, transparent 0.2rem) 0.45rem 0.68rem / 1.6rem 0.44rem repeat-x,
+      linear-gradient(90deg, #121216, #2f3037 52%, #121216);
+    opacity: 0.9;
+  }
+
   .hero {
+    position: relative;
+    z-index: 1;
     display: grid;
     grid-template-columns: minmax(0, 1.1fr) minmax(18rem, 25rem);
     gap: clamp(1.25rem, 4vw, 3.5rem);
@@ -436,6 +469,24 @@
     gap: 0.9rem;
   }
 
+  .cinema-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.65rem;
+    color: #52525b;
+    font-size: 0.9rem;
+  }
+
+  .cinema-kicker span {
+    width: 1.8rem;
+    height: 0.62rem;
+    border-radius: 2px;
+    background:
+      repeating-linear-gradient(135deg, #121216 0 0.22rem, #f8fafc 0.22rem 0.38rem),
+      #121216;
+    box-shadow: 0 0.32rem 0 var(--film-red);
+  }
+
   h1 {
     max-width: 17ch;
     font-size: clamp(1.78rem, 3.68vw, 3.22rem);
@@ -449,6 +500,38 @@
     color: #475569;
     font-size: clamp(0.98rem, 1.5vw, 1.08rem);
     line-height: 1.55;
+  }
+
+  .cinema-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 0.85rem;
+    max-width: 40rem;
+    color: #27272a;
+    font-size: 0.88rem;
+  }
+
+  .cinema-tags span {
+    position: relative;
+    padding-left: 0.85rem;
+  }
+
+  .cinema-tags span::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.5em;
+    width: 0.45rem;
+    height: 0.12rem;
+    background: var(--film-red);
+  }
+
+  .cinema-tags span:nth-child(2)::before {
+    background: var(--btn-primary-background);
+  }
+
+  .cinema-tags span:nth-child(3)::before {
+    background: var(--film-gold);
   }
 
   .actions {
@@ -495,12 +578,20 @@
   }
 
   .project-panel {
-    border: 1px solid rgb(203 213 225);
+    position: relative;
+    border: 1px solid rgb(18 18 22 / 0.22);
     border-radius: 8px;
-    background: rgb(255 255 255 / 0.82);
+    background:
+      linear-gradient(180deg, rgb(18 18 22 / 0.94), rgb(32 33 39 / 0.92) 34%, rgb(255 255 255 / 0.92) 34%);
     padding: 1rem;
-    box-shadow: 0 18px 48px rgb(15 23 42 / 0.08);
+    box-shadow: 0 20px 56px rgb(18 18 22 / 0.18);
     backdrop-filter: blur(18px);
+  }
+
+  .panel-caption {
+    color: #f8fafc;
+    font-size: 0.86rem;
+    margin-bottom: 0.75rem;
   }
 
   .film-stack {
@@ -513,10 +604,13 @@
     position: absolute;
     inset: 0;
     border-radius: 8px;
-    border: 1px solid rgb(203 213 225 / 0.82);
+    border: 1px solid rgb(18 18 22 / 0.72);
     background:
-      linear-gradient(90deg, rgb(15 23 42 / 0.1) 0 12%, transparent 12% 88%, rgb(15 23 42 / 0.1) 88%),
-      linear-gradient(145deg, #e2e8f0, #f8fafc 48%, #cbd5e1);
+      radial-gradient(circle, #f8fafc 0 0.16rem, transparent 0.18rem) 0.45rem 0.45rem / 1rem 1rem repeat-y,
+      radial-gradient(circle, #f8fafc 0 0.16rem, transparent 0.18rem) calc(100% - 0.45rem) 0.45rem / 1rem 1rem repeat-y,
+      linear-gradient(90deg, rgb(18 18 22 / 0.22) 0 12%, transparent 12% 88%, rgb(18 18 22 / 0.22) 88%),
+      linear-gradient(145deg, #e4e4e7, #fafafa 48%, #cbd5e1);
+    box-shadow: 0 0.7rem 1.5rem rgb(18 18 22 / 0.16);
   }
 
   .film-stack span:nth-child(1) {
@@ -531,8 +625,10 @@
 
   .film-stack span:nth-child(3) {
     background:
-      linear-gradient(90deg, rgb(15 23 42 / 0.12) 0 10%, transparent 10% 90%, rgb(15 23 42 / 0.12) 90%),
-      linear-gradient(150deg, #f8fafc, rgb(11 93 215 / 0.16) 52%, #e2e8f0);
+      radial-gradient(circle, #f8fafc 0 0.16rem, transparent 0.18rem) 0.45rem 0.45rem / 1rem 1rem repeat-y,
+      radial-gradient(circle, #f8fafc 0 0.16rem, transparent 0.18rem) calc(100% - 0.45rem) 0.45rem / 1rem 1rem repeat-y,
+      linear-gradient(90deg, rgb(18 18 22 / 0.24) 0 10%, transparent 10% 90%, rgb(18 18 22 / 0.24) 90%),
+      linear-gradient(150deg, #fafafa, rgb(11 93 215 / 0.18) 48%, rgb(190 18 60 / 0.18));
   }
 
   .film-stack span.has-image {
@@ -547,6 +643,16 @@
     object-fit: cover;
   }
 
+  .film-stack span.has-image::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(90deg, rgb(18 18 22 / 0.5) 0 11%, transparent 11% 89%, rgb(18 18 22 / 0.5) 89%),
+      linear-gradient(180deg, transparent 58%, rgb(18 18 22 / 0.34));
+    pointer-events: none;
+  }
+
   .panel-grid {
     display: grid;
     grid-template-columns: 1fr;
@@ -555,7 +661,8 @@
 
   .panel-grid div {
     border-radius: 8px;
-    background: rgb(241 245 249);
+    background: rgb(255 255 255 / 0.9);
+    border: 1px solid rgb(18 18 22 / 0.08);
     padding: 0.7rem;
   }
 
@@ -578,7 +685,9 @@
   }
 
   .how-it-works {
-    background: rgb(255 255 255);
+    background:
+      linear-gradient(90deg, transparent 0 calc(100% - 1px), rgb(18 18 22 / 0.04) calc(100% - 1px)) 0 0 / 3.5rem 100%,
+      rgb(255 255 255);
     color: #0f172a;
     border-top: 1px solid rgb(226 232 240);
     padding: clamp(0.65rem, 1.5vw, 1.2rem) clamp(1rem, 4vw, 3rem) clamp(2rem, 5vw, 4.5rem);
@@ -590,10 +699,12 @@
   }
 
   .how-heading {
-    max-width: 46rem;
+    max-width: 49rem;
     display: flex;
     flex-direction: column;
     gap: 0.8rem;
+    border-left: 4px solid var(--film-red);
+    padding-left: 1rem;
   }
 
   .how-heading p,
@@ -619,10 +730,28 @@
   }
 
   .step {
+    position: relative;
+    overflow: hidden;
     border: 1px solid rgb(226 232 240);
     border-radius: 8px;
     background: rgb(248 250 252);
     padding: 1rem;
+  }
+
+  .step::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto;
+    height: 0.24rem;
+    background: var(--btn-primary-background);
+  }
+
+  .step:nth-child(1)::before {
+    background: var(--film-red);
+  }
+
+  .step:nth-child(3)::before {
+    background: var(--film-gold);
   }
 
   .step-icon {
@@ -633,8 +762,20 @@
     justify-content: center;
     border-radius: 999px;
     color: var(--btn-primary-background);
-    background: rgb(219 234 254);
+    background: rgb(18 18 22);
     margin-bottom: 0.9rem;
+  }
+
+  .step:nth-child(1) .step-icon {
+    color: #fecdd3;
+  }
+
+  .step:nth-child(2) .step-icon {
+    color: #bfdbfe;
+  }
+
+  .step:nth-child(3) .step-icon {
+    color: #fde68a;
   }
 
   .step h3 {
@@ -646,7 +787,8 @@
   .rules {
     margin-top: 0.85rem;
     border-radius: 8px;
-    border: 1px solid rgb(203 213 225);
+    border: 1px solid rgb(18 18 22 / 0.14);
+    border-left: 4px solid var(--btn-primary-background);
     padding: 1rem;
     background: rgb(255 255 255);
   }
@@ -658,10 +800,16 @@
   }
 
   .faq details {
-    border: 1px solid rgb(226 232 240);
+    border: 1px solid rgb(18 18 22 / 0.1);
     border-radius: 8px;
-    background: rgb(248 250 252);
+    background: rgb(255 255 255);
     padding: 0.9rem 1rem;
+    box-shadow: 0 0.5rem 1.4rem rgb(18 18 22 / 0.04);
+  }
+
+  .faq details[open] {
+    border-color: rgb(11 93 215 / 0.28);
+    background: rgb(248 250 252);
   }
 
   .faq summary {
@@ -681,12 +829,22 @@
   }
 
   :global(.dark) .films-page {
-    background: rgb(9 9 11 / 1);
+    background:
+      linear-gradient(90deg, rgb(255 255 255 / 0.035) 1px, transparent 1px) 0 0 / 3.5rem 100%,
+      rgb(9 9 11 / 1);
     color: #fafafa;
+  }
+
+  :global(.dark) .film-rail {
+    background:
+      radial-gradient(circle, #09090b 0 0.18rem, transparent 0.2rem) 0.45rem 0.24rem / 1.6rem 0.44rem repeat-x,
+      radial-gradient(circle, #09090b 0 0.18rem, transparent 0.2rem) 0.45rem 0.68rem / 1.6rem 0.44rem repeat-x,
+      linear-gradient(90deg, #18181b, #3f3f46 52%, #18181b);
   }
 
   :global(.dark) .lead,
   :global(.dark) .notification-note,
+  :global(.dark) .cinema-kicker,
   :global(.dark) .how-heading p,
   :global(.dark) .step p,
   :global(.dark) .rules p,
@@ -694,6 +852,16 @@
   :global(.dark) .panel-grid span,
   :global(.dark) .status-line {
     color: #a1a1aa;
+  }
+
+  :global(.dark) .cinema-kicker span {
+    background:
+      repeating-linear-gradient(135deg, #fafafa 0 0.22rem, #18181b 0.22rem 0.38rem),
+      #fafafa;
+  }
+
+  :global(.dark) .cinema-tags {
+    color: #e4e4e7;
   }
 
   :global(.dark) .how-heading a {
@@ -715,11 +883,13 @@
 
   :global(.dark) .project-panel {
     border-color: rgb(39 39 42);
-    background: rgb(9 9 11 / 0.8);
+    background:
+      linear-gradient(180deg, rgb(24 24 27 / 0.96), rgb(9 9 11 / 0.92) 34%, rgb(9 9 11 / 0.84) 34%);
     box-shadow: 0 18px 48px rgb(0 0 0 / 0.24);
   }
 
   :global(.dark) .panel-grid div {
+    border-color: rgb(63 63 70);
     background: rgb(24 24 27);
   }
 
@@ -741,7 +911,9 @@
   }
 
   :global(.dark) .how-it-works {
-    background: rgb(9 9 11);
+    background:
+      linear-gradient(90deg, transparent 0 calc(100% - 1px), rgb(255 255 255 / 0.035) calc(100% - 1px)) 0 0 / 3.5rem 100%,
+      rgb(9 9 11);
     color: #fafafa;
     border-top-color: rgb(39 39 42);
   }
@@ -752,8 +924,7 @@
   }
 
   :global(.dark) .step-icon {
-    background: rgb(30 58 138 / 0.45);
-    color: #93c5fd;
+    background: rgb(9 9 11);
   }
 
   :global(.dark) .rules {
@@ -764,6 +935,12 @@
   :global(.dark) .faq details {
     border-color: rgb(39 39 42);
     background: rgb(24 24 27);
+    box-shadow: none;
+  }
+
+  :global(.dark) .faq details[open] {
+    border-color: rgb(147 197 253 / 0.34);
+    background: rgb(9 9 11);
   }
 
   :global(.dark) .faq summary {
@@ -778,7 +955,7 @@
     .films-page {
       min-height: auto;
       align-items: flex-start;
-      padding: 1rem 1rem 1.5rem;
+      padding: 1.35rem 1rem 1.5rem;
     }
 
     .hero {
@@ -795,6 +972,11 @@
     .lead {
       font-size: 0.94rem;
       line-height: 1.45;
+    }
+
+    .cinema-tags {
+      font-size: 0.82rem;
+      gap: 0.4rem 0.7rem;
     }
 
     .film-stack {
@@ -824,6 +1006,10 @@
 
     .how-it-works {
       padding: 2rem 1rem;
+    }
+
+    .how-heading {
+      padding-left: 0.8rem;
     }
 
     .steps {

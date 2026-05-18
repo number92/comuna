@@ -2257,6 +2257,10 @@ def comun_knowledge_base_item(request: HttpRequest, slug: str, item_id: int) -> 
         return JsonResponse({"ok": False, "error": "item not found"}, status=404)
 
     if request.method == "DELETE":
+        if item.item_type == ComunKnowledgeBaseItem.TYPE_GROUP:
+            ComunKnowledgeBaseItem.objects.filter(comun=comun, is_active=True, parent=item).update(
+                parent=item.parent
+            )
         item.is_active = False
         item.save(update_fields=["is_active", "updated_at"])
         serialized = _serialize_comun_knowledge_base(list(_comun_knowledge_base_queryset(comun)))

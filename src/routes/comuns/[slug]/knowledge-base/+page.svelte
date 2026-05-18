@@ -45,6 +45,14 @@
   const itemLevelStyle = (item: BackendComunKnowledgeBaseItem) =>
     `padding-left: ${Math.min(Number(item.depth ?? 0), 8) * 1.25}rem`
 
+  const normalizedParentId = (parentId: unknown) => {
+    const parsed = Number(parentId ?? 0)
+    if (!Number.isFinite(parsed) || parsed <= 0) return null
+    return itemById.has(parsed) ? parsed : null
+  }
+
+  const itemParentId = (item: BackendComunKnowledgeBaseItem) => normalizedParentId(item.parent_id)
+
   const itemFrameClass = (item: BackendComunKnowledgeBaseItem) => {
     const dragState = `${dragOverKey === `into-${item.id}` ? ' ring-2 ring-blue-200 dark:ring-blue-900/60' : ''}${draggedItemId === Number(item.id) ? ' opacity-50' : ''}`
     const dragClass = canManage ? ' cursor-grab active:cursor-grabbing' : ''
@@ -55,7 +63,7 @@
   }
 
   const childItems = (parentId: number | null) =>
-    flatItems.filter((item) => Number(item.parent_id ?? 0) === Number(parentId ?? 0))
+    flatItems.filter((item) => Number(itemParentId(item) ?? 0) === Number(parentId ?? 0))
 
   const itemDescendantIds = (itemId: number) => {
     const result = new Set<number>()
@@ -127,7 +135,7 @@
       const item = itemById.get(itemId) ?? fallbackItems.get(itemId)
       if (!item) continue
       const patch: Partial<BackendComunKnowledgeBaseItem> = { sort_order: (index + 1) * 10 }
-      if (itemId === movedItemId || Number(item.parent_id ?? 0) !== Number(parentId ?? 0)) {
+      if (itemId === movedItemId || Number(itemParentId(item) ?? 0) !== Number(parentId ?? 0)) {
         patch.parent_id = parentId
       }
       payload = await patchItem(item, patch)
@@ -143,7 +151,7 @@
     const dragged = itemById.get(draggedId)
     if (!dragged || draggedId === Number(target.id)) return
 
-    const parentId = Number(target.parent_id ?? 0) || null
+    const parentId = itemParentId(target)
     if (!canMoveInto(draggedId, parentId)) {
       throw new Error('Нельзя вложить группу в саму себя')
     }
@@ -182,7 +190,7 @@
     const title = window.prompt('Название группы')
     if (!title?.trim()) return
 
-    const parentId = Number(target.parent_id ?? 0) || null
+    const parentId = itemParentId(target)
     const group = await createGroup(title.trim(), parentId)
     const groupId = Number(group?.id ?? 0)
     if (!groupId) throw new Error('Не удалось создать группу')
@@ -320,11 +328,11 @@
       </div>
     {/if}
     {#if flatItems.length}
-      <div class="flex flex-col gap-2">
+      <div class={canManage ? 'flex flex-col gap-0' : 'flex flex-col gap-2'}>
         {#each flatItems as item (item.id)}
           {#if canManage}
             <div
-              class="h-3 rounded-full transition {dragOverKey === `before-${item.id}` ? 'bg-blue-200 dark:bg-blue-900/50' : 'bg-transparent'}"
+              class="h-1 rounded-full transition {dragOverKey === `before-${item.id}` ? 'bg-blue-200 dark:bg-blue-900/50' : 'bg-transparent'}"
               role="presentation"
               on:dragenter={() => (dragOverKey = `before-${item.id}`)}
               on:dragover|preventDefault={() => (dragOverKey = `before-${item.id}`)}
@@ -423,7 +431,7 @@
           </article>
           {#if canManage}
             <div
-              class="h-3 rounded-full transition {dragOverKey === `after-${item.id}` ? 'bg-blue-200 dark:bg-blue-900/50' : 'bg-transparent'}"
+              class="h-1 rounded-full transition {dragOverKey === `after-${item.id}` ? 'bg-blue-200 dark:bg-blue-900/50' : 'bg-transparent'}"
               role="presentation"
               on:dragenter={() => (dragOverKey = `after-${item.id}`)}
               on:dragover|preventDefault={() => (dragOverKey = `after-${item.id}`)}

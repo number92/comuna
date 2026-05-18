@@ -197,24 +197,19 @@
 <LoginModal bind:open={authOpen} initialMode="signup" />
 
 <section class="films-page">
-  <div class="film-rail" aria-hidden="true"></div>
+  <div class="hero-shapes" aria-hidden="true">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
   <div class="hero">
     <div class="hero-copy">
-      <div class="cinema-kicker">
-        <span aria-hidden="true"></span>
-        <p>Спецпроект сообщества «После титров»</p>
-      </div>
       <h1>1001 фильм, который должен посмотреть каждый</h1>
       <p class="lead">
         Каждый день вы получаете один фильм, только посмотрев и оценив его вы переходите
         к следующему, пропускать нельзя, выбирать нельзя — погрузиться в мир разных жанров,
         культур и эпох — нужно!
       </p>
-      <div class="cinema-tags" aria-label="Особенности маршрута">
-        <span>1 фильм в день</span>
-        <span>без выбора</span>
-        <span>обсуждение после просмотра</span>
-      </div>
       <div class="actions">
         {#if loading}
           <Button size="lg" disabled>
@@ -299,7 +294,6 @@
     </div>
 
     <div class="project-panel" aria-label="Статус проекта">
-      <div class="panel-caption">Личная программа показа</div>
       <div class="film-stack">
         {#each landingImages as image}
           <span class:has-image={Boolean(image.image_url)}>
@@ -422,33 +416,64 @@
 
 <style>
   .films-page {
-    --film-ink: #121216;
-    --film-red: #be123c;
-    --film-gold: #f59e0b;
+    --play-ink: #171717;
+    --play-pink: #e11d48;
+    --play-yellow: #facc15;
+    --play-mint: #10b981;
+    --play-violet: #7c3aed;
 
     position: relative;
     overflow: hidden;
     min-height: auto;
     margin-top: -1rem;
     background:
-      linear-gradient(90deg, rgb(18 18 22 / 0.035) 1px, transparent 1px) 0 0 / 3.5rem 100%,
-      linear-gradient(135deg, #fbfbfc 0 58%, #f1f5f9 58% 100%);
+      linear-gradient(115deg, rgb(225 29 72 / 0.09) 0 10rem, transparent 10rem 100%),
+      linear-gradient(245deg, rgb(250 204 21 / 0.18) 0 14rem, transparent 14rem 100%),
+      linear-gradient(90deg, rgb(23 23 23 / 0.035) 1px, transparent 1px) 0 0 / 3.5rem 100%,
+      linear-gradient(135deg, #fff7ed 0, #f8fafc 42%, #ecfeff 100%);
     color: #0f172a;
     padding: clamp(0.75rem, 1.8vw, 1.35rem) clamp(1rem, 4vw, 3rem) 10px;
     display: flex;
     align-items: flex-start;
   }
 
-  .film-rail {
+  .hero-shapes {
     position: absolute;
-    inset: 0 0 auto;
-    height: 1.35rem;
+    inset: 0;
     pointer-events: none;
-    background:
-      radial-gradient(circle, #fbfbfc 0 0.18rem, transparent 0.2rem) 0.45rem 0.24rem / 1.6rem 0.44rem repeat-x,
-      radial-gradient(circle, #fbfbfc 0 0.18rem, transparent 0.2rem) 0.45rem 0.68rem / 1.6rem 0.44rem repeat-x,
-      linear-gradient(90deg, #121216, #2f3037 52%, #121216);
-    opacity: 0.9;
+  }
+
+  .hero-shapes span {
+    position: absolute;
+    border-radius: 8px;
+    opacity: 0.88;
+  }
+
+  .hero-shapes span:nth-child(1) {
+    width: 9rem;
+    height: 1.1rem;
+    left: max(1rem, calc(50% - 34rem));
+    top: 1.1rem;
+    background: repeating-linear-gradient(90deg, var(--play-pink) 0 0.8rem, transparent 0.8rem 1.2rem);
+    transform: rotate(-5deg);
+  }
+
+  .hero-shapes span:nth-child(2) {
+    width: 7.5rem;
+    height: 7.5rem;
+    right: max(0.5rem, calc(50% - 38rem));
+    bottom: -3.2rem;
+    border: 1.1rem solid rgb(124 58 237 / 0.22);
+    transform: rotate(12deg);
+  }
+
+  .hero-shapes span:nth-child(3) {
+    width: 10rem;
+    height: 1.25rem;
+    right: max(2rem, calc(50% - 33rem));
+    top: 2.7rem;
+    background: linear-gradient(90deg, var(--play-mint), var(--play-yellow), var(--btn-primary-background));
+    transform: rotate(8deg);
   }
 
   .hero {
@@ -469,24 +494,6 @@
     gap: 0.9rem;
   }
 
-  .cinema-kicker {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.65rem;
-    color: #52525b;
-    font-size: 0.9rem;
-  }
-
-  .cinema-kicker span {
-    width: 1.8rem;
-    height: 0.62rem;
-    border-radius: 2px;
-    background:
-      repeating-linear-gradient(135deg, #121216 0 0.22rem, #f8fafc 0.22rem 0.38rem),
-      #121216;
-    box-shadow: 0 0.32rem 0 var(--film-red);
-  }
-
   h1 {
     max-width: 17ch;
     font-size: clamp(1.78rem, 3.68vw, 3.22rem);
@@ -500,38 +507,6 @@
     color: #475569;
     font-size: clamp(0.98rem, 1.5vw, 1.08rem);
     line-height: 1.55;
-  }
-
-  .cinema-tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem 0.85rem;
-    max-width: 40rem;
-    color: #27272a;
-    font-size: 0.88rem;
-  }
-
-  .cinema-tags span {
-    position: relative;
-    padding-left: 0.85rem;
-  }
-
-  .cinema-tags span::before {
-    content: "";
-    position: absolute;
-    left: 0;
-    top: 0.5em;
-    width: 0.45rem;
-    height: 0.12rem;
-    background: var(--film-red);
-  }
-
-  .cinema-tags span:nth-child(2)::before {
-    background: var(--btn-primary-background);
-  }
-
-  .cinema-tags span:nth-child(3)::before {
-    background: var(--film-gold);
   }
 
   .actions {
@@ -579,19 +554,23 @@
 
   .project-panel {
     position: relative;
-    border: 1px solid rgb(18 18 22 / 0.22);
+    overflow: hidden;
+    border: 1px solid rgb(23 23 23 / 0.12);
     border-radius: 8px;
     background:
-      linear-gradient(180deg, rgb(18 18 22 / 0.94), rgb(32 33 39 / 0.92) 34%, rgb(255 255 255 / 0.92) 34%);
+      linear-gradient(135deg, rgb(255 255 255 / 0.92), rgb(255 255 255 / 0.72)),
+      linear-gradient(135deg, rgb(225 29 72 / 0.18), rgb(250 204 21 / 0.22) 45%, rgb(16 185 129 / 0.18));
     padding: 1rem;
-    box-shadow: 0 20px 56px rgb(18 18 22 / 0.18);
+    box-shadow: 0 22px 58px rgb(15 23 42 / 0.14);
     backdrop-filter: blur(18px);
   }
 
-  .panel-caption {
-    color: #f8fafc;
-    font-size: 0.86rem;
-    margin-bottom: 0.75rem;
+  .project-panel::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto;
+    height: 0.45rem;
+    background: linear-gradient(90deg, var(--play-pink), var(--play-yellow), var(--play-mint), var(--btn-primary-background));
   }
 
   .film-stack {
@@ -604,13 +583,11 @@
     position: absolute;
     inset: 0;
     border-radius: 8px;
-    border: 1px solid rgb(18 18 22 / 0.72);
+    border: 1px solid rgb(23 23 23 / 0.2);
     background:
-      radial-gradient(circle, #f8fafc 0 0.16rem, transparent 0.18rem) 0.45rem 0.45rem / 1rem 1rem repeat-y,
-      radial-gradient(circle, #f8fafc 0 0.16rem, transparent 0.18rem) calc(100% - 0.45rem) 0.45rem / 1rem 1rem repeat-y,
-      linear-gradient(90deg, rgb(18 18 22 / 0.22) 0 12%, transparent 12% 88%, rgb(18 18 22 / 0.22) 88%),
-      linear-gradient(145deg, #e4e4e7, #fafafa 48%, #cbd5e1);
-    box-shadow: 0 0.7rem 1.5rem rgb(18 18 22 / 0.16);
+      linear-gradient(90deg, rgb(255 255 255 / 0.5) 0 12%, transparent 12% 88%, rgb(255 255 255 / 0.5) 88%),
+      linear-gradient(145deg, #fef3c7, #fafafa 48%, #cffafe);
+    box-shadow: 0 0.8rem 1.6rem rgb(15 23 42 / 0.13);
   }
 
   .film-stack span:nth-child(1) {
@@ -625,10 +602,8 @@
 
   .film-stack span:nth-child(3) {
     background:
-      radial-gradient(circle, #f8fafc 0 0.16rem, transparent 0.18rem) 0.45rem 0.45rem / 1rem 1rem repeat-y,
-      radial-gradient(circle, #f8fafc 0 0.16rem, transparent 0.18rem) calc(100% - 0.45rem) 0.45rem / 1rem 1rem repeat-y,
-      linear-gradient(90deg, rgb(18 18 22 / 0.24) 0 10%, transparent 10% 90%, rgb(18 18 22 / 0.24) 90%),
-      linear-gradient(150deg, #fafafa, rgb(11 93 215 / 0.18) 48%, rgb(190 18 60 / 0.18));
+      linear-gradient(90deg, rgb(255 255 255 / 0.45) 0 10%, transparent 10% 90%, rgb(255 255 255 / 0.45) 90%),
+      linear-gradient(150deg, #fff7ed, rgb(11 93 215 / 0.18) 46%, rgb(225 29 72 / 0.18) 74%, #ecfeff);
   }
 
   .film-stack span.has-image {
@@ -648,8 +623,8 @@
     position: absolute;
     inset: 0;
     background:
-      linear-gradient(90deg, rgb(18 18 22 / 0.5) 0 11%, transparent 11% 89%, rgb(18 18 22 / 0.5) 89%),
-      linear-gradient(180deg, transparent 58%, rgb(18 18 22 / 0.34));
+      linear-gradient(90deg, rgb(15 23 42 / 0.26) 0 10%, transparent 10% 90%, rgb(15 23 42 / 0.26) 90%),
+      linear-gradient(180deg, transparent 58%, rgb(15 23 42 / 0.26));
     pointer-events: none;
   }
 
@@ -662,7 +637,7 @@
   .panel-grid div {
     border-radius: 8px;
     background: rgb(255 255 255 / 0.9);
-    border: 1px solid rgb(18 18 22 / 0.08);
+    border: 1px solid rgb(23 23 23 / 0.08);
     padding: 0.7rem;
   }
 
@@ -685,11 +660,19 @@
   }
 
   .how-it-works {
+    --play-ink: #171717;
+    --play-pink: #e11d48;
+    --play-yellow: #facc15;
+    --play-mint: #10b981;
+    --play-violet: #7c3aed;
+
     background:
-      linear-gradient(90deg, transparent 0 calc(100% - 1px), rgb(18 18 22 / 0.04) calc(100% - 1px)) 0 0 / 3.5rem 100%,
-      rgb(255 255 255);
+      linear-gradient(102deg, rgb(225 29 72 / 0.08) 0 8rem, transparent 8rem 100%),
+      linear-gradient(258deg, rgb(16 185 129 / 0.11) 0 10rem, transparent 10rem 100%),
+      linear-gradient(90deg, transparent 0 calc(100% - 1px), rgb(18 18 22 / 0.045) calc(100% - 1px)) 0 0 / 3.5rem 100%,
+      linear-gradient(180deg, #ffffff, #f8fafc);
     color: #0f172a;
-    border-top: 1px solid rgb(226 232 240);
+    border-top: 1px solid rgb(15 23 42 / 0.08);
     padding: clamp(0.65rem, 1.5vw, 1.2rem) clamp(1rem, 4vw, 3rem) clamp(2rem, 5vw, 4.5rem);
   }
 
@@ -703,7 +686,8 @@
     display: flex;
     flex-direction: column;
     gap: 0.8rem;
-    border-left: 4px solid var(--film-red);
+    border-left: 4px solid var(--play-pink);
+    border-image: linear-gradient(var(--play-pink), var(--play-yellow), var(--play-mint)) 1;
     padding-left: 1rem;
   }
 
@@ -732,10 +716,11 @@
   .step {
     position: relative;
     overflow: hidden;
-    border: 1px solid rgb(226 232 240);
+    border: 1px solid rgb(23 23 23 / 0.08);
     border-radius: 8px;
-    background: rgb(248 250 252);
+    background: rgb(255 255 255 / 0.9);
     padding: 1rem;
+    box-shadow: 0 0.7rem 1.5rem rgb(15 23 42 / 0.06);
   }
 
   .step::before {
@@ -746,12 +731,24 @@
     background: var(--btn-primary-background);
   }
 
+  .step:nth-child(1) {
+    background: linear-gradient(160deg, #fff1f2, rgb(255 255 255 / 0.92) 58%);
+  }
+
+  .step:nth-child(2) {
+    background: linear-gradient(160deg, #eff6ff, rgb(255 255 255 / 0.92) 58%);
+  }
+
+  .step:nth-child(3) {
+    background: linear-gradient(160deg, #fef9c3, rgb(255 255 255 / 0.92) 58%);
+  }
+
   .step:nth-child(1)::before {
-    background: var(--film-red);
+    background: var(--play-pink);
   }
 
   .step:nth-child(3)::before {
-    background: var(--film-gold);
+    background: var(--play-yellow);
   }
 
   .step-icon {
@@ -787,10 +784,13 @@
   .rules {
     margin-top: 0.85rem;
     border-radius: 8px;
-    border: 1px solid rgb(18 18 22 / 0.14);
-    border-left: 4px solid var(--btn-primary-background);
+    border: 1px solid rgb(18 18 22 / 0.1);
+    border-left: 4px solid var(--play-mint);
     padding: 1rem;
-    background: rgb(255 255 255);
+    background:
+      linear-gradient(135deg, rgb(236 253 245 / 0.82), rgb(239 246 255 / 0.82)),
+      rgb(255 255 255);
+    box-shadow: 0 0.7rem 1.5rem rgb(15 23 42 / 0.05);
   }
 
   .faq {
@@ -807,9 +807,21 @@
     box-shadow: 0 0.5rem 1.4rem rgb(18 18 22 / 0.04);
   }
 
+  .faq details:nth-child(3n + 1) {
+    background: #fff1f2;
+  }
+
+  .faq details:nth-child(3n + 2) {
+    background: #f0f9ff;
+  }
+
+  .faq details:nth-child(3n + 3) {
+    background: #fffbeb;
+  }
+
   .faq details[open] {
     border-color: rgb(11 93 215 / 0.28);
-    background: rgb(248 250 252);
+    background: rgb(255 255 255);
   }
 
   .faq summary {
@@ -830,21 +842,15 @@
 
   :global(.dark) .films-page {
     background:
+      linear-gradient(115deg, rgb(225 29 72 / 0.12) 0 10rem, transparent 10rem 100%),
+      linear-gradient(245deg, rgb(250 204 21 / 0.08) 0 14rem, transparent 14rem 100%),
       linear-gradient(90deg, rgb(255 255 255 / 0.035) 1px, transparent 1px) 0 0 / 3.5rem 100%,
       rgb(9 9 11 / 1);
     color: #fafafa;
   }
 
-  :global(.dark) .film-rail {
-    background:
-      radial-gradient(circle, #09090b 0 0.18rem, transparent 0.2rem) 0.45rem 0.24rem / 1.6rem 0.44rem repeat-x,
-      radial-gradient(circle, #09090b 0 0.18rem, transparent 0.2rem) 0.45rem 0.68rem / 1.6rem 0.44rem repeat-x,
-      linear-gradient(90deg, #18181b, #3f3f46 52%, #18181b);
-  }
-
   :global(.dark) .lead,
   :global(.dark) .notification-note,
-  :global(.dark) .cinema-kicker,
   :global(.dark) .how-heading p,
   :global(.dark) .step p,
   :global(.dark) .rules p,
@@ -852,16 +858,6 @@
   :global(.dark) .panel-grid span,
   :global(.dark) .status-line {
     color: #a1a1aa;
-  }
-
-  :global(.dark) .cinema-kicker span {
-    background:
-      repeating-linear-gradient(135deg, #fafafa 0 0.22rem, #18181b 0.22rem 0.38rem),
-      #fafafa;
-  }
-
-  :global(.dark) .cinema-tags {
-    color: #e4e4e7;
   }
 
   :global(.dark) .how-heading a {
@@ -884,7 +880,8 @@
   :global(.dark) .project-panel {
     border-color: rgb(39 39 42);
     background:
-      linear-gradient(180deg, rgb(24 24 27 / 0.96), rgb(9 9 11 / 0.92) 34%, rgb(9 9 11 / 0.84) 34%);
+      linear-gradient(135deg, rgb(24 24 27 / 0.94), rgb(9 9 11 / 0.85)),
+      linear-gradient(135deg, rgb(225 29 72 / 0.26), rgb(250 204 21 / 0.14) 45%, rgb(16 185 129 / 0.18));
     box-shadow: 0 18px 48px rgb(0 0 0 / 0.24);
   }
 
@@ -912,6 +909,8 @@
 
   :global(.dark) .how-it-works {
     background:
+      linear-gradient(102deg, rgb(225 29 72 / 0.1) 0 8rem, transparent 8rem 100%),
+      linear-gradient(258deg, rgb(16 185 129 / 0.08) 0 10rem, transparent 10rem 100%),
       linear-gradient(90deg, transparent 0 calc(100% - 1px), rgb(255 255 255 / 0.035) calc(100% - 1px)) 0 0 / 3.5rem 100%,
       rgb(9 9 11);
     color: #fafafa;
@@ -920,7 +919,8 @@
 
   :global(.dark) .step {
     border-color: rgb(39 39 42);
-    background: rgb(24 24 27);
+    background: linear-gradient(160deg, rgb(39 39 42), rgb(24 24 27));
+    box-shadow: none;
   }
 
   :global(.dark) .step-icon {
@@ -929,7 +929,8 @@
 
   :global(.dark) .rules {
     border-color: rgb(39 39 42);
-    background: rgb(9 9 11);
+    background: linear-gradient(135deg, rgb(20 83 45 / 0.24), rgb(30 64 175 / 0.18));
+    box-shadow: none;
   }
 
   :global(.dark) .faq details {
@@ -972,11 +973,6 @@
     .lead {
       font-size: 0.94rem;
       line-height: 1.45;
-    }
-
-    .cinema-tags {
-      font-size: 0.82rem;
-      gap: 0.4rem 0.7rem;
     }
 
     .film-stack {

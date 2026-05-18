@@ -43,7 +43,14 @@
   type FilmJourneyStatus = {
     ok: boolean
     total_count: number
+    landing_images?: LandingImage[]
     subscription?: FilmJourneySubscription | null
+  }
+
+  type LandingImage = {
+    slot: string
+    title: string
+    image_url: string
   }
 
   let status: FilmJourneyStatus | null = null
@@ -165,6 +172,15 @@
   $: progressLabel = subscription
     ? `${subscription.completed_count} из 1001`
     : '0 из 1001'
+  $: landingImages = ['1', '2', '3'].map((slot) => {
+    return (
+      status?.landing_images?.find((image) => image.slot === slot) ?? {
+        slot,
+        title: `Кадр ${slot}`,
+        image_url: '',
+      }
+    )
+  })
 
   onMount(loadStatus)
 </script>
@@ -273,9 +289,13 @@
 
     <div class="project-panel" aria-label="Статус проекта">
       <div class="film-stack">
-        <span></span>
-        <span></span>
-        <span></span>
+        {#each landingImages as image}
+          <span class:has-image={Boolean(image.image_url)}>
+            {#if image.image_url}
+              <img src={image.image_url} alt={image.title || 'Кадр из фильма'} loading="lazy" />
+            {/if}
+          </span>
+        {/each}
       </div>
       <div class="panel-grid">
         <div>
@@ -471,6 +491,18 @@
       linear-gradient(150deg, #f8fafc, rgb(11 93 215 / 0.16) 52%, #e2e8f0);
   }
 
+  .film-stack span.has-image {
+    overflow: hidden;
+    background: #0f172a;
+  }
+
+  .film-stack span.has-image img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
   .panel-grid {
     display: grid;
     grid-template-columns: 1fr;
@@ -616,6 +648,10 @@
     background:
       linear-gradient(90deg, rgb(255 255 255 / 0.09) 0 10%, transparent 10% 90%, rgb(255 255 255 / 0.09) 90%),
       linear-gradient(150deg, #09090b, rgb(37 99 235 / 0.36) 52%, #18181b);
+  }
+
+  :global(.dark) .film-stack span.has-image {
+    background: #0f172a;
   }
 
   :global(.dark) .how-it-works {

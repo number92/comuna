@@ -6,6 +6,7 @@
   import {
     buildSpecial1001FilmsAdminFilmUrl,
     buildSpecial1001FilmsAdminFilmsUrl,
+    buildSpecial1001FilmsAdminLandingImagesUrl,
   } from '$lib/api/backend'
   import { refreshSiteUser, siteToken, siteUser } from '$lib/siteAuth'
 
@@ -60,10 +61,21 @@
     }
   }
 
+  type LandingImage = {
+    id?: number | null
+    slot: string
+    title: string
+    image_url: string
+    source_url?: string
+    is_active: boolean
+  }
+
   type AdminResponse = {
     ok: boolean
     error?: string
     analytics?: AdminAnalytics
+    landing_images?: LandingImage[]
+    landing_image?: LandingImage
     films?: AdminFilm[]
     film?: AdminFilm
   }
@@ -89,6 +101,10 @@
   let saving = false
   let error = ''
   let analytics: AdminAnalytics | null = null
+  let landingImages: LandingImage[] = []
+  let landingDrafts: Record<string, LandingImage> = {}
+  let landingFiles: Record<string, File | null> = {}
+  let landingSaving: Record<string, boolean> = {}
   let films: AdminFilm[] = []
   let draft = emptyFilm()
   let editing: Record<number, AdminFilm> = {}
@@ -99,6 +115,24 @@
   }
 
   const formatNumber = (value: number) => new Intl.NumberFormat('ru-RU').format(value || 0)
+
+  const emptyLandingImage = (slot: string): LandingImage => ({
+    id: null,
+    slot,
+    title: `Кадр ${slot}`,
+    image_url: '',
+    source_url: '',
+    is_active: false,
+  })
+
+  const normalizeLandingImages = (items: LandingImage[] = []) => {
+    return ['1', '2', '3'].map((slot) => items.find((item) => item.slot === slot) ?? emptyLandingImage(slot))
+  }
+
+  const syncLandingDrafts = (items: LandingImage[]) => {
+    landingDrafts = Object.fromEntries(items.map((item) => [item.slot, { ...item }]))
+    landingFiles = Object.fromEntries(items.map((item) => [item.slot, null]))
+  }
 
   const stageItems = (data: AdminAnalytics) => [
     ['Всего участников', data.subscriptions.total],
@@ -124,11 +158,15 @@
         throw new Error(data.error || 'Не удалось загрузить управление фильмами')
       }
       analytics = data.analytics ?? null
+      landingImages = normalizeLandingImages(data.landing_images ?? [])
+      syncLandingDrafts(landingImages)
       films = data.films ?? []
       editing = {}
     } catch (err) {
       error = err instanceof Error ? err.message : 'Не удалось загрузить управление фильмами'
       films = []
+      landingImages = normalizeLandingImages([])
+      syncLandingDrafts(landingImages)
       analytics = null
     } finally {
       loading = false
@@ -138,9 +176,12 @@
   function normalizePayload(value: Record<string, unknown>) {
     return {
       ...value,
-      year: value.year === '' ? null : Number(value.year),
-      runtime_minutes: value.runtime_minutes === '' ? null : Number(value.runtime_minutes),
-      sort_order: value.sort_order === '' ? undefined : Number(value.sort_order),
+      year: value.year === '' || value.year == null ? null : Number(value.year),
+      runtime_minutes:
+        value.runtime_minutes === '' || value.runtime_minutes == null
+          ? null
+          : Number(value.runtime_minutes),
+      sort_order: value.sort_order === '' || value.sort_order == null ? undefined : Number(value.sort_order),
       imdb_rating: value.imdb_rating === '' ? null : value.imdb_rating,
     }
   }
@@ -235,6 +276,56 @@
     }
   }
 
+  function setLandingFile(slot: string, event: Event) {
+    const input = event.currentTarget as HTMLInputElement
+    landingFiles = {
+      ...landingFiles,
+      [slot]: input.files?.[0] ?? null,
+    }
+  }
+
+  async function saveLandingImage(slot: string) {
+    const draftImage = landingDrafts[slot] ?? emptyLandingImage(slot)
+    landingSaving = { ...landingSaving, [slot]: true }
+    error = ''
+    try {
+      const file = landingFiles[slot]
+      const requestInit: RequestInit = {
+        method: 'POST',
+        credentials: 'include',
+        headers: authHeaders(),
+      }
+      if (file) {
+        const form = new FormData()
+        form.set('slot', slot)
+        form.set('title', draftImage.title || `Кадр ${slot}`)
+        form.set('image_url', draftImage.image_url || '')
+        form.set('source_url', draftImage.source_url || '')
+        form.set('is_active', draftImage.is_active ? '1' : '0')
+        form.set('image', file)
+        requestInit.body = form
+      } else {
+        requestInit.headers = {
+          'Content-Type': 'application/json',
+          ...authHeaders(),
+        }
+        requestInit.body = JSON.stringify(draftImage)
+      }
+      const response = await fetch(buildSpecial1001FilmsAdminLandingImagesUrl(), requestInit)
+      const data = (await response.json()) as AdminResponse
+      if (!response.ok || !data.ok) {
+        throw new Error(data.error || 'Не удалось сохранить картинку')
+      }
+      landingImages = normalizeLandingImages(data.landing_images ?? [])
+      syncLandingDrafts(landingImages)
+      toast({ content: 'Картинка лендинга сохранена', type: 'success' })
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Не удалось сохранить картинку'
+    } finally {
+      landingSaving = { ...landingSaving, [slot]: false }
+    }
+  }
+
   onMount(async () => {
     if (!browser) return
     const currentUser = $siteUser || (await refreshSiteUser())
@@ -309,6 +400,51 @@
         </div>
       </section>
     {/if}
+
+    <section class="panel">
+      <div class="section-heading">
+        <h2>Фотки лендинга</h2>
+        <span>3 правые карточки</span>
+      </div>
+      <div class="landing-images-grid">
+        {#each landingImages as image (image.slot)}
+          {@const draftImage = landingDrafts[image.slot] ?? image}
+          <article>
+            <div class="landing-preview">
+              {#if draftImage.image_url}
+                <img src={draftImage.image_url} alt={draftImage.title || `Кадр ${image.slot}`} />
+              {:else}
+                <span>Кадр {image.slot}</span>
+              {/if}
+            </div>
+            <label>
+              <span>Название</span>
+              <input bind:value={draftImage.title} placeholder={`Кадр ${image.slot}`} />
+            </label>
+            <label>
+              <span>URL картинки</span>
+              <input bind:value={draftImage.image_url} placeholder="https://..." />
+            </label>
+            <label>
+              <span>Загрузить файл</span>
+              <input type="file" accept="image/*" on:change={(event) => setLandingFile(image.slot, event)} />
+            </label>
+            <label class="checkbox-row">
+              <input type="checkbox" bind:checked={draftImage.is_active} />
+              <span>Показывать на лендинге</span>
+            </label>
+            <Button
+              color="primary"
+              size="sm"
+              disabled={landingSaving[image.slot]}
+              on:click={() => saveLandingImage(image.slot)}
+            >
+              {landingSaving[image.slot] ? 'Сохраняю' : 'Сохранить'}
+            </Button>
+          </article>
+        {/each}
+      </div>
+    </section>
 
     <section class="panel">
       <div class="section-heading">
@@ -480,6 +616,64 @@
     background: #f8fafc;
   }
 
+  .landing-images-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 12px;
+  }
+
+  .landing-images-grid article {
+    display: grid;
+    gap: 10px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 10px;
+    background: #f8fafc;
+  }
+
+  .landing-preview {
+    aspect-ratio: 16 / 10;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid #cbd5e1;
+    background:
+      linear-gradient(90deg, rgb(15 23 42 / 0.1) 0 12%, transparent 12% 88%, rgb(15 23 42 / 0.1) 88%),
+      linear-gradient(145deg, #e2e8f0, #f8fafc 48%, #cbd5e1);
+    display: grid;
+    place-items: center;
+    color: #64748b;
+    font-size: 0.9rem;
+  }
+
+  .landing-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .landing-images-grid label {
+    display: grid;
+    gap: 4px;
+  }
+
+  .landing-images-grid label span,
+  .checkbox-row span {
+    color: #64748b;
+    font-size: 0.82rem;
+  }
+
+  .checkbox-row {
+    display: flex !important;
+    grid-template-columns: none;
+    align-items: center;
+    gap: 8px !important;
+  }
+
+  .checkbox-row input {
+    width: auto;
+  }
+
   .film-form {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -568,6 +762,7 @@
   :global(.dark) .notice,
   :global(.dark) .panel,
   :global(.dark) .stats-grid article,
+  :global(.dark) .landing-images-grid article,
   :global(.dark) .films-table article {
     border-color: #27272a;
     background: #09090b;
@@ -585,6 +780,13 @@
     background: #18181b;
   }
 
+  :global(.dark) .landing-preview {
+    border-color: #3f3f46;
+    background:
+      linear-gradient(90deg, rgb(255 255 255 / 0.08) 0 12%, transparent 12% 88%, rgb(255 255 255 / 0.08) 88%),
+      linear-gradient(145deg, #18181b, #27272a 48%, #09090b);
+  }
+
   @media (max-width: 860px) {
     .page-header,
     .section-heading {
@@ -594,6 +796,7 @@
 
     .stats-grid,
     .stage-grid,
+    .landing-images-grid,
     .film-form,
     .films-table article,
     .film-main:has(input),

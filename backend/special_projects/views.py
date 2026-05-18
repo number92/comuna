@@ -555,7 +555,7 @@ def film_journey_entry_rating_vote(request: HttpRequest, access_token: str) -> H
     )
 
 
-def _save_letter_upload(request: HttpRequest, upload) -> str:
+def _save_letter_upload(request: HttpRequest, upload, *, folder: str = "landname") -> str:
     content_type = (getattr(upload, "content_type", "") or "").lower()
     if not content_type.startswith("image/"):
         raise ValueError("Файл должен быть картинкой.")
@@ -576,7 +576,8 @@ def _save_letter_upload(request: HttpRequest, upload) -> str:
     ext = os.path.splitext(upload.name or "")[1].lower()
     if ext not in {".jpg", ".jpeg", ".png", ".webp", ".gif"}:
         ext = ".jpg"
-    filename = f"special-projects/landname/{base_name}-{secrets.token_hex(8)}{ext}"
+    folder = get_valid_filename(folder or "special-project")
+    filename = f"special-projects/{folder}/{base_name}-{secrets.token_hex(8)}{ext}"
     saved_path = default_storage.save(filename, upload)
     relative_url = default_storage.url(saved_path)
     site_base = (getattr(settings, "SITE_BASE_URL", "") or "").rstrip("/")
@@ -624,6 +625,59 @@ def _parse_imdb_rating(value):
     if parsed < 0 or parsed > 10:
         return None
     return round(parsed, 1)
+
+
+def _release_year_from_template_data(data: dict) -> int | None:
+    release_date = str(data.get("release_date") or "").strip()
+    if len(release_date) < 4:
+        return None
+    try:
+        year = int(release_date[:4])
+    except ValueError:
+        return None
+    if year < 1880 or year > 3000:
+        return None
+    return year
+
+
+def _apply_imdb_autofill_to_film_payload(data: dict) -> dict:
+    imdb_url = str(data.get("imdb_url") or "").strip()
+    if not imdb_url:
+        return data
+
+    template_data = film_journey.movie_review_autofill_data_from_imdb(imdb_url)
+    if not template_data:
+        return data
+
+    canonical_imdb_url = str(template_data.get("imdb_url") or "").strip()
+    if canonical_imdb_url:
+        data["imdb_url"] = canonical_imdb_url
+
+    poster_url = str(template_data.get("poster_url") or "").strip()
+    if poster_url and not data.get("poster_url"):
+        data["poster_url"] = poster_url[:700]
+
+    release_year = _release_year_from_template_data(template_data)
+    if release_year and not data.get("year"):
+        data["year"] = release_year
+
+    genre = str(template_data.get("genre") or "").strip()
+    if genre and not data.get("genres"):
+        data["genres"] = genre[:240]
+    if genre and not data.get("category"):
+        data["category"] = genre[:120]
+
+    original_title = str(template_data.get("original_title") or "").strip()
+    template_title = str(template_data.get("title") or "").strip()
+    if not original_title and template_title and template_title != data.get("title"):
+        original_title = template_title
+    if original_title and not data.get("original_title"):
+        data["original_title"] = original_title[:220]
+
+    if template_title and not data.get("title"):
+        data["title"] = template_title[:220]
+
+    return data
 
 
 def _film_admin_payload(film: FilmJourneyFilm) -> dict:
@@ -736,6 +790,92 @@ def _film_journey_admin_analytics() -> dict:
     }
 
 
+def _landing_image_payload_from_request(request: HttpRequest) -> tuple[dict, object | None]:
+    if (request.content_type or "").startswith("multipart/form-data"):
+        return request.POST, request.FILES.get("image") or request.FILES.get("file")
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+    except json.JSONDecodeError:
+        raise ValueError("invalid json")
+    if not isinstance(payload, dict):
+        raise ValueError("invalid payload")
+    return payload, None
+
+
+def _save_film_landing_image_slot(request: HttpRequest, user) -> dict:
+    payload, upload = _landing_image_payload_from_request(request)
+    slot = str(payload.get("slot") or "").strip()
+    if slot not in film_journey.LANDING_IMAGE_SLOTS:
+        raise ValueError("Некорректный слот картинки.")
+
+    title = str(payload.get("title") or f"Кадр {slot}").strip()[:160] or f"Кадр {slot}"
+    image_url = str(payload.get("image_url") or "").strip()
+    source_url = str(payload.get("source_url") or "").strip()
+    is_active = _parse_bool(payload.get("is_active", True), default=True)
+
+    if upload:
+        image_url = _save_letter_upload(request, upload, folder="1001-films")
+    if image_url and (not image_url.startswith(("http://", "https://")) or len(image_url) > 700):
+        raise ValueError("Некорректная ссылка на картинку.")
+    if source_url and (not source_url.startswith(("http://", "https://")) or len(source_url) > 700):
+        raise ValueError("Некорректная ссылка на источник.")
+
+    image = (
+        SpecialProjectLetterImage.objects.filter(
+            project_slug=film_journey.LANDING_IMAGES_PROJECT_SLUG,
+            letter=slot,
+        )
+        .order_by("sort_order", "id")
+        .first()
+    )
+    if image is None:
+        image = SpecialProjectLetterImage(
+            project_slug=film_journey.LANDING_IMAGES_PROJECT_SLUG,
+            letter=slot,
+            sort_order=int(slot) * 10,
+            created_by=user,
+        )
+
+    image.title = title
+    image.location_name = title
+    image.image_url = image_url
+    image.source_url = source_url
+    image.is_active = is_active and bool(image_url)
+    image.save()
+    return film_journey.serialize_landing_image_slot(slot, image)
+
+
+@csrf_exempt
+def film_journey_admin_landing_images(request: HttpRequest) -> HttpResponse:
+    user, error_response = _require_staff(request)
+    if error_response is not None:
+        return error_response
+
+    if request.method == "GET":
+        return JsonResponse(
+            {
+                "ok": True,
+                "landing_images": film_journey.landing_images_payload(include_inactive=True),
+            }
+        )
+
+    if request.method not in {"POST", "PATCH"}:
+        return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)
+
+    try:
+        image = _save_film_landing_image_slot(request, user)
+    except ValueError as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "landing_image": image,
+            "landing_images": film_journey.landing_images_payload(include_inactive=True),
+        }
+    )
+
+
 def _film_payload_from_request(payload: dict, *, existing: FilmJourneyFilm | None = None) -> dict:
     title = str(payload.get("title", existing.title if existing else "") or "").strip()
     if not title:
@@ -779,7 +919,7 @@ def _film_payload_from_request(payload: dict, *, existing: FilmJourneyFilm | Non
     for url_field in ("imdb_url", "poster_url"):
         if data[url_field] and not data[url_field].startswith(("http://", "https://")):
             raise ValueError("Ссылки должны начинаться с http:// или https://.")
-    return data
+    return _apply_imdb_autofill_to_film_payload(data)
 
 
 @csrf_exempt
@@ -794,6 +934,7 @@ def film_journey_admin_films(request: HttpRequest) -> HttpResponse:
             {
                 "ok": True,
                 "analytics": _film_journey_admin_analytics(),
+                "landing_images": film_journey.landing_images_payload(include_inactive=True),
                 "films": films,
             }
         )

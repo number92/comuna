@@ -17,6 +17,7 @@ from special_projects.models import (
     FilmJourneyEntry,
     FilmJourneyFilm,
     FilmJourneySubscription,
+    SpecialProjectLetterImage,
 )
 
 User = get_user_model()
@@ -31,6 +32,8 @@ PAUSE_AFTER = timedelta(days=8)
 DISCUSSION_AUTHOR_USERNAME = "tambur-1001-films"
 DISCUSSION_MESSAGE_ID_BASE = 1001000000
 DISCUSSION_RATING_BLOCK_ID = "film-rating"
+LANDING_IMAGES_PROJECT_SLUG = "1001-films-landing"
+LANDING_IMAGE_SLOTS = ("1", "2", "3")
 
 
 @dataclass(frozen=True)
@@ -63,6 +66,33 @@ def active_films_queryset():
 
 def active_films_count() -> int:
     return active_films_queryset().count()
+
+
+def serialize_landing_image_slot(slot: str, image: SpecialProjectLetterImage | None = None) -> dict[str, Any]:
+    return {
+        "id": image.id if image else None,
+        "slot": slot,
+        "title": image.title if image else f"Кадр {slot}",
+        "image_url": image.image_url if image else "",
+        "source_url": image.source_url if image else "",
+        "is_active": image.is_active if image else False,
+    }
+
+
+def landing_images_payload(*, include_inactive: bool = False) -> list[dict[str, Any]]:
+    images = SpecialProjectLetterImage.objects.filter(
+        project_slug=LANDING_IMAGES_PROJECT_SLUG,
+        letter__in=LANDING_IMAGE_SLOTS,
+    )
+    if not include_inactive:
+        images = images.filter(is_active=True)
+    images_by_slot: dict[str, SpecialProjectLetterImage] = {}
+    for image in images.order_by("letter", "sort_order", "id"):
+        images_by_slot.setdefault(image.letter, image)
+    return [
+        serialize_landing_image_slot(slot, images_by_slot.get(slot))
+        for slot in LANDING_IMAGE_SLOTS
+    ]
 
 
 def serialize_film(film: FilmJourneyFilm) -> dict[str, Any]:
@@ -103,14 +133,18 @@ def _film_genre_for_template(film: FilmJourneyFilm) -> str:
     value = (film.genres or film.category or "").strip().lower()
     if any(token in value for token in ("хоррор", "ужас")):
         return "horror"
-    if any(token in value for token in ("комед", "юмор")):
+    if any(token in value for token in ("comedy", "комед", "юмор")):
         return "comedy"
-    if any(token in value for token in ("драм", "мелодрам")):
+    if any(token in value for token in ("drama", "драм", "мелодрам")):
         return "drama"
-    if any(token in value for token in ("триллер", "детектив")):
+    if any(token in value for token in ("thriller", "триллер")):
         return "thriller"
-    if any(token in value for token in ("фантаст", "фэнтези", "fantasy", "sci-fi")):
+    if any(token in value for token in ("mystery", "детектив")):
+        return "mystery"
+    if any(token in value for token in ("sci_fi", "фантаст", "sci-fi")):
         return "sci_fi"
+    if any(token in value for token in ("fantasy", "фэнтези")):
+        return "fantasy"
     if any(token in value for token in ("боев", "экшен", "action")):
         return "action"
     if any(token in value for token in ("документ", "document")):
@@ -118,6 +152,49 @@ def _film_genre_for_template(film: FilmJourneyFilm) -> str:
     if any(token in value for token in ("анимац", "мульт")):
         return "animation"
     return ""
+
+
+def movie_review_autofill_data_from_imdb(imdb_input: str) -> dict[str, Any]:
+    from editor import service as editor_service
+    from editor.service import (
+        _canonical_imdb_url,
+        _extract_imdb_id,
+        _normalize_movie_review_template_data,
+    )
+
+    imdb_id = _extract_imdb_id(imdb_input)
+    if not imdb_id:
+        return {}
+
+    autofill_data: dict[str, object] = {"imdb_url": _canonical_imdb_url(imdb_id)}
+    cinemeta_data = editor_service._movie_review_autofill_from_cinemeta(imdb_id)
+    if cinemeta_data:
+        for key, value in cinemeta_data.items():
+            if isinstance(value, str) and value.strip():
+                autofill_data[key] = value.strip()
+
+    wikidata_data = editor_service._movie_review_autofill_from_wikidata(imdb_id)
+    if wikidata_data:
+        for key in ("title", "original_title", "genre", "release_date", "content_kind", "poster_url"):
+            value = wikidata_data.get(key)
+            if isinstance(value, str) and value.strip() and not autofill_data.get(key):
+                autofill_data[key] = value.strip()
+
+    justwatch_data = editor_service._movie_review_autofill_from_justwatch(
+        imdb_id,
+        title=str(autofill_data.get("title") or ""),
+        original_title=str(autofill_data.get("original_title") or ""),
+        content_kind=str(autofill_data.get("content_kind") or ""),
+    )
+    if justwatch_data:
+        watch_where = justwatch_data.get("watch_where")
+        if isinstance(watch_where, list) and watch_where:
+            autofill_data["watch_where"] = watch_where
+
+    normalized_data, template_error = _normalize_movie_review_template_data(autofill_data)
+    if template_error or not normalized_data:
+        return {}
+    return normalized_data
 
 
 def _film_review_template_data(film: FilmJourneyFilm) -> dict[str, Any]:
@@ -320,6 +397,7 @@ def project_status_for_user(user: User | None) -> dict[str, Any]:
         "ok": True,
         "project": PROJECT_SLUG,
         "total_count": PUBLIC_TOTAL_COUNT,
+        "landing_images": landing_images_payload(),
         "subscription": serialize_subscription(subscription),
     }
 

@@ -294,6 +294,10 @@ export const buildSpecial1001FilmsAdminFilmsUrl = (): string => {
   return `${getBackendBaseUrl()}/api/special-projects/1001-films/admin/films/`
 }
 
+export const buildSpecial1001FilmsAdminLandingImagesUrl = (): string => {
+  return `${getBackendBaseUrl()}/api/special-projects/1001-films/admin/landing-images/`
+}
+
 export const buildSpecial1001FilmsAdminFilmUrl = (id: number | string): string => {
   return `${getBackendBaseUrl()}/api/special-projects/1001-films/admin/films/${encodeURIComponent(id)}/`
 }

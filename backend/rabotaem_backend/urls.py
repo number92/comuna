@@ -68,6 +68,7 @@ from ratings.views import top_authors, top_authors_month, top_comuns, top_comuns
 from special_projects.views import (
     film_journey_admin_film_detail,
     film_journey_admin_films,
+    film_journey_admin_landing_images,
     film_journey_entry_comments,
     film_journey_entry_detail,
     film_journey_entry_rating_vote,
@@ -307,6 +308,11 @@ urlpatterns = [
         "api/special-projects/1001-films/admin/films/",
         film_journey_admin_films,
         name="special-1001-films-admin-films",
+    ),
+    path(
+        "api/special-projects/1001-films/admin/landing-images/",
+        film_journey_admin_landing_images,
+        name="special-1001-films-admin-landing-images",
     ),
     path(
         "api/special-projects/1001-films/admin/films/<int:film_id>/",

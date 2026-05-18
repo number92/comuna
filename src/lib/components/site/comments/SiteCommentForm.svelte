@@ -17,6 +17,7 @@
   export let autoFocus = false
   export let showCancel = false
   export let commentMasks: SiteCommentMask[] = []
+  export let submitUrl: string | null = null
 
   const dispatch = createEventDispatcher<{
     comment: SiteComment
@@ -95,7 +96,7 @@
       }
 
       const response = await fetch(
-        commentId ? buildCommentDetailUrl(commentId) : buildPostCommentsUrl(postId),
+        commentId ? buildCommentDetailUrl(commentId) : submitUrl || buildPostCommentsUrl(postId),
         {
           method: commentId ? 'PATCH' : 'POST',
           headers: {

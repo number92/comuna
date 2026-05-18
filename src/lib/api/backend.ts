@@ -282,6 +282,14 @@ export const buildSpecial1001FilmsEntryUrl = (token: string): string => {
   return `${getBackendBaseUrl()}/api/special-projects/1001-films/entries/${encodeURIComponent(token)}/`
 }
 
+export const buildSpecial1001FilmsEntryCommentsUrl = (token: string): string => {
+  return `${getBackendBaseUrl()}/api/special-projects/1001-films/entries/${encodeURIComponent(token)}/comments/`
+}
+
+export const buildSpecial1001FilmsEntryRatingVoteUrl = (token: string): string => {
+  return `${getBackendBaseUrl()}/api/special-projects/1001-films/entries/${encodeURIComponent(token)}/rating-vote/`
+}
+
 export const buildSpecial1001FilmsAdminFilmsUrl = (): string => {
   return `${getBackendBaseUrl()}/api/special-projects/1001-films/admin/films/`
 }

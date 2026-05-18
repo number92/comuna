@@ -2644,21 +2644,24 @@ def comment_like(request: HttpRequest, comment_id: int) -> HttpResponse:
         return JsonResponse({"ok": False, "error": "unauthorized"}, status=401)
 
     try:
-        now = timezone.now()
-        comment = (
-            PostComment.objects.select_related("post", "post__author")
-            .filter(
-                id=comment_id,
-                is_deleted=False,
-                post__is_blocked=False,
-                post__is_pending=False,
-                post__author__is_blocked=False,
-            )
-            .filter(Q(post__publish_at__isnull=True) | Q(post__publish_at__lte=now))
-            .get()
+        comment = PostComment.objects.select_related("post", "post__author").get(
+            id=comment_id,
+            is_deleted=False,
+            post__is_blocked=False,
+            post__author__is_blocked=False,
         )
     except PostComment.DoesNotExist:
         return JsonResponse({"ok": False, "error": "comment not found"}, status=404)
+
+    now = timezone.now()
+    is_public_post = (not comment.post.is_pending) and (
+        comment.post.publish_at is None or comment.post.publish_at <= now
+    )
+    if not is_public_post:
+        from special_projects import film_journey
+
+        if not film_journey.special_project_post_filter(comment.post):
+            return JsonResponse({"ok": False, "error": "comment not found"}, status=404)
 
     existing = PostCommentLike.objects.filter(comment=comment, user=user).first()
     delta = 0

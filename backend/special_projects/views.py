@@ -301,7 +301,12 @@ def film_journey_entry_detail(request: HttpRequest, access_token: str) -> HttpRe
         return JsonResponse(
             {
                 "ok": True,
-                "entry": film_journey.serialize_entry(entry, include_film=True),
+                "entry": film_journey.serialize_entry(
+                    entry,
+                    include_film=True,
+                    include_discussion=True,
+                    user=user,
+                ),
                 "subscription": film_journey.serialize_subscription(entry.subscription),
             }
         )
@@ -325,8 +330,227 @@ def film_journey_entry_detail(request: HttpRequest, access_token: str) -> HttpRe
     return JsonResponse(
         {
             "ok": True,
-            "entry": film_journey.serialize_entry(entry, include_film=True),
+            "entry": film_journey.serialize_entry(
+                entry,
+                include_film=True,
+                include_discussion=True,
+                user=user,
+            ),
             "subscription": film_journey.serialize_subscription(entry.subscription),
+        }
+    )
+
+
+def _film_journey_entry_for_request(request: HttpRequest, access_token: str):
+    user = _get_user_from_request(request)
+    if user is None:
+        return None, None, JsonResponse({"ok": False, "error": "unauthorized"}, status=401)
+    entry = film_journey.entry_for_token_and_user(access_token, user)
+    if entry is None:
+        return user, None, JsonResponse({"ok": False, "error": "film not found"}, status=404)
+    return user, entry, None
+
+
+def _serialize_entry_discussion_comment_payload(post, user):
+    from feeds.models import PostComment, PostCommentLike
+    from feeds.views import (
+        _can_edit_site_comment,
+        _comment_personas_for_user,
+        _serialize_site_comment,
+    )
+    from django.db.models import Count
+
+    comments = (
+        PostComment.objects.filter(post=post)
+        .select_related("user", "user__site_profile")
+        .annotate(likes_count=Count("likes", distinct=True))
+        .order_by("created_at")
+    )
+    liked_ids = set(
+        PostCommentLike.objects.filter(user=user, comment__post=post).values_list(
+            "comment_id",
+            flat=True,
+        )
+    )
+    return {
+        "ok": True,
+        "comments": [
+            _serialize_site_comment(
+                comment,
+                liked_by_me=comment.id in liked_ids,
+                likes_count=comment.likes_count,
+                can_edit=_can_edit_site_comment(user, comment),
+            )
+            for comment in comments
+        ],
+        "comment_masks": _comment_personas_for_user(user),
+    }
+
+
+@csrf_exempt
+def film_journey_entry_comments(request: HttpRequest, access_token: str) -> HttpResponse:
+    user, entry, error_response = _film_journey_entry_for_request(request, access_token)
+    if error_response is not None:
+        return error_response
+
+    from feeds.models import Post, PostComment
+    from feeds.views import (
+        _COMMENT_PERSONAS_BY_KEY,
+        _can_edit_site_comment,
+        _comment_personas_for_user,
+        _ensure_comment_persona_user,
+        _maybe_notify_author_comment,
+        _maybe_notify_comment_reply,
+        _maybe_notify_post_comment,
+        _serialize_site_comment,
+    )
+
+    post = film_journey.ensure_film_discussion_post(entry.film)
+    if request.method == "GET":
+        return JsonResponse(_serialize_entry_discussion_comment_payload(post, user))
+
+    if request.method != "POST":
+        return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)
+
+    try:
+        payload = json.loads(request.body.decode("utf-8"))
+    except json.JSONDecodeError:
+        return JsonResponse({"ok": False, "error": "invalid json"}, status=400)
+
+    body = (payload.get("body") or "").strip()
+    parent_id = payload.get("parent_id")
+    mask_key = str(payload.get("mask_key") or "").strip()
+    if not body:
+        return JsonResponse({"ok": False, "error": "comment is empty"}, status=400)
+    if len(body) > 2000:
+        return JsonResponse({"ok": False, "error": "comment too long"}, status=400)
+
+    parent = None
+    if parent_id:
+        try:
+            parent = PostComment.objects.get(id=int(parent_id), post=post, is_deleted=False)
+        except (PostComment.DoesNotExist, ValueError, TypeError):
+            return JsonResponse({"ok": False, "error": "parent comment not found"}, status=404)
+
+    persona = None
+    comment_user = user
+    if mask_key:
+        if not user.is_staff:
+            return JsonResponse({"ok": False, "error": "forbidden"}, status=403)
+        persona = _COMMENT_PERSONAS_BY_KEY.get(mask_key)
+        if not persona:
+            return JsonResponse({"ok": False, "error": "invalid comment mask"}, status=400)
+        persona_user = _ensure_comment_persona_user(persona)
+        if not persona_user:
+            return JsonResponse({"ok": False, "error": "comment mask unavailable"}, status=500)
+        comment_user = persona_user
+
+    comment = PostComment.objects.create(
+        post=post,
+        user=comment_user,
+        body=body,
+        parent=parent,
+        persona_key=(persona or {}).get("key", ""),
+        persona_username=(persona or {}).get("username", ""),
+    )
+    Post.objects.filter(id=post.id).update(comments_count=F("comments_count") + 1)
+    post.refresh_from_db(fields=["comments_count"])
+    _maybe_notify_post_comment(post, comment, parent=parent)
+    _maybe_notify_comment_reply(post, parent, comment)
+    _maybe_notify_author_comment(post, comment)
+
+    if comment_user.id == user.id:
+        entry = film_journey.complete_entry_from_discussion_if_ready(entry, user)
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "comment": _serialize_site_comment(
+                comment,
+                liked_by_me=False,
+                likes_count=0,
+                can_edit=_can_edit_site_comment(user, comment),
+            ),
+            "comments_count": post.comments_count,
+            "comment_masks": _comment_personas_for_user(user),
+            "entry": film_journey.serialize_entry(
+                entry,
+                include_film=True,
+                include_discussion=True,
+                user=user,
+            ),
+        }
+    )
+
+
+@csrf_exempt
+def film_journey_entry_rating_vote(request: HttpRequest, access_token: str) -> HttpResponse:
+    if request.method != "POST":
+        return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)
+    user, entry, error_response = _film_journey_entry_for_request(request, access_token)
+    if error_response is not None:
+        return error_response
+
+    from editor.models import PostRatingVote
+    from editor.service import (
+        _extract_inline_post_rating_blocks,
+        _normalize_editor_block_identifier,
+        _serialize_post_rating_block,
+        _serialize_post_ratings,
+    )
+
+    post = film_journey.ensure_film_discussion_post(entry.film)
+    try:
+        payload = json.loads(request.body.decode("utf-8")) if request.body else {}
+    except json.JSONDecodeError:
+        return JsonResponse({"ok": False, "error": "invalid json"}, status=400)
+    if not isinstance(payload, dict):
+        return JsonResponse({"ok": False, "error": "invalid payload"}, status=400)
+
+    raw_value = payload.get("value", payload.get("rating", payload.get("score")))
+    try:
+        rating_value = int(raw_value)
+    except (TypeError, ValueError):
+        return JsonResponse({"ok": False, "error": "invalid rating value"}, status=400)
+    if rating_value < 1 or rating_value > 10:
+        return JsonResponse({"ok": False, "error": "invalid rating value"}, status=400)
+
+    available_block_ids = _extract_inline_post_rating_blocks(post.content or "")
+    if not available_block_ids:
+        return JsonResponse({"ok": False, "error": "rating is not available"}, status=400)
+    raw_block_id = str(payload.get("block_id") or payload.get("rating_block_id") or "").strip()
+    if raw_block_id:
+        block_id = _normalize_editor_block_identifier(
+            raw_block_id,
+            fallback_prefix="post-rating",
+            fallback_index=0,
+        )
+    elif len(available_block_ids) == 1:
+        block_id = available_block_ids[0]
+    else:
+        return JsonResponse({"ok": False, "error": "block_id is required"}, status=400)
+    if block_id not in available_block_ids:
+        return JsonResponse({"ok": False, "error": "rating block not found"}, status=404)
+
+    PostRatingVote.objects.update_or_create(
+        post=post,
+        user=user,
+        block_id=block_id,
+        defaults={"value": rating_value},
+    )
+    entry = film_journey.complete_entry_from_discussion_if_ready(entry, user)
+    return JsonResponse(
+        {
+            "ok": True,
+            "block_id": block_id,
+            "post_rating": _serialize_post_rating_block(post, user, block_id),
+            "post_ratings": _serialize_post_ratings(post, user),
+            "entry": film_journey.serialize_entry(
+                entry,
+                include_film=True,
+                include_discussion=True,
+                user=user,
+            ),
         }
     )
 
@@ -595,7 +819,7 @@ def film_journey_admin_films(request: HttpRequest) -> HttpResponse:
 
 @csrf_exempt
 def film_journey_admin_film_detail(request: HttpRequest, film_id: int) -> HttpResponse:
-    _, error_response = _require_staff(request)
+    user, error_response = _require_staff(request)
     if error_response is not None:
         return error_response
 
@@ -605,6 +829,16 @@ def film_journey_admin_film_detail(request: HttpRequest, film_id: int) -> HttpRe
     ).first()
     if film is None:
         return JsonResponse({"ok": False, "error": "film not found"}, status=404)
+
+    if request.method == "GET":
+        post = film_journey.ensure_film_discussion_post(film)
+        return JsonResponse(
+            {
+                "ok": True,
+                "film": _film_admin_payload(film),
+                "discussion_post": film_journey.serialize_discussion_post(post, user),
+            }
+        )
 
     if request.method == "PATCH":
         try:

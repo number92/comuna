@@ -368,6 +368,9 @@
                 </Button>
               {:else}
                 <Button size="sm" on:click={() => editFilm(film)}>Править</Button>
+                <Button size="sm" href={`/s/1001-films/admin/preview/${film.id}`}>
+                  Предпросмотр
+                </Button>
                 {#if film.is_active}
                   <Button size="sm" on:click={() => deactivateFilm(film)} disabled={rowSaving[film.id]}>
                     Скрыть

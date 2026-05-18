@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import timedelta
+import html
+import json
 from typing import Any
 
 from django.conf import settings
@@ -26,6 +28,9 @@ REMINDER_EVENT_KEY = "film_journey_reminder"
 FIRST_REMINDER_AFTER = timedelta(days=2)
 SECOND_REMINDER_AFTER = timedelta(days=5)
 PAUSE_AFTER = timedelta(days=8)
+DISCUSSION_AUTHOR_USERNAME = "tambur-1001-films"
+DISCUSSION_MESSAGE_ID_BASE = 1001000000
+DISCUSSION_RATING_BLOCK_ID = "film-rating"
 
 
 @dataclass(frozen=True)
@@ -79,6 +84,158 @@ def serialize_film(film: FilmJourneyFilm) -> dict[str, Any]:
     }
 
 
+def _discussion_author():
+    from feeds.models import Author
+
+    author, _created = Author.objects.get_or_create(
+        username=DISCUSSION_AUTHOR_USERNAME,
+        defaults={
+            "title": "1001 фильм",
+            "description": "Системная лента обсуждений спецпроекта 1001 фильм.",
+            "auto_publish": False,
+            "notify_comments": False,
+        },
+    )
+    return author
+
+
+def _film_genre_for_template(film: FilmJourneyFilm) -> str:
+    value = (film.genres or film.category or "").strip().lower()
+    if any(token in value for token in ("хоррор", "ужас")):
+        return "horror"
+    if any(token in value for token in ("комед", "юмор")):
+        return "comedy"
+    if any(token in value for token in ("драм", "мелодрам")):
+        return "drama"
+    if any(token in value for token in ("триллер", "детектив")):
+        return "thriller"
+    if any(token in value for token in ("фантаст", "фэнтези", "fantasy", "sci-fi")):
+        return "sci_fi"
+    if any(token in value for token in ("боев", "экшен", "action")):
+        return "action"
+    if any(token in value for token in ("документ", "document")):
+        return "documentary"
+    if any(token in value for token in ("анимац", "мульт")):
+        return "animation"
+    return ""
+
+
+def _film_review_template_data(film: FilmJourneyFilm) -> dict[str, Any]:
+    data = {
+        "imdb_url": film.imdb_url,
+        "poster_url": film.poster_url,
+        "genre": _film_genre_for_template(film),
+        "content_kind": "movie",
+        "title": film.title,
+        "original_title": film.original_title,
+        "watch_where": [],
+        "author_rating": "",
+    }
+    return {
+        key: value
+        for key, value in data.items()
+        if (isinstance(value, str) and value.strip()) or (isinstance(value, list) and value)
+    }
+
+
+def _film_review_content(film: FilmJourneyFilm) -> str:
+    blocks: list[dict[str, Any]] = []
+    if film.description:
+        blocks.append(
+            {
+                "id": "film-description",
+                "type": "paragraph",
+                "data": {
+                    "text": html.escape(film.description).replace("\n", "<br>"),
+                },
+            }
+        )
+    blocks.append(
+        {
+            "id": DISCUSSION_RATING_BLOCK_ID,
+            "type": "post_rating",
+            "data": {"block_id": DISCUSSION_RATING_BLOCK_ID},
+        }
+    )
+    return json.dumps(
+        {
+            "time": 0,
+            "blocks": blocks,
+            "version": "2.31.0",
+        },
+        ensure_ascii=False,
+    )
+
+
+def ensure_film_discussion_post(film: FilmJourneyFilm):
+    from feeds.models import Post
+
+    author = _discussion_author()
+    message_id = DISCUSSION_MESSAGE_ID_BASE + int(film.id)
+    raw_data = {
+        "source": "special_project",
+        "special_project": {
+            "slug": PROJECT_SLUG,
+            "film_id": film.id,
+        },
+        "template": {
+            "type": "movie_review",
+            "version": 1,
+            "data": _film_review_template_data(film),
+        },
+    }
+    content = _film_review_content(film)
+    post, created = Post.objects.get_or_create(
+        author=author,
+        message_id=message_id,
+        defaults={
+            "title": film.title,
+            "content": content,
+            "source_url": film.imdb_url,
+            "is_pending": True,
+            "raw_data": raw_data,
+        },
+    )
+    updates: list[str] = []
+    if post.title != film.title:
+        post.title = film.title
+        updates.append("title")
+    if post.content != content:
+        post.content = content
+        updates.append("content")
+    if post.source_url != film.imdb_url:
+        post.source_url = film.imdb_url
+        updates.append("source_url")
+    if post.raw_data != raw_data:
+        post.raw_data = raw_data
+        updates.append("raw_data")
+    if not post.is_pending:
+        post.is_pending = True
+        updates.append("is_pending")
+    if updates and not created:
+        post.save(update_fields=(*updates, "updated_at"))
+    return post
+
+
+def serialize_discussion_post(post, user: User | None = None) -> dict[str, Any]:
+    from editor.service import _serialize_post_ratings, _serialize_post_template
+
+    return {
+        "id": post.id,
+        "title": post.title,
+        "content": post.content,
+        "template": _serialize_post_template(post),
+        "post_ratings": _serialize_post_ratings(post, user),
+        "comments_count": post.comments_count,
+    }
+
+
+def special_project_post_filter(post) -> bool:
+    raw_data = post.raw_data if isinstance(getattr(post, "raw_data", None), dict) else {}
+    project = raw_data.get("special_project") if isinstance(raw_data.get("special_project"), dict) else {}
+    return project.get("slug") == PROJECT_SLUG
+
+
 def entry_public_path(entry: FilmJourneyEntry) -> str:
     return f"/s/1001-films/watch/{entry.access_token}"
 
@@ -87,7 +244,13 @@ def entry_absolute_url(entry: FilmJourneyEntry) -> str:
     return _site_url(entry_public_path(entry))
 
 
-def serialize_entry(entry: FilmJourneyEntry, *, include_film: bool = True) -> dict[str, Any]:
+def serialize_entry(
+    entry: FilmJourneyEntry,
+    *,
+    include_film: bool = True,
+    include_discussion: bool = False,
+    user: User | None = None,
+) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "id": entry.id,
         "position": entry.position,
@@ -110,6 +273,9 @@ def serialize_entry(entry: FilmJourneyEntry, *, include_film: bool = True) -> di
     }
     if include_film:
         payload["film"] = serialize_film(entry.film)
+    if include_discussion:
+        post = ensure_film_discussion_post(entry.film)
+        payload["discussion_post"] = serialize_discussion_post(post, user)
     return payload
 
 
@@ -287,6 +453,30 @@ def submit_entry_review(entry: FilmJourneyEntry, *, rating: int, comment: str) -
             )
         )
     return entry
+
+
+def complete_entry_from_discussion_if_ready(entry: FilmJourneyEntry, user: User) -> FilmJourneyEntry:
+    from editor.models import PostRatingVote
+    from feeds.models import PostComment
+
+    post = ensure_film_discussion_post(entry.film)
+    vote = (
+        PostRatingVote.objects.filter(
+            post=post,
+            user=user,
+            block_id=DISCUSSION_RATING_BLOCK_ID,
+        )
+        .order_by("-updated_at", "-id")
+        .first()
+    )
+    comment = (
+        PostComment.objects.filter(post=post, user=user, is_deleted=False)
+        .order_by("created_at", "id")
+        .first()
+    )
+    if vote is None or comment is None:
+        return entry
+    return submit_entry_review(entry, rating=int(vote.value), comment=comment.body)
 
 
 def send_due_deliveries(*, now=None, force: bool = False) -> DeliveryResult:

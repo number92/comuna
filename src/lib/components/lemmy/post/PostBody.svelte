@@ -105,6 +105,7 @@
   export let showFullBody = false
   export let collapsible = false
   export let externalPreviewImageUrl: string | null | undefined = null
+  export let ratingVoteUrl: string | null = null
   $: void view
   $: void clickThrough
   
@@ -112,7 +113,7 @@
 
   export { htmlElement as element }
 
-  const dispatch = createEventDispatcher<{ expand: void }>()
+  const dispatch = createEventDispatcher<{ expand: void; rating: BackendPostRating }>()
 
   let expanded = false
   let hasOverflow = false
@@ -862,7 +863,7 @@
 
     postRatingsVoting = true
     try {
-      const response = await fetch(buildPostRatingVoteUrl(postId), {
+      const response = await fetch(ratingVoteUrl || buildPostRatingVoteUrl(postId), {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -884,6 +885,7 @@
           ...localPostRatings,
           [nextBlockId]: { ...(payload.post_rating as BackendPostRating) },
         }
+        dispatch('rating', payload.post_rating as BackendPostRating)
       }
     } catch (error) {
       toast({

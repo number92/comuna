@@ -181,7 +181,6 @@
       }
     )
   })
-  $: heroImage = landingImages.find((image) => image.image_url) ?? landingImages[0]
 
   onMount(loadStatus)
 </script>
@@ -216,12 +215,17 @@
           </p>
           <div class="actions">
             {#if loading}
-              <Button size="lg" disabled>
+              <Button size="lg" class="journey-button journey-button-muted" disabled>
                 <Icon src={ArrowPath} size="18" mini slot="prefix" />
                 Загрузка
               </Button>
             {:else if !$siteToken || !$siteUser}
-              <Button size="lg" color="primary" on:click={() => (authOpen = true)}>
+              <Button
+                size="lg"
+                color="primary"
+                class="journey-button journey-button-main"
+                on:click={() => (authOpen = true)}
+              >
                 <Icon src={LockClosed} size="18" mini slot="prefix" />
                 Зарегистрироваться и начать
               </Button>
@@ -229,6 +233,7 @@
               <Button
                 size="lg"
                 color="primary"
+                class="journey-button journey-button-main"
                 loading={actionLoading}
                 disabled={actionLoading}
                 on:click={startJourney}
@@ -240,6 +245,7 @@
               <Button
                 size="lg"
                 color="primary"
+                class="journey-button journey-button-main"
                 loading={actionLoading}
                 disabled={actionLoading}
                 on:click={resumeJourney}
@@ -248,23 +254,32 @@
                 Возобновить
               </Button>
             {:else if currentEntry && !currentEntry.completed_at}
-              <Button size="lg" color="primary" href={currentEntry.path}>
+              <Button
+                size="lg"
+                color="primary"
+                class="journey-button journey-button-main"
+                href={currentEntry.path}
+              >
                 <Icon src={Film} size="18" mini slot="prefix" />
                 Открыть текущий фильм
               </Button>
             {:else if subscription.status === 'completed'}
-              <Button size="lg" disabled>
+              <Button size="lg" class="journey-button journey-button-muted" disabled>
                 <Icon src={CheckCircle} size="18" mini slot="prefix" />
                 Маршрут завершён
               </Button>
             {:else}
-              <Button size="lg" disabled>
+              <Button size="lg" class="journey-button journey-button-next" disabled>
                 <Icon src={CalendarDays} size="18" mini slot="prefix" />
                 Следующий фильм {formatDate(subscription.next_delivery_at)}
               </Button>
             {/if}
             {#if $siteUser?.is_staff}
-              <Button size="lg" href="/s/1001-films/admin">
+              <Button
+                size="lg"
+                class="journey-button journey-button-admin"
+                href="/s/1001-films/admin"
+              >
                 Управление фильмами
               </Button>
             {/if}
@@ -298,12 +313,19 @@
         </div>
 
         <div class="project-panel" aria-label="Статус проекта">
-          <div class="editorial-visual" class:has-image={Boolean(heroImage?.image_url)}>
-            {#if heroImage?.image_url}
-              <img src={heroImage.image_url} alt={heroImage.title || 'Кадр из фильма'} loading="lazy" />
-            {:else}
-              <div class="visual-placeholder" aria-hidden="true"></div>
-            {/if}
+          <div class="film-stack" aria-label="Кадры проекта">
+            {#each landingImages as image, index}
+              <div
+                class="film-frame film-frame-{index + 1}"
+                class:has-image={Boolean(image.image_url)}
+              >
+                {#if image.image_url}
+                  <img src={image.image_url} alt={image.title || `Кадр ${index + 1}`} loading="lazy" />
+                {:else}
+                  <div class="visual-placeholder visual-placeholder-{index + 1}" aria-hidden="true"></div>
+                {/if}
+              </div>
+            {/each}
           </div>
           <div class="panel-grid">
             <div>
@@ -622,6 +644,83 @@
     margin-top: 0.25rem;
   }
 
+  .actions :global(.journey-button) {
+    position: relative;
+    min-height: 2.85rem;
+    overflow: hidden;
+    border: 0.14rem solid #08091d !important;
+    border-radius: 999px !important;
+    padding: 0.72rem 1.18rem !important;
+    font-family: Impact, Haettenschweiler, "Arial Narrow Bold", sans-serif;
+    font-size: 0.94rem;
+    font-weight: 900;
+    letter-spacing: 0;
+    text-transform: uppercase;
+    box-shadow:
+      0.22rem 0.22rem 0 rgb(8 9 29 / 0.82),
+      inset 0 0.08rem 0 rgb(255 255 255 / 0.36);
+    transform: translate(0, 0);
+  }
+
+  .actions :global(.journey-button:hover) {
+    filter: none;
+    transform: translate(-0.05rem, -0.05rem);
+    box-shadow:
+      0.31rem 0.31rem 0 rgb(8 9 29 / 0.9),
+      inset 0 0.08rem 0 rgb(255 255 255 / 0.42);
+  }
+
+  .actions :global(.journey-button:active) {
+    transform: translate(0.1rem, 0.1rem);
+    box-shadow:
+      0.12rem 0.12rem 0 rgb(8 9 29 / 0.86),
+      inset 0 0.08rem 0 rgb(255 255 255 / 0.22);
+  }
+
+  .actions :global(.journey-button[disabled]) {
+    cursor: default;
+    opacity: 1;
+    pointer-events: none;
+    transform: none;
+  }
+
+  .actions :global(.journey-button .button-content) {
+    gap: 0.48rem;
+  }
+
+  .actions :global(.journey-button-main) {
+    background:
+      linear-gradient(180deg, #ffde75 0%, var(--retro-orange) 54%, #e48118 100%) !important;
+    color: #24112d !important;
+    text-shadow: 0 0.04rem 0 rgb(255 245 207 / 0.58);
+  }
+
+  .actions :global(.journey-button-next) {
+    background:
+      repeating-linear-gradient(90deg, rgb(255 255 255 / 0.14) 0 1px, transparent 1px 7px),
+      linear-gradient(180deg, #f7edcf 0%, #e4c66b 100%) !important;
+    color: #381936 !important;
+    border-color: var(--retro-red) !important;
+    box-shadow:
+      0.22rem 0.22rem 0 rgb(111 30 50 / 0.42),
+      inset 0 0.08rem 0 rgb(255 255 255 / 0.5);
+  }
+
+  .actions :global(.journey-button-admin) {
+    background:
+      linear-gradient(180deg, #3de4e3 0%, #1597be 62%, #0c5d93 100%) !important;
+    color: #fff5cf !important;
+    border-color: #061634 !important;
+    text-shadow: 0 0.06rem 0 rgb(0 0 0 / 0.36);
+  }
+
+  .actions :global(.journey-button-muted) {
+    background:
+      linear-gradient(180deg, rgb(255 245 207 / 0.96), rgb(244 169 31 / 0.68)) !important;
+    color: #3b213b !important;
+    border-color: rgb(8 9 29 / 0.78) !important;
+  }
+
   .error {
     color: #ffd479;
   }
@@ -663,7 +762,7 @@
   .project-panel {
     position: relative;
     z-index: 4;
-    overflow: hidden;
+    overflow: visible;
     align-self: center;
     border: 1px solid rgb(255 245 207 / 0.24);
     border-radius: 1rem;
@@ -685,50 +784,96 @@
     pointer-events: none;
   }
 
-  .editorial-visual {
+  .film-stack {
     position: relative;
-    min-height: 19rem;
-    margin-bottom: 0.72rem;
+    min-height: 19.4rem;
+    margin: 0.1rem 0.2rem 1.05rem;
+    isolation: isolate;
+  }
+
+  .film-stack::before {
+    content: "";
+    position: absolute;
+    left: 8%;
+    right: 6%;
+    bottom: 0.2rem;
+    height: 1.1rem;
+    border-radius: 50%;
+    background: rgb(0 0 0 / 0.42);
+    filter: blur(0.65rem);
+    z-index: 0;
+  }
+
+  .film-frame {
+    position: absolute;
     overflow: hidden;
-    border-radius: 0.72rem;
-    border: 0.18rem solid #0b0b16;
+    border: 0.18rem solid #070714;
+    border-radius: 0.38rem;
     background:
       radial-gradient(circle at 68% 34%, #f5e09a 0 3.8rem, transparent 3.9rem),
       radial-gradient(circle at 30% 70%, rgb(215 59 47 / 0.72), transparent 8rem),
       linear-gradient(145deg, #101451, #07081d 68%);
-    box-shadow: 0 0.7rem 0 rgb(0 0 0 / 0.28);
+    box-shadow:
+      0 0.8rem 1.2rem rgb(0 0 0 / 0.34),
+      0 0 0 0.45rem #fff2be,
+      0 0 0 0.58rem #070714;
+    transform-origin: 50% 90%;
   }
 
-  .editorial-visual::before,
-  .editorial-visual::after {
+  .film-frame::before,
+  .film-frame::after {
     content: "";
     position: absolute;
     pointer-events: none;
-    z-index: 2;
   }
 
-  .editorial-visual::before {
-    inset: 0.8rem;
-    border: 1px solid rgb(255 245 207 / 0.26);
-    border-radius: 0.5rem;
-  }
-
-  .editorial-visual::after {
+  .film-frame::before {
     inset: 0;
+    z-index: 3;
     background:
-      repeating-linear-gradient(0deg, rgb(255 255 255 / 0.11) 0 1px, transparent 1px 4px),
-      linear-gradient(180deg, transparent 46%, rgb(9 11 37 / 0.52));
+      radial-gradient(circle, #070714 0 0.12rem, transparent 0.13rem) 0.35rem 0.45rem / 0.7rem 1.08rem repeat-y,
+      radial-gradient(circle, #070714 0 0.12rem, transparent 0.13rem) calc(100% - 0.35rem) 0.45rem / 0.7rem 1.08rem repeat-y,
+      linear-gradient(90deg, #fff2be 0 1.05rem, transparent 1.05rem calc(100% - 1.05rem), #fff2be calc(100% - 1.05rem));
+    opacity: 0.96;
   }
 
-  .editorial-visual.has-image {
+  .film-frame::after {
+    inset: 0;
+    z-index: 4;
+    background:
+      repeating-linear-gradient(0deg, rgb(255 255 255 / 0.1) 0 1px, transparent 1px 4px),
+      linear-gradient(110deg, transparent 0 39%, rgb(255 255 255 / 0.2) 45%, transparent 55%),
+      linear-gradient(180deg, transparent 48%, rgb(9 11 37 / 0.38));
+  }
+
+  .film-frame-1 {
+    inset: 1.1rem 0.15rem 0.7rem 1rem;
+    z-index: 3;
+    transform: rotate(3deg);
+  }
+
+  .film-frame-2 {
+    inset: 0.65rem 1.55rem 1.55rem 0.15rem;
+    z-index: 2;
+    transform: rotate(-6deg);
+  }
+
+  .film-frame-3 {
+    inset: 0.1rem 0.75rem 2.25rem 2.15rem;
+    z-index: 1;
+    transform: rotate(8deg);
+  }
+
+  .film-frame.has-image {
     background: #07081d;
   }
 
-  .editorial-visual img {
+  .film-frame img {
     display: block;
     width: 100%;
     height: 100%;
     object-fit: cover;
+    padding: 0.78rem 1.08rem;
     filter: saturate(1.18) contrast(1.08) sepia(0.12);
   }
 
@@ -739,6 +884,20 @@
       conic-gradient(from 34deg at 48% 105%, rgb(215 59 47 / 0.95), rgb(244 169 31 / 0.9), transparent 24deg 336deg, rgb(215 59 47 / 0.95)),
       radial-gradient(circle at 70% 28%, #f5e09a 0 3.7rem, transparent 3.8rem),
       linear-gradient(145deg, #111657, #07081d 68%);
+  }
+
+  .visual-placeholder-2 {
+    background:
+      radial-gradient(circle at 30% 34%, #35d4df 0 2.6rem, transparent 2.7rem),
+      linear-gradient(135deg, rgb(215 59 47 / 0.86), transparent 44%),
+      linear-gradient(145deg, #101451, #07081d 72%);
+  }
+
+  .visual-placeholder-3 {
+    background:
+      radial-gradient(circle at 72% 28%, #f4a91f 0 2.2rem, transparent 2.3rem),
+      repeating-linear-gradient(90deg, rgb(255 245 207 / 0.18) 0 0.18rem, transparent 0.18rem 1.1rem),
+      linear-gradient(145deg, #2b1830, #07081d 68%);
   }
 
   .visual-placeholder::before {
@@ -1047,8 +1206,9 @@
       line-height: 1.45;
     }
 
-    .editorial-visual {
+    .film-stack {
       min-height: 15rem;
+      margin-inline: 0.15rem;
     }
 
     .project-panel {
@@ -1110,7 +1270,7 @@
       font-size: 0.9rem;
     }
 
-    .editorial-visual {
+    .film-stack {
       min-height: 14rem;
     }
 

@@ -181,6 +181,7 @@
       }
     )
   })
+  $: heroImage = landingImages.find((image) => image.image_url) ?? landingImages[0]
 
   onMount(loadStatus)
 </script>
@@ -294,14 +295,12 @@
     </div>
 
     <div class="project-panel" aria-label="Статус проекта">
-      <div class="film-stack">
-        {#each landingImages as image}
-          <span class:has-image={Boolean(image.image_url)}>
-            {#if image.image_url}
-              <img src={image.image_url} alt={image.title || 'Кадр из фильма'} loading="lazy" />
-            {/if}
-          </span>
-        {/each}
+      <div class="editorial-visual" class:has-image={Boolean(heroImage?.image_url)}>
+        {#if heroImage?.image_url}
+          <img src={heroImage.image_url} alt={heroImage.title || 'Кадр из фильма'} loading="lazy" />
+        {:else}
+          <div class="visual-placeholder" aria-hidden="true"></div>
+        {/if}
       </div>
       <div class="panel-grid">
         <div>
@@ -416,26 +415,26 @@
 
 <style>
   .films-page {
-    --play-ink: #19130f;
-    --play-red: #d83a2f;
-    --play-yellow: #f8c847;
-    --play-cream: #fff2cf;
-    --play-mint: #39b7a5;
-    --play-blue: #2578bd;
-    --play-shadow: #060606;
+    --editorial-ink: #f4ead7;
+    --editorial-paper: #d8c5a7;
+    --editorial-muted: #9c8d78;
+    --editorial-bg: #12100e;
+    --editorial-copper: #b06b3f;
+    --editorial-wine: #5e1f20;
+    --editorial-olive: #29372b;
+    --editorial-line: rgb(244 234 215 / 0.2);
 
     position: relative;
     overflow: hidden;
     min-height: auto;
     margin-top: -1rem;
     background:
-      radial-gradient(circle at 1rem 1rem, rgb(25 19 15 / 0.12) 0 0.08rem, transparent 0.1rem) 0 0 / 1rem 1rem,
-      linear-gradient(112deg, rgb(216 58 47 / 0.16) 0 10rem, transparent 10rem 100%),
-      linear-gradient(246deg, rgb(57 183 165 / 0.2) 0 15rem, transparent 15rem 100%),
-      linear-gradient(90deg, rgb(25 19 15 / 0.06) 1px, transparent 1px) 0 0 / 3.5rem 100%,
-      linear-gradient(135deg, #fff2cf 0, #fff8e6 48%, #dff6f0 100%);
-    color: var(--play-ink);
-    padding: clamp(0.75rem, 1.8vw, 1.35rem) clamp(1rem, 4vw, 3rem) 10px;
+      radial-gradient(circle at 78% 12%, rgb(176 107 63 / 0.28), transparent 17rem),
+      radial-gradient(circle at 12% 78%, rgb(94 31 32 / 0.34), transparent 18rem),
+      linear-gradient(90deg, rgb(244 234 215 / 0.04) 1px, transparent 1px) 0 0 / 4.25rem 100%,
+      linear-gradient(135deg, #17130f 0, #0f0e0c 48%, #201611 100%);
+    color: var(--editorial-ink);
+    padding: clamp(1rem, 2.2vw, 1.8rem) clamp(1rem, 4vw, 3rem) clamp(1.2rem, 2vw, 2rem);
     display: flex;
     align-items: flex-start;
   }
@@ -446,10 +445,9 @@
     inset: 0;
     pointer-events: none;
     background:
-      linear-gradient(rgb(255 255 255 / 0.18), transparent 0.18rem) 0 0 / 100% 0.46rem,
-      radial-gradient(circle, rgb(25 19 15 / 0.12) 0 0.05rem, transparent 0.07rem) 0.2rem 0.3rem / 0.8rem 0.8rem;
-    mix-blend-mode: multiply;
-    opacity: 0.32;
+      radial-gradient(circle, rgb(244 234 215 / 0.13) 0 0.055rem, transparent 0.075rem) 0.25rem 0.25rem / 0.85rem 0.85rem,
+      linear-gradient(rgb(244 234 215 / 0.06), transparent 0.16rem) 0 0 / 100% 0.52rem;
+    opacity: 0.22;
   }
 
   .hero-shapes {
@@ -460,51 +458,50 @@
 
   .hero-shapes span {
     position: absolute;
-    border: 3px solid var(--play-shadow);
-    border-radius: 8px;
-    opacity: 0.95;
+    border-radius: 999px;
+    opacity: 0.9;
   }
 
   .hero-shapes span:nth-child(1) {
-    width: 10rem;
-    height: 1.25rem;
+    width: 20rem;
+    height: 20rem;
     left: max(1rem, calc(50% - 34rem));
-    top: 1.1rem;
-    background: repeating-linear-gradient(90deg, var(--play-red) 0 0.9rem, var(--play-cream) 0.9rem 1.3rem);
-    box-shadow: 0.34rem 0.34rem 0 var(--play-shadow);
-    transform: rotate(-6deg);
+    top: -10rem;
+    border: 1px solid var(--editorial-line);
+    background: radial-gradient(circle, transparent 0 54%, rgb(176 107 63 / 0.16) 55% 56%, transparent 57%);
+    transform: none;
   }
 
   .hero-shapes span:nth-child(2) {
-    width: 7.25rem;
-    height: 7.25rem;
-    right: max(0.5rem, calc(50% - 38rem));
-    bottom: -3.2rem;
-    border-width: 0.95rem;
+    width: 11rem;
+    height: 16rem;
+    right: max(0.5rem, calc(50% - 37rem));
+    bottom: -7rem;
+    border: 1px solid rgb(244 234 215 / 0.16);
+    border-radius: 999px 999px 0 0;
     background:
-      radial-gradient(circle, rgb(25 19 15 / 0.18) 0 0.12rem, transparent 0.14rem) 0 0 / 0.8rem 0.8rem,
-      var(--play-yellow);
-    box-shadow: -0.36rem 0.36rem 0 var(--play-shadow);
-    transform: rotate(14deg);
+      linear-gradient(90deg, transparent 49%, rgb(244 234 215 / 0.18) 49% 51%, transparent 51%),
+      linear-gradient(rgb(176 107 63 / 0.12), transparent);
+    transform: rotate(10deg);
   }
 
   .hero-shapes span:nth-child(3) {
-    width: 10rem;
-    height: 1.25rem;
-    right: max(2rem, calc(50% - 33rem));
-    top: 2.7rem;
-    background: linear-gradient(90deg, var(--play-mint), var(--play-yellow), var(--play-blue), var(--play-red));
-    box-shadow: 0.34rem 0.34rem 0 var(--play-shadow);
-    transform: rotate(8deg);
+    width: 34rem;
+    height: 1px;
+    right: max(2rem, calc(50% - 32rem));
+    top: 4rem;
+    border-radius: 0;
+    background: linear-gradient(90deg, transparent, rgb(244 234 215 / 0.5), transparent);
+    transform: none;
   }
 
   .hero {
     position: relative;
     z-index: 1;
     display: grid;
-    grid-template-columns: minmax(0, 1.1fr) minmax(18rem, 25rem);
+    grid-template-columns: minmax(0, 1fr) minmax(18rem, 25.5rem);
     gap: clamp(1.25rem, 4vw, 3.5rem);
-    align-items: center;
+    align-items: end;
     max-width: 70rem;
     width: 100%;
     margin: 0 auto;
@@ -517,22 +514,22 @@
   }
 
   h1 {
-    max-width: 17ch;
-    font-size: clamp(1.78rem, 3.68vw, 3.22rem);
-    line-height: 1.02;
+    max-width: 14ch;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: clamp(2.45rem, 5.6vw, 5.85rem);
+    line-height: 0.88;
     letter-spacing: 0;
-    font-weight: 800;
-    color: var(--play-ink);
-    text-shadow:
-      0.05em 0.05em 0 var(--play-yellow),
-      0.1em 0.1em 0 rgb(216 58 47 / 0.85);
+    font-weight: 400;
+    color: var(--editorial-ink);
+    text-wrap: balance;
+    text-shadow: none;
   }
 
   .lead {
     max-width: 42rem;
-    color: #4a3426;
+    color: var(--editorial-paper);
     font-size: clamp(0.98rem, 1.5vw, 1.08rem);
-    line-height: 1.55;
+    line-height: 1.65;
   }
 
   .actions {
@@ -548,7 +545,7 @@
 
   .notification-note {
     max-width: 35rem;
-    color: #475569;
+    color: var(--editorial-muted);
     font-size: 0.92rem;
     line-height: 1.45;
   }
@@ -559,22 +556,22 @@
     gap: 0.8rem;
     align-items: center;
     max-width: 42rem;
-    border: 3px solid var(--play-shadow);
-    border-radius: 8px;
-    background: #dff6f0;
+    border: 1px solid var(--editorial-line);
+    border-radius: 0;
+    background: rgb(244 234 215 / 0.07);
     padding: 0.85rem;
-    box-shadow: 0.34rem 0.34rem 0 var(--play-shadow);
+    backdrop-filter: blur(18px);
   }
 
   .telegram-callout strong {
     display: block;
     margin-bottom: 0.25rem;
     font-weight: 500;
-    color: #0f172a;
+    color: var(--editorial-ink);
   }
 
   .telegram-callout p {
-    color: #475569;
+    color: var(--editorial-paper);
     font-size: 0.9rem;
     line-height: 1.45;
   }
@@ -582,110 +579,107 @@
   .project-panel {
     position: relative;
     overflow: hidden;
-    border: 4px solid var(--play-shadow);
-    border-radius: 8px;
+    border: 1px solid var(--editorial-line);
+    border-radius: 0;
     background:
-      radial-gradient(circle, rgb(25 19 15 / 0.12) 0 0.08rem, transparent 0.1rem) 0.2rem 0.2rem / 0.78rem 0.78rem,
-      linear-gradient(135deg, rgb(255 242 207 / 0.96), rgb(255 248 230 / 0.88)),
-      linear-gradient(135deg, rgb(216 58 47 / 0.18), rgb(248 200 71 / 0.22) 45%, rgb(57 183 165 / 0.2));
-    padding: 1rem;
-    box-shadow:
-      0.55rem 0.55rem 0 var(--play-shadow),
-      0 22px 58px rgb(15 23 42 / 0.14);
-    backdrop-filter: blur(18px);
+      linear-gradient(180deg, rgb(244 234 215 / 0.1), rgb(244 234 215 / 0.035)),
+      rgb(18 16 14 / 0.76);
+    padding: 0.85rem;
+    box-shadow: 0 2rem 5rem rgb(0 0 0 / 0.34);
+    backdrop-filter: blur(22px);
   }
 
   .project-panel::before {
     content: "";
     position: absolute;
-    inset: 0 0 auto;
-    height: 0.62rem;
-    background: repeating-linear-gradient(
-      90deg,
-      var(--play-red) 0 1.1rem,
-      var(--play-yellow) 1.1rem 2.2rem,
-      var(--play-mint) 2.2rem 3.3rem,
-      var(--play-blue) 3.3rem 4.4rem
-    );
+    inset: 0.85rem;
+    border: 1px solid rgb(244 234 215 / 0.18);
+    pointer-events: none;
   }
 
-  .film-stack {
+  .editorial-visual {
     position: relative;
-    height: clamp(9.5rem, 26svh, 14rem);
-    margin-bottom: 0.85rem;
-  }
-
-  .film-stack span {
-    position: absolute;
-    inset: 0;
-    border-radius: 8px;
-    border: 4px solid var(--play-shadow);
-    background:
-      radial-gradient(circle, #fff8e6 0 0.14rem, transparent 0.16rem) 0.46rem 0.46rem / 1rem 1rem repeat-y,
-      radial-gradient(circle, #fff8e6 0 0.14rem, transparent 0.16rem) calc(100% - 0.46rem) 0.46rem / 1rem 1rem repeat-y,
-      linear-gradient(90deg, rgb(25 19 15 / 0.24) 0 12%, transparent 12% 88%, rgb(25 19 15 / 0.24) 88%),
-      linear-gradient(145deg, var(--play-yellow), #fff8e6 48%, #bfeee6);
-    box-shadow: 0.4rem 0.4rem 0 var(--play-shadow);
-  }
-
-  .film-stack span:nth-child(1) {
-    transform: rotate(-7deg) translate(-0.7rem, 0.6rem);
-    opacity: 0.72;
-  }
-
-  .film-stack span:nth-child(2) {
-    transform: rotate(5deg) translate(0.7rem, 0.2rem);
-    opacity: 0.82;
-  }
-
-  .film-stack span:nth-child(3) {
-    background:
-      radial-gradient(circle, #fff8e6 0 0.14rem, transparent 0.16rem) 0.46rem 0.46rem / 1rem 1rem repeat-y,
-      radial-gradient(circle, #fff8e6 0 0.14rem, transparent 0.16rem) calc(100% - 0.46rem) 0.46rem / 1rem 1rem repeat-y,
-      linear-gradient(90deg, rgb(25 19 15 / 0.26) 0 10%, transparent 10% 90%, rgb(25 19 15 / 0.26) 90%),
-      linear-gradient(150deg, #fff2cf, rgb(37 120 189 / 0.26) 46%, rgb(216 58 47 / 0.24) 74%, #dff6f0);
-  }
-
-  .film-stack span.has-image {
+    min-height: clamp(16rem, 48svh, 30rem);
+    margin-bottom: 0.9rem;
     overflow: hidden;
-    background: #0f172a;
+    background:
+      radial-gradient(circle at 50% 31%, rgb(216 197 167 / 0.24), transparent 7rem),
+      linear-gradient(145deg, #251813, #0f0e0c 62%);
   }
 
-  .film-stack span.has-image img {
+  .editorial-visual::before,
+  .editorial-visual::after {
+    content: "";
+    position: absolute;
+    pointer-events: none;
+    z-index: 2;
+  }
+
+  .editorial-visual::before {
+    inset: 1rem;
+    border: 1px solid rgb(244 234 215 / 0.34);
+  }
+
+  .editorial-visual::after {
+    inset: 0;
+    background:
+      linear-gradient(180deg, transparent 48%, rgb(15 14 12 / 0.72)),
+      radial-gradient(circle at 50% 42%, transparent 0 9rem, rgb(15 14 12 / 0.48) 15rem);
+  }
+
+  .editorial-visual.has-image {
+    background: #0f0e0c;
+  }
+
+  .editorial-visual img {
     display: block;
     width: 100%;
     height: 100%;
     object-fit: cover;
+    filter: saturate(0.78) contrast(1.08) sepia(0.18);
   }
 
-  .film-stack span.has-image::after {
-    content: "";
+  .visual-placeholder {
     position: absolute;
     inset: 0;
     background:
-      radial-gradient(circle, rgb(255 242 207 / 0.38) 0 0.07rem, transparent 0.09rem) 0.3rem 0.3rem / 0.72rem 0.72rem,
-      linear-gradient(90deg, rgb(25 19 15 / 0.38) 0 10%, transparent 10% 90%, rgb(25 19 15 / 0.38) 90%),
-      linear-gradient(180deg, transparent 55%, rgb(25 19 15 / 0.32));
-    pointer-events: none;
+      radial-gradient(ellipse at 50% 34%, rgb(216 197 167 / 0.3) 0 8rem, transparent 8.2rem),
+      linear-gradient(90deg, transparent 48%, rgb(216 197 167 / 0.26) 48% 52%, transparent 52%),
+      radial-gradient(ellipse at 50% 70%, rgb(176 107 63 / 0.32) 0 7rem, transparent 7.2rem),
+      linear-gradient(145deg, #271815, #0f0e0c 66%);
+  }
+
+  .visual-placeholder::before {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 18%;
+    width: min(46%, 11rem);
+    aspect-ratio: 0.72;
+    border: 1px solid rgb(244 234 215 / 0.38);
+    border-radius: 999px 999px 18% 18%;
+    transform: translateX(-50%);
+    background:
+      linear-gradient(90deg, transparent 47%, rgb(244 234 215 / 0.28) 47% 53%, transparent 53%),
+      radial-gradient(circle at 50% 30%, rgb(244 234 215 / 0.2), transparent 4.5rem);
   }
 
   .panel-grid {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 0.6rem;
+    gap: 0.55rem;
   }
 
   .panel-grid div {
-    border-radius: 8px;
-    background: #fff8e6;
-    border: 3px solid var(--play-shadow);
-    padding: 0.7rem;
-    box-shadow: 0.25rem 0.25rem 0 var(--play-shadow);
+    border-radius: 0;
+    background: rgb(244 234 215 / 0.08);
+    border: 1px solid var(--editorial-line);
+    padding: 0.7rem 0.8rem;
   }
 
   .panel-grid span,
   .status-line {
-    color: #64748b;
+    color: var(--editorial-muted);
     font-size: 0.9rem;
   }
 
@@ -693,8 +687,9 @@
     display: block;
     margin-top: 0.18rem;
     font-size: 1.45rem;
-    font-weight: 800;
-    color: var(--play-red);
+    font-family: Georgia, "Times New Roman", serif;
+    font-weight: 400;
+    color: var(--editorial-ink);
   }
 
   .status-line {
@@ -703,22 +698,20 @@
   }
 
   .how-it-works {
-    --play-ink: #19130f;
-    --play-red: #d83a2f;
-    --play-yellow: #f8c847;
-    --play-cream: #fff2cf;
-    --play-mint: #39b7a5;
-    --play-blue: #2578bd;
-    --play-shadow: #060606;
+    --editorial-ink: #f4ead7;
+    --editorial-paper: #d8c5a7;
+    --editorial-muted: #9c8d78;
+    --editorial-bg: #12100e;
+    --editorial-copper: #b06b3f;
+    --editorial-wine: #5e1f20;
+    --editorial-line: rgb(244 234 215 / 0.18);
 
     background:
-      radial-gradient(circle at 0.5rem 0.5rem, rgb(25 19 15 / 0.11) 0 0.07rem, transparent 0.09rem) 0 0 / 0.95rem 0.95rem,
-      linear-gradient(102deg, rgb(216 58 47 / 0.11) 0 8rem, transparent 8rem 100%),
-      linear-gradient(258deg, rgb(37 120 189 / 0.12) 0 10rem, transparent 10rem 100%),
-      linear-gradient(90deg, transparent 0 calc(100% - 1px), rgb(25 19 15 / 0.055) calc(100% - 1px)) 0 0 / 3.5rem 100%,
-      linear-gradient(180deg, #fff8e6, #fff2cf);
-    color: var(--play-ink);
-    border-top: 4px solid var(--play-shadow);
+      radial-gradient(circle at 18% 12%, rgb(176 107 63 / 0.2), transparent 17rem),
+      linear-gradient(90deg, transparent 0 calc(100% - 1px), rgb(244 234 215 / 0.045) calc(100% - 1px)) 0 0 / 4.25rem 100%,
+      linear-gradient(180deg, #15120f, #0f0e0c);
+    color: var(--editorial-ink);
+    border-top: 1px solid var(--editorial-line);
     padding: clamp(0.65rem, 1.5vw, 1.2rem) clamp(1rem, 4vw, 3rem) clamp(2rem, 5vw, 4.5rem);
   }
 
@@ -728,28 +721,28 @@
   }
 
   .how-heading {
-    max-width: 49rem;
+    max-width: 54rem;
     display: flex;
     flex-direction: column;
     gap: 0.8rem;
-    border-left: 5px solid var(--play-red);
-    border-image: linear-gradient(var(--play-red), var(--play-yellow), var(--play-mint)) 1;
-    padding-left: 1rem;
+    border-left: 1px solid var(--editorial-line);
+    padding-left: 1.2rem;
   }
 
   .how-heading p,
   .step p,
   .rules p,
   .faq p {
-    color: #4a3426;
+    color: var(--editorial-paper);
     line-height: 1.6;
   }
 
   .how-heading a {
-    color: var(--btn-primary-background);
+    color: var(--editorial-ink);
     font-weight: 500;
     text-decoration: underline;
     text-underline-offset: 0.16em;
+    text-decoration-color: var(--editorial-copper);
   }
 
   .steps {
@@ -762,39 +755,38 @@
   .step {
     position: relative;
     overflow: hidden;
-    border: 3px solid var(--play-shadow);
-    border-radius: 8px;
-    background: var(--play-cream);
-    padding: 1rem;
-    box-shadow: 0.36rem 0.36rem 0 var(--play-shadow);
+    border: 1px solid var(--editorial-line);
+    border-radius: 0;
+    background: rgb(244 234 215 / 0.045);
+    padding: 1.05rem;
   }
 
   .step::before {
     content: "";
     position: absolute;
     inset: 0 0 auto;
-    height: 0.42rem;
-    background: var(--play-blue);
+    height: 1px;
+    background: linear-gradient(90deg, var(--editorial-copper), transparent);
   }
 
   .step:nth-child(1) {
-    background: linear-gradient(160deg, #ffe1d6, #fff8e6 62%);
+    background: linear-gradient(160deg, rgb(176 107 63 / 0.15), rgb(244 234 215 / 0.035) 58%);
   }
 
   .step:nth-child(2) {
-    background: linear-gradient(160deg, #dff6f0, #fff8e6 62%);
+    background: linear-gradient(160deg, rgb(41 55 43 / 0.34), rgb(244 234 215 / 0.035) 58%);
   }
 
   .step:nth-child(3) {
-    background: linear-gradient(160deg, #ffef9c, #fff8e6 62%);
+    background: linear-gradient(160deg, rgb(94 31 32 / 0.24), rgb(244 234 215 / 0.035) 58%);
   }
 
   .step:nth-child(1)::before {
-    background: var(--play-red);
+    background: linear-gradient(90deg, var(--editorial-copper), transparent);
   }
 
   .step:nth-child(3)::before {
-    background: var(--play-yellow);
+    background: linear-gradient(90deg, var(--editorial-wine), transparent);
   }
 
   .step-icon {
@@ -804,10 +796,9 @@
     align-items: center;
     justify-content: center;
     border-radius: 999px;
-    color: #fff8e6;
-    background: var(--play-shadow);
-    border: 2px solid var(--play-shadow);
-    box-shadow: 0.18rem 0.18rem 0 var(--play-red);
+    color: var(--editorial-ink);
+    background: rgb(244 234 215 / 0.08);
+    border: 1px solid var(--editorial-line);
     margin-bottom: 0.9rem;
   }
 
@@ -825,20 +816,20 @@
 
   .step h3 {
     font-size: 1.05rem;
-    font-weight: 800;
+    font-family: Georgia, "Times New Roman", serif;
+    font-weight: 400;
     margin-bottom: 0.45rem;
-    color: var(--play-ink);
+    color: var(--editorial-ink);
   }
 
   .rules {
     margin-top: 0.85rem;
-    border-radius: 8px;
-    border: 3px solid var(--play-shadow);
-    padding: 1rem;
+    border-radius: 0;
+    border: 1px solid var(--editorial-line);
+    padding: 1rem 1.1rem;
     background:
-      radial-gradient(circle, rgb(25 19 15 / 0.12) 0 0.08rem, transparent 0.1rem) 0.22rem 0.28rem / 0.78rem 0.78rem,
-      linear-gradient(135deg, #dff6f0, #fff8e6);
-    box-shadow: 0.36rem 0.36rem 0 var(--play-shadow);
+      linear-gradient(90deg, rgb(176 107 63 / 0.12), transparent),
+      rgb(244 234 215 / 0.045);
   }
 
   .faq {
@@ -848,170 +839,44 @@
   }
 
   .faq details {
-    border: 3px solid var(--play-shadow);
-    border-radius: 8px;
-    background: #fff8e6;
+    border: 1px solid var(--editorial-line);
+    border-radius: 0;
+    background: rgb(244 234 215 / 0.045);
     padding: 0.9rem 1rem;
-    box-shadow: 0.3rem 0.3rem 0 var(--play-shadow);
   }
 
   .faq details:nth-child(3n + 1) {
-    background: #ffe1d6;
+    background: rgb(176 107 63 / 0.1);
   }
 
   .faq details:nth-child(3n + 2) {
-    background: #dff6f0;
+    background: rgb(41 55 43 / 0.24);
   }
 
   .faq details:nth-child(3n + 3) {
-    background: #ffef9c;
+    background: rgb(94 31 32 / 0.14);
   }
 
   .faq details[open] {
-    border-color: var(--play-shadow);
-    background: #fff8e6;
+    border-color: rgb(244 234 215 / 0.34);
+    background: rgb(244 234 215 / 0.08);
   }
 
   .faq summary {
     cursor: pointer;
-    color: var(--play-ink);
+    color: var(--editorial-ink);
     font-size: 1rem;
-    font-weight: 800;
+    font-family: Georgia, "Times New Roman", serif;
+    font-weight: 400;
     line-height: 1.35;
   }
 
   .faq summary::marker {
-    color: var(--play-red);
+    color: var(--editorial-copper);
   }
 
   .faq p {
     margin-top: 0.65rem;
-  }
-
-  :global(.dark) .films-page {
-    background:
-      linear-gradient(115deg, rgb(225 29 72 / 0.12) 0 10rem, transparent 10rem 100%),
-      linear-gradient(245deg, rgb(250 204 21 / 0.08) 0 14rem, transparent 14rem 100%),
-      linear-gradient(90deg, rgb(255 255 255 / 0.035) 1px, transparent 1px) 0 0 / 3.5rem 100%,
-      rgb(9 9 11 / 1);
-    color: #fafafa;
-  }
-
-  :global(.dark) h1 {
-    color: #fff8e6;
-    text-shadow:
-      0.05em 0.05em 0 rgb(248 200 71 / 0.75),
-      0.1em 0.1em 0 rgb(216 58 47 / 0.7);
-  }
-
-  :global(.dark) .lead,
-  :global(.dark) .notification-note,
-  :global(.dark) .how-heading p,
-  :global(.dark) .step p,
-  :global(.dark) .rules p,
-  :global(.dark) .faq p,
-  :global(.dark) .panel-grid span,
-  :global(.dark) .status-line {
-    color: #a1a1aa;
-  }
-
-  :global(.dark) .how-heading a {
-    color: #93c5fd;
-  }
-
-  :global(.dark) .telegram-callout {
-    border-color: rgb(30 64 175 / 0.75);
-    background: rgb(30 58 138 / 0.22);
-  }
-
-  :global(.dark) .telegram-callout strong {
-    color: #fafafa;
-  }
-
-  :global(.dark) .telegram-callout p {
-    color: #cbd5e1;
-  }
-
-  :global(.dark) .project-panel {
-    border-color: #fff8e6;
-    background:
-      linear-gradient(135deg, rgb(24 24 27 / 0.94), rgb(9 9 11 / 0.85)),
-      linear-gradient(135deg, rgb(225 29 72 / 0.26), rgb(250 204 21 / 0.14) 45%, rgb(16 185 129 / 0.18));
-    box-shadow:
-      0.5rem 0.5rem 0 rgb(255 248 230 / 0.55),
-      0 18px 48px rgb(0 0 0 / 0.24);
-  }
-
-  :global(.dark) .panel-grid div {
-    border-color: #fff8e6;
-    background: rgb(24 24 27);
-    box-shadow: 0.25rem 0.25rem 0 rgb(255 248 230 / 0.4);
-  }
-
-  :global(.dark) .film-stack span {
-    border-color: rgb(39 39 42 / 0.9);
-    background:
-      linear-gradient(90deg, rgb(255 255 255 / 0.08) 0 12%, transparent 12% 88%, rgb(255 255 255 / 0.08) 88%),
-      linear-gradient(145deg, #18181b, #27272a 48%, #09090b);
-  }
-
-  :global(.dark) .film-stack span:nth-child(3) {
-    background:
-      linear-gradient(90deg, rgb(255 255 255 / 0.09) 0 10%, transparent 10% 90%, rgb(255 255 255 / 0.09) 90%),
-      linear-gradient(150deg, #09090b, rgb(37 99 235 / 0.36) 52%, #18181b);
-  }
-
-  :global(.dark) .film-stack span.has-image {
-    background: #0f172a;
-  }
-
-  :global(.dark) .how-it-works {
-    background:
-      linear-gradient(102deg, rgb(225 29 72 / 0.1) 0 8rem, transparent 8rem 100%),
-      linear-gradient(258deg, rgb(16 185 129 / 0.08) 0 10rem, transparent 10rem 100%),
-      linear-gradient(90deg, transparent 0 calc(100% - 1px), rgb(255 255 255 / 0.035) calc(100% - 1px)) 0 0 / 3.5rem 100%,
-      rgb(9 9 11);
-    color: #fafafa;
-    border-top-color: rgb(39 39 42);
-  }
-
-  :global(.dark) .step {
-    border-color: #fff8e6;
-    background: linear-gradient(160deg, rgb(39 39 42), rgb(24 24 27));
-    box-shadow: 0.34rem 0.34rem 0 rgb(255 248 230 / 0.34);
-  }
-
-  :global(.dark) .step h3 {
-    color: #fff8e6;
-  }
-
-  :global(.dark) .step-icon {
-    background: rgb(9 9 11);
-  }
-
-  :global(.dark) .rules {
-    border-color: #fff8e6;
-    background: linear-gradient(135deg, rgb(20 83 45 / 0.24), rgb(30 64 175 / 0.18));
-    box-shadow: 0.34rem 0.34rem 0 rgb(255 248 230 / 0.34);
-  }
-
-  :global(.dark) .faq details {
-    border-color: #fff8e6;
-    background: rgb(24 24 27);
-    box-shadow: 0.28rem 0.28rem 0 rgb(255 248 230 / 0.3);
-  }
-
-  :global(.dark) .faq details[open] {
-    border-color: rgb(147 197 253 / 0.34);
-    background: rgb(9 9 11);
-  }
-
-  :global(.dark) .faq summary {
-    color: #fafafa;
-  }
-
-  :global(.dark) .faq summary::marker {
-    color: #93c5fd;
   }
 
   @media (max-width: 820px) {
@@ -1037,8 +902,8 @@
       line-height: 1.45;
     }
 
-    .film-stack {
-      height: min(20svh, 8.5rem);
+    .editorial-visual {
+      min-height: min(44svh, 20rem);
     }
 
     .project-panel {
@@ -1095,8 +960,8 @@
       font-size: 0.9rem;
     }
 
-    .film-stack {
-      height: min(28svh, 10.5rem);
+    .editorial-visual {
+      min-height: min(38svh, 16rem);
     }
   }
 </style>

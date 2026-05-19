@@ -865,6 +865,7 @@
     try {
       const response = await fetch(ratingVoteUrl || buildPostRatingVoteUrl(postId), {
         method: 'POST',
+        credentials: 'include',
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',

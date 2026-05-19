@@ -10,6 +10,8 @@ from communities.models import Comun
 from communities.service import _comun_posts_base_queryset
 from feeds.models import Post
 from special_projects.film_journey import (
+    DISCUSSION_AUTHOR_DESCRIPTION,
+    DISCUSSION_AUTHOR_TITLE,
     DISCUSSION_COMUN_SLUG,
     DISCUSSION_RATING_BLOCK_ID,
     PROJECT_TIME_ZONE,
@@ -85,7 +87,9 @@ class FilmJourneyDeliveryTests(TestCase):
 
         post = ensure_film_discussion_post(film)
 
-        self.assertEqual(post.title, "Как вам Первый фильм?")
+        self.assertEqual(post.title, 'Как вам фильм "Первый фильм" 1977 года?')
+        self.assertEqual(post.author.title, DISCUSSION_AUTHOR_TITLE)
+        self.assertEqual(post.author.description, DISCUSSION_AUTHOR_DESCRIPTION)
         self.assertFalse(post.is_pending)
         self.assertFalse(post.is_blocked)
         self.assertIsNone(post.publish_at)
@@ -118,7 +122,7 @@ class FilmJourneyDeliveryTests(TestCase):
         start_subscription(user)
 
         post = Post.objects.get(raw_data__special_project__film_id=film.id)
-        self.assertEqual(post.title, "Как вам Фильм дня?")
+        self.assertEqual(post.title, 'Как вам фильм "Фильм дня"?')
         self.assertFalse(post.is_pending)
         notify_mock.assert_called_once()
 

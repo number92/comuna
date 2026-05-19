@@ -33,6 +33,13 @@ PAUSE_AFTER = timedelta(days=8)
 PROJECT_TIME_ZONE = ZoneInfo("Europe/Moscow")
 NEXT_DELIVERY_DEADLINE_HOUR = 18
 DISCUSSION_AUTHOR_USERNAME = "tambur-1001-films"
+DISCUSSION_AUTHOR_TITLE = "Проект 365 фильмов"
+DISCUSSION_AUTHOR_DESCRIPTION = (
+    "https://tambur.pub/s/1001-films/\n\n"
+    "Это челлендж без права выбора. Каждый день — один фильм. Посмотрели, "
+    "оценили, перешли к следующему. Пропускать нельзя, выбирать нельзя — "
+    "просто смотрите и открывайте для себя разные жанры, культуры и эпохи."
+)
 DISCUSSION_MESSAGE_ID_BASE = 1001000000
 DISCUSSION_RATING_BLOCK_ID = "film-rating"
 DISCUSSION_COMUN_SLUG = "after_the_credits"
@@ -134,12 +141,21 @@ def _discussion_author():
     author, _created = Author.objects.get_or_create(
         username=DISCUSSION_AUTHOR_USERNAME,
         defaults={
-            "title": "365 фильмов",
-            "description": "Системная лента обсуждений спецпроекта 365 фильмов.",
+            "title": DISCUSSION_AUTHOR_TITLE,
+            "description": DISCUSSION_AUTHOR_DESCRIPTION,
             "auto_publish": False,
             "notify_comments": False,
         },
     )
+    updates: list[str] = []
+    if author.title != DISCUSSION_AUTHOR_TITLE:
+        author.title = DISCUSSION_AUTHOR_TITLE
+        updates.append("title")
+    if author.description != DISCUSSION_AUTHOR_DESCRIPTION:
+        author.description = DISCUSSION_AUTHOR_DESCRIPTION
+        updates.append("description")
+    if updates:
+        author.save(update_fields=(*updates, "updated_at"))
     return author
 
 
@@ -276,7 +292,8 @@ def _film_review_content(film: FilmJourneyFilm) -> str:
 
 
 def _film_discussion_title(film: FilmJourneyFilm) -> str:
-    return f"Как вам {film.title}?"[:255]
+    year_part = f" {film.year} года" if film.year else ""
+    return f'Как вам фильм "{film.title}"{year_part}?'[:255]
 
 
 def ensure_film_discussion_post(film: FilmJourneyFilm):

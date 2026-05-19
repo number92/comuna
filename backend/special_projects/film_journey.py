@@ -35,6 +35,7 @@ NEXT_DELIVERY_DEADLINE_HOUR = 18
 DISCUSSION_AUTHOR_USERNAME = "tambur-1001-films"
 DISCUSSION_MESSAGE_ID_BASE = 1001000000
 DISCUSSION_RATING_BLOCK_ID = "film-rating"
+DISCUSSION_COMUN_SLUG = "after_the_credits"
 LANDING_IMAGES_PROJECT_SLUG = "1001-films-landing"
 LANDING_IMAGE_SLOTS = ("1", "2", "3")
 
@@ -274,13 +275,18 @@ def _film_review_content(film: FilmJourneyFilm) -> str:
     )
 
 
+def _film_discussion_title(film: FilmJourneyFilm) -> str:
+    return f"Как вам {film.title}?"[:255]
+
+
 def ensure_film_discussion_post(film: FilmJourneyFilm):
     from feeds.models import Post
 
     author = _discussion_author()
     message_id = DISCUSSION_MESSAGE_ID_BASE + int(film.id)
     raw_data = {
-        "source": "special_project",
+        "source": "manual_comun",
+        "comun_slug": DISCUSSION_COMUN_SLUG,
         "special_project": {
             "slug": PROJECT_SLUG,
             "film_id": film.id,
@@ -291,21 +297,24 @@ def ensure_film_discussion_post(film: FilmJourneyFilm):
             "data": _film_review_template_data(film),
         },
     }
+    title = _film_discussion_title(film)
     content = _film_review_content(film)
     post, created = Post.objects.get_or_create(
         author=author,
         message_id=message_id,
         defaults={
-            "title": film.title,
+            "title": title,
             "content": content,
             "source_url": film.imdb_url,
-            "is_pending": True,
+            "is_pending": False,
+            "is_blocked": False,
+            "publish_at": None,
             "raw_data": raw_data,
         },
     )
     updates: list[str] = []
-    if post.title != film.title:
-        post.title = film.title
+    if post.title != title:
+        post.title = title
         updates.append("title")
     if post.content != content:
         post.content = content
@@ -316,11 +325,21 @@ def ensure_film_discussion_post(film: FilmJourneyFilm):
     if post.raw_data != raw_data:
         post.raw_data = raw_data
         updates.append("raw_data")
-    if not post.is_pending:
-        post.is_pending = True
+    if post.is_pending:
+        post.is_pending = False
         updates.append("is_pending")
+    if post.is_blocked:
+        post.is_blocked = False
+        updates.append("is_blocked")
+    if post.publish_at is not None:
+        post.publish_at = None
+        updates.append("publish_at")
     if updates and not created:
         post.save(update_fields=(*updates, "updated_at"))
+    if created or updates:
+        from communities.service import _recalculate_comun_ratings_for_post
+
+        _recalculate_comun_ratings_for_post(post)
     return post
 
 
@@ -481,7 +500,7 @@ def _notify_entry(entry: FilmJourneyEntry, *, reminder: bool = False) -> None:
     if reminder:
         title = "Напоминание: фильм ждёт оценки"
         message = (
-            f"Чтобы получить следующий фильм, поставьте оценку и оставьте комментарий к «{film.title}»."
+            f"Чтобы получить следующий фильм, поставьте оценку к «{film.title}»."
         )
         event_key = REMINDER_EVENT_KEY
     else:
@@ -495,6 +514,8 @@ def _notify_entry(entry: FilmJourneyEntry, *, reminder: bool = False) -> None:
         message=message,
         link_url=entry_public_path(entry),
         payload={"entry_id": entry.id, "film_id": film.id, "position": entry.position},
+        force_site=True,
+        force_telegram=True,
     )
 
 
@@ -531,6 +552,7 @@ def deliver_next_film(
         available_at=current_time,
         notification_sent_at=current_time,
     )
+    ensure_film_discussion_post(film)
     locked.last_delivered_at = current_time
     locked.next_delivery_at = next_delivery_time(current_time)
     locked.save(update_fields=("last_delivered_at", "next_delivery_at", "updated_at"))
@@ -542,8 +564,6 @@ def submit_entry_review(entry: FilmJourneyEntry, *, rating: int, comment: str) -
     clean_comment = (comment or "").strip()
     if rating < 1 or rating > 10:
         raise ValueError("Поставьте оценку от 1 до 10.")
-    if len(clean_comment) < 3:
-        raise ValueError("Оставьте комментарий к фильму.")
 
     now = timezone.now()
     entry.rating = rating
@@ -592,9 +612,9 @@ def complete_entry_from_discussion_if_ready(entry: FilmJourneyEntry, user: User)
         .order_by("created_at", "id")
         .first()
     )
-    if vote is None or comment is None:
+    if vote is None:
         return entry
-    return submit_entry_review(entry, rating=int(vote.value), comment=comment.body)
+    return submit_entry_review(entry, rating=int(vote.value), comment=comment.body if comment else "")
 
 
 def send_due_deliveries(*, now=None, force: bool = False) -> DeliveryResult:
@@ -608,11 +628,22 @@ def send_due_deliveries(*, now=None, force: bool = False) -> DeliveryResult:
         project_slug=PROJECT_SLUG,
         status=FilmJourneySubscription.STATUS_ACTIVE,
     )
-    if not force:
-        subscriptions = subscriptions.filter(next_delivery_at__lte=current_time)
 
     for subscription in subscriptions.order_by("next_delivery_at", "id"):
-        entry = deliver_next_film(subscription, now=current_time, force=force)
+        current = latest_entry(subscription)
+        should_force_first_delivery = current is None
+        if (
+            not force
+            and not should_force_first_delivery
+            and subscription.next_delivery_at > current_time
+        ):
+            continue
+
+        entry = deliver_next_film(
+            subscription,
+            now=current_time,
+            force=force or should_force_first_delivery,
+        )
         if entry:
             delivered += 1
             continue
@@ -629,7 +660,7 @@ def send_due_deliveries(*, now=None, force: bool = False) -> DeliveryResult:
         if age >= PAUSE_AFTER and current.second_reminder_sent_at is not None:
             subscription.status = FilmJourneySubscription.STATUS_PAUSED
             subscription.paused_at = current_time
-            subscription.pause_reason = "Нет оценки и комментария после двух напоминаний."
+            subscription.pause_reason = "Нет оценки после двух напоминаний."
             subscription.save(update_fields=("status", "paused_at", "pause_reason", "updated_at"))
             paused += 1
         elif age >= SECOND_REMINDER_AFTER and current.second_reminder_sent_at is None:

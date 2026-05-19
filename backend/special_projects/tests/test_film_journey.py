@@ -6,8 +6,19 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
-from special_projects.film_journey import PROJECT_TIME_ZONE, next_delivery_time, start_subscription
-from special_projects.models import FilmJourneyFilm
+from communities.models import Comun
+from communities.service import _comun_posts_base_queryset
+from feeds.models import Post
+from special_projects.film_journey import (
+    DISCUSSION_COMUN_SLUG,
+    DISCUSSION_RATING_BLOCK_ID,
+    PROJECT_TIME_ZONE,
+    ensure_film_discussion_post,
+    next_delivery_time,
+    send_due_deliveries,
+    start_subscription,
+)
+from special_projects.models import FilmJourneyFilm, FilmJourneySubscription
 
 
 User = get_user_model()
@@ -53,3 +64,90 @@ class FilmJourneyDeliveryTests(TestCase):
             datetime(2026, 5, 19, 18, 0, tzinfo=PROJECT_TIME_ZONE),
         )
         notify_mock.assert_called_once()
+
+    def test_discussion_post_is_public_comun_post_with_movie_review_template(self):
+        comun = Comun.objects.create(
+            name="После титров",
+            slug=DISCUSSION_COMUN_SLUG,
+            is_active=True,
+        )
+        film = FilmJourneyFilm.objects.create(
+            title="Первый фильм",
+            original_title="First Movie",
+            year=1977,
+            description="Описание из списка.",
+            imdb_url="https://www.imdb.com/title/tt0000001/",
+            poster_url="https://example.com/poster.jpg",
+            genres="drama",
+            sort_order=1,
+            is_active=True,
+        )
+
+        post = ensure_film_discussion_post(film)
+
+        self.assertEqual(post.title, "Как вам Первый фильм?")
+        self.assertFalse(post.is_pending)
+        self.assertFalse(post.is_blocked)
+        self.assertIsNone(post.publish_at)
+        self.assertEqual(post.raw_data.get("source"), "manual_comun")
+        self.assertEqual(post.raw_data.get("comun_slug"), DISCUSSION_COMUN_SLUG)
+        self.assertEqual(post.raw_data.get("special_project", {}).get("film_id"), film.id)
+        self.assertEqual(post.raw_data.get("template", {}).get("type"), "movie_review")
+        self.assertEqual(
+            post.raw_data.get("template", {}).get("data", {}).get("poster_url"),
+            "https://example.com/poster.jpg",
+        )
+        self.assertIn("Описание из списка.", post.content)
+        self.assertIn(DISCUSSION_RATING_BLOCK_ID, post.content)
+        self.assertIn(post, list(_comun_posts_base_queryset(comun)))
+
+    @patch("special_projects.film_journey.create_user_notification")
+    def test_start_subscription_creates_discussion_post_for_delivered_film(self, notify_mock):
+        Comun.objects.create(
+            name="После титров",
+            slug=DISCUSSION_COMUN_SLUG,
+            is_active=True,
+        )
+        user = User.objects.create_user(username="film-user-with-discussion", password="pass")
+        film = FilmJourneyFilm.objects.create(
+            title="Фильм дня",
+            sort_order=1,
+            is_active=True,
+        )
+
+        start_subscription(user)
+
+        post = Post.objects.get(raw_data__special_project__film_id=film.id)
+        self.assertEqual(post.title, "Как вам Фильм дня?")
+        self.assertFalse(post.is_pending)
+        notify_mock.assert_called_once()
+
+    @patch("special_projects.film_journey.create_user_notification")
+    def test_due_deliveries_sends_first_film_for_active_subscription_without_entries(self, notify_mock):
+        user = User.objects.create_user(username="film-user-no-entry", password="pass")
+        film = FilmJourneyFilm.objects.create(
+            title="Первый фильм без выдачи",
+            sort_order=1,
+            is_active=True,
+        )
+        now = datetime(2026, 5, 19, 12, 0, tzinfo=PROJECT_TIME_ZONE)
+        future = datetime(2026, 5, 20, 12, 0, tzinfo=PROJECT_TIME_ZONE)
+        subscription = FilmJourneySubscription.objects.create(
+            project_slug=FilmJourneyFilm.PROJECT_SLUG,
+            user=user,
+            status=FilmJourneySubscription.STATUS_ACTIVE,
+            started_at=now,
+            next_delivery_at=future,
+        )
+
+        with patch("special_projects.film_journey.timezone.now", return_value=now):
+            result = send_due_deliveries()
+
+        entry = subscription.entries.get()
+        subscription.refresh_from_db()
+        self.assertEqual(result.delivered, 1)
+        self.assertEqual(entry.film, film)
+        self.assertEqual(entry.position, 1)
+        self.assertEqual(subscription.last_delivered_at, now)
+        notify_mock.assert_called_once()
+        self.assertTrue(notify_mock.call_args.kwargs.get("force_telegram"))

@@ -353,7 +353,7 @@
 </script>
 
 <svelte:head>
-  <title>Управление фильмами | 1001 фильм</title>
+  <title>Управление фильмами | 365 фильмов</title>
   <meta name="robots" content="noindex,nofollow" />
 </svelte:head>
 
@@ -361,7 +361,7 @@
   <header class="page-header">
     <div>
       <a class="back-link" href="/s/1001-films">← к лендингу</a>
-      <h1>1001 фильм: управление</h1>
+      <h1>365 фильмов: управление</h1>
     </div>
     <Button on:click={loadAdmin} disabled={loading}>Обновить</Button>
   </header>

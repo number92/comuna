@@ -5,6 +5,7 @@ from datetime import timedelta
 import html
 import json
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -23,12 +24,14 @@ from special_projects.models import (
 User = get_user_model()
 
 PROJECT_SLUG = FilmJourneyFilm.PROJECT_SLUG
-PUBLIC_TOTAL_COUNT = 1001
+PUBLIC_TOTAL_COUNT = 365
 DAILY_EVENT_KEY = "film_journey_daily"
 REMINDER_EVENT_KEY = "film_journey_reminder"
 FIRST_REMINDER_AFTER = timedelta(days=2)
 SECOND_REMINDER_AFTER = timedelta(days=5)
 PAUSE_AFTER = timedelta(days=8)
+PROJECT_TIME_ZONE = ZoneInfo("Europe/Moscow")
+NEXT_DELIVERY_DEADLINE_HOUR = 18
 DISCUSSION_AUTHOR_USERNAME = "tambur-1001-films"
 DISCUSSION_MESSAGE_ID_BASE = 1001000000
 DISCUSSION_RATING_BLOCK_ID = "film-rating"
@@ -55,7 +58,17 @@ def _site_url(path: str) -> str:
 
 def next_delivery_time(now=None):
     value = now or timezone.now()
-    return value + timedelta(days=1)
+    local_value = timezone.localtime(value, PROJECT_TIME_ZONE)
+    candidate = local_value + timedelta(days=1)
+    deadline = candidate.replace(
+        hour=NEXT_DELIVERY_DEADLINE_HOUR,
+        minute=0,
+        second=0,
+        microsecond=0,
+    )
+    if candidate > deadline:
+        return deadline
+    return candidate
 
 
 def active_films_queryset():
@@ -120,8 +133,8 @@ def _discussion_author():
     author, _created = Author.objects.get_or_create(
         username=DISCUSSION_AUTHOR_USERNAME,
         defaults={
-            "title": "1001 фильм",
-            "description": "Системная лента обсуждений спецпроекта 1001 фильм.",
+            "title": "365 фильмов",
+            "description": "Системная лента обсуждений спецпроекта 365 фильмов.",
             "auto_publish": False,
             "notify_comments": False,
         },
@@ -427,11 +440,20 @@ def start_subscription(user: User) -> FilmJourneySubscription:
         defaults={
             "status": FilmJourneySubscription.STATUS_ACTIVE,
             "started_at": now,
-            "next_delivery_at": next_delivery_time(now),
+            "next_delivery_at": now,
         },
     )
     if not created and subscription.status == FilmJourneySubscription.STATUS_PAUSED:
         resume_subscription(subscription)
+        subscription.refresh_from_db()
+    if (
+        subscription.status == FilmJourneySubscription.STATUS_ACTIVE
+        and latest_entry(subscription) is None
+    ):
+        if subscription.next_delivery_at > now:
+            subscription.next_delivery_at = now
+            subscription.save(update_fields=("next_delivery_at", "updated_at"))
+        deliver_next_film(subscription, now=now, force=True)
         subscription.refresh_from_db()
     return subscription
 
@@ -510,7 +532,8 @@ def deliver_next_film(
         notification_sent_at=current_time,
     )
     locked.last_delivered_at = current_time
-    locked.save(update_fields=("last_delivered_at", "updated_at"))
+    locked.next_delivery_at = next_delivery_time(current_time)
+    locked.save(update_fields=("last_delivered_at", "next_delivery_at", "updated_at"))
     _notify_entry(entry)
     return entry
 

@@ -149,8 +149,8 @@ class FilmJourneyFilm(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        verbose_name = "Фильм спецпроекта 1001"
-        verbose_name_plural = "Фильмы спецпроекта 1001"
+        verbose_name = "Фильм спецпроекта 365"
+        verbose_name_plural = "Фильмы спецпроекта 365"
         ordering = ("project_slug", "sort_order", "id")
         indexes = [
             models.Index(fields=("project_slug", "is_active", "sort_order")),
@@ -198,8 +198,8 @@ class FilmJourneySubscription(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        verbose_name = "Подписка на спецпроект 1001"
-        verbose_name_plural = "Подписки на спецпроект 1001"
+        verbose_name = "Подписка на спецпроект 365"
+        verbose_name_plural = "Подписки на спецпроект 365"
         ordering = ("-created_at", "-id")
         constraints = [
             models.UniqueConstraint(
@@ -240,8 +240,8 @@ class FilmJourneyEntry(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        verbose_name = "Выдача фильма спецпроекта 1001"
-        verbose_name_plural = "Выдачи фильмов спецпроекта 1001"
+        verbose_name = "Выдача фильма спецпроекта 365"
+        verbose_name_plural = "Выдачи фильмов спецпроекта 365"
         ordering = ("subscription", "position")
         constraints = [
             models.UniqueConstraint(

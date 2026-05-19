@@ -89,7 +89,7 @@
 </script>
 
 <svelte:head>
-  <title>{film ? `${film.title} — 1001 фильм` : '1001 фильм'}</title>
+  <title>{film ? `${film.title} — 365 фильмов` : '365 фильмов'}</title>
   <meta name="robots" content="noindex,nofollow" />
 </svelte:head>
 

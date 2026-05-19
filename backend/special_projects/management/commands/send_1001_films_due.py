@@ -6,7 +6,7 @@ from special_projects.film_journey import send_due_deliveries
 
 
 class Command(BaseCommand):
-    help = "Send due 1001 films project notifications and reminders."
+    help = "Send due 365 films project notifications and reminders."
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -19,7 +19,7 @@ class Command(BaseCommand):
         result = send_due_deliveries(force=bool(options.get("force")))
         self.stdout.write(
             self.style.SUCCESS(
-                "1001 films: "
+                "365 films: "
                 f"delivered={result.delivered}, "
                 f"reminders={result.reminders}, "
                 f"paused={result.paused}, "

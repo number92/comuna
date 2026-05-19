@@ -77,7 +77,7 @@
 </script>
 
 <svelte:head>
-  <title>Предпросмотр фильма | 1001 фильм</title>
+  <title>Предпросмотр фильма | 365 фильмов</title>
   <meta name="robots" content="noindex,nofollow" />
 </svelte:head>
 

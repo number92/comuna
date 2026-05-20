@@ -1,7 +1,7 @@
 <script lang="ts">
   import Markdown from '$lib/components/markdown/Markdown.svelte'
   import type { View } from '$lib/settings'
-  import { Button, toast } from 'mono-svelte'
+  import { toast } from 'mono-svelte'
   import { ChevronDown, Icon } from 'svelte-hero-icons'
   import { browser } from '$app/environment'
   import { afterUpdate, createEventDispatcher, onMount, tick } from 'svelte'
@@ -118,6 +118,12 @@
   let expanded = false
   let hasOverflow = false
   let hadOverflow = false
+  let previewCanExpand = false
+  let previewWasTrimmed = false
+  let fullBody: string | null = null
+  let fullBodyLoading = false
+  let fullBodyLoadFailed = false
+  let bodySourceKey = ''
   let element: Element
   let isFirstImage = true;
   let firstImageUrl: string | null = null;
@@ -711,10 +717,46 @@
     showImage(src, image.getAttribute('alt') || image.getAttribute('title') || '')
   }
 
+  const loadFullBodyForExpand = async (): Promise<boolean> => {
+    if (!browser || showFullBody || !collapsible || !postId || fullBody !== null) return true
+    if (fullBodyLoading) return false
+
+    fullBodyLoading = true
+    fullBodyLoadFailed = false
+    try {
+      const token = $siteToken
+      const response = await fetch(buildPostDetailUrl(postId), {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      const payload = await response.json().catch(() => null)
+      const nextBody = typeof payload?.post?.content === 'string' ? payload.post.content : ''
+      if (!response.ok || !nextBody) {
+        throw new Error(payload?.error || 'Failed to load post body')
+      }
+      fullBody = nextBody
+      if (payload?.post?.poll && typeof payload.post.poll === 'object') {
+        applyLocalPollState(payload.post.poll as BackendPoll)
+      }
+      if (payload?.post?.post_ratings && typeof payload.post.post_ratings === 'object') {
+        localPostRatings = normalizePostRatingsMap(payload.post.post_ratings)
+      }
+      return true
+    } catch (error) {
+      console.error('Failed to load full post body:', error)
+      fullBodyLoadFailed = true
+      toast({ content: 'Не удалось загрузить полный текст поста', type: 'error' })
+      return false
+    } finally {
+      fullBodyLoading = false
+    }
+  }
+
   const expand = async (event?: Event) => {
     event?.preventDefault()
     event?.stopPropagation()
-    if (expanded) return
+    if (expanded || fullBodyLoading) return
+    const loaded = await loadFullBodyForExpand()
+    if (!loaded) return
     expanded = true
     hasOverflow = false
     dispatch('expand')
@@ -2197,12 +2239,15 @@
       // (min-width: 641px) - планшеты и десктопы
       const sizesAttr = '(max-width: 640px) 240px, (min-width: 641px) 480px';
       
-      // Определяем атрибуты загрузки в зависимости от позиции изображения
-      let loadingAttrs = '';
+      // In feed cards all inline images are lazy, including images loaded after expand.
+      const forceLazyImages = collapsible && !showFullBody;
+      let loadingAttrs = 'decoding="async"';
       
-      if (isFirstImage) {
+      if (forceLazyImages) {
+        loadingAttrs = 'loading="lazy" decoding="async"';
+      } else if (isFirstImage) {
         // Первое изображение загружаем с высоким приоритетом и без ленивой загрузки
-        loadingAttrs = 'fetchpriority="high"';
+        loadingAttrs = 'fetchpriority="high" decoding="async"';
         firstImageUrl = minImageUrl;
         firstImageSrcset = srcset;
       } else {
@@ -2210,7 +2255,7 @@
         // Но только если они не в первых 1000 символах контента
         const imagePosition = content.indexOf(imgUrl);
         if (imagePosition > 1000) {
-          loadingAttrs = 'loading="lazy"';
+          loadingAttrs = 'loading="lazy" decoding="async"';
         }
       }
       
@@ -2236,7 +2281,10 @@
 
       return imgHtml;
     }
-    return `<img src="${imgUrl}" data-expandable-image="1" data-expandable-src="${imgUrl}" ${alt ? `alt="${alt}"` : 'alt="Post image"'} ${title ? `title="${title}"` : ''} class="w-full h-auto">`;
+    const loadingAttrs = collapsible && !showFullBody
+      ? 'loading="lazy" decoding="async"'
+      : 'decoding="async"';
+    return `<img src="${imgUrl}" data-expandable-image="1" data-expandable-src="${imgUrl}" ${loadingAttrs} ${alt ? `alt="${alt}"` : 'alt="Post image"'} ${title ? `title="${title}"` : ''} class="w-full h-auto">`;
   }
 
   // Добавляем функцию для определения, находится ли изображение выше сгиба
@@ -2268,9 +2316,60 @@
       return { text: '', trimmed: false };
     }
     if (paragraphText.length > maxPreviewLength) {
+      previewWasTrimmed = true;
       return { text: `${paragraphText.slice(0, maxPreviewLength).trim()}...`, trimmed: true };
     }
     return { text: paragraphText, trimmed: false };
+  }
+
+  function removeTitlePrefixFromText(rawText: string): string {
+    let text = rawText.trim();
+    if (!text || !title) return text;
+    const titleText = title.trim();
+    if (!titleText || !text.toLowerCase().startsWith(titleText.toLowerCase())) return text;
+    return text
+      .slice(titleText.length)
+      .replace(/^[:\-–—.!?\s]+/, '')
+      .trim();
+  }
+
+  function normalizePreviewCompareText(rawText: string): string {
+    return removeTitlePrefixFromText(stripHtmlTags(rawText))
+      .replace(/\.\.\.$/, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function looksTrimmedPreview(rawText: string): boolean {
+    return /(?:\.{3}|…)\s*(?:<\/p>)?\s*$/i.test((rawText || '').trim());
+  }
+
+  function collectEditorText(value: any): string {
+    if (!value) return '';
+    if (typeof value === 'string') return stripHtmlTags(value);
+    if (Array.isArray(value)) return value.map(collectEditorText).filter(Boolean).join(' ');
+    if (typeof value !== 'object') return '';
+
+    const chunks: string[] = [];
+    for (const key of ['text', 'caption', 'title', 'description', 'quote', 'message']) {
+      if (typeof value[key] === 'string') chunks.push(stripHtmlTags(value[key]));
+    }
+    for (const key of ['items', 'content', 'rows']) {
+      if (Array.isArray(value[key])) chunks.push(collectEditorText(value[key]));
+    }
+    return chunks.filter(Boolean).join(' ');
+  }
+
+  function extractSourcePlainText(rawContent: string): string {
+    const editorContent = parseSerializedEditorModel(rawContent);
+    if (editorContent) {
+      return normalizePreviewCompareText(collectEditorText(editorContent.blocks ?? []));
+    }
+    return normalizePreviewCompareText(
+      rawContent
+        .replace(/<preview-image>.*?<\/preview-image>/gis, '')
+        .replace(/<preview-description>.*?<\/preview-description>/gis, '')
+    );
   }
 
   function buildPreviewParagraphFromText(rawText: string): string {
@@ -2496,18 +2595,19 @@
   }
 
   function extractPreviewContent(html: string) {
-    if (showFullBody || collapsible) {
+    if (showFullBody || (collapsible && expanded)) {
       const editorContent = parseSerializedEditorModel(html)
-      if (!showFullBody && collapsible) {
-        if (!editorContent && looksLikeSerializedEditorModel(html)) return ''
-        const previewHtml = editorContent ? buildJsonCardPreview(editorContent) : buildHtmlCardPreview(html)
-        if (previewHtml) return removeDuplicateLeadingPreviewImage(stripLeadingTitleFromHtml(previewHtml))
-        return ''
-      }
-
       const fullHtml = editorContent ? convertJsonToHtml(html) : html
       const contentHtml = stripLeadingTitleFromHtml(fullHtml)
       return contentHtml
+    }
+
+    if (collapsible) {
+      const editorContent = parseSerializedEditorModel(html)
+      if (!editorContent && looksLikeSerializedEditorModel(html)) return ''
+      const previewHtml = editorContent ? buildJsonCardPreview(editorContent) : buildHtmlCardPreview(html)
+      if (previewHtml) return removeDuplicateLeadingPreviewImage(stripLeadingTitleFromHtml(previewHtml))
+      return ''
     }
     // Проверяем, является ли контент JSON или base64
     if (isJsonContent(html)) {
@@ -2878,10 +2978,24 @@
     firstImageUrl = null;
     firstImageSrcset = null;
     hasPreview = false;
-    processedBody = extractPreviewContent(body);
+    previewWasTrimmed = false;
+    const renderBody = !showFullBody && collapsible && expanded && fullBody ? fullBody : body;
+    processedBody = extractPreviewContent(renderBody);
+    if (!showFullBody && collapsible && !expanded) {
+      const previewText = normalizePreviewCompareText(processedBody);
+      const sourceText = extractSourcePlainText(body);
+      previewCanExpand =
+        previewWasTrimmed ||
+        Boolean(postId && looksTrimmedPreview(processedBody)) ||
+        Boolean(sourceText && sourceText.length > previewText.length + 8);
+    } else {
+      previewCanExpand = false;
+    }
     void externalPreviewImageUrl
     void pollRenderState
     void postRatingsRenderState
+    void expanded
+    void fullBody
   }
 
   $: if (browser && allowPollVoting && postId && $siteToken) {
@@ -2890,19 +3004,25 @@
 
   // Сбрасываем состояние превью только при смене исходного контента/режима отображения
   $: {
-    void body
+    const nextBodySourceKey = `${postId ?? ''}:${body}`
+    if (nextBodySourceKey !== bodySourceKey) {
+      bodySourceKey = nextBodySourceKey
+      fullBody = null
+      fullBodyLoading = false
+      fullBodyLoadFailed = false
+      if (!showFullBody && collapsible) {
+        expanded = false
+        hasOverflow = false
+        hadOverflow = false
+      } else {
+        expanded = true
+        hasOverflow = false
+        hadOverflow = false
+      }
+    }
     void showFullBody
     void collapsible
     void externalPreviewImageUrl
-    if (!showFullBody && collapsible) {
-      expanded = false
-      hasOverflow = false
-      hadOverflow = false
-    } else {
-      expanded = true
-      hasOverflow = false
-      hadOverflow = false
-    }
   }
 
   onMount(() => {
@@ -2968,7 +3088,7 @@
       if (hasOverflow) {
         hadOverflow = true
       }
-      if (!hasOverflow) {
+      if (!hasOverflow && !previewCanExpand) {
         expanded = true
       }
     }, 50)
@@ -3000,7 +3120,7 @@
       if (hasOverflow) {
         hadOverflow = true
       }
-      if (!hasOverflow) {
+      if (!hasOverflow && !previewCanExpand) {
         expanded = true
       }
     }, 0)
@@ -3052,16 +3172,23 @@
     </button>
   {/if}
 
-  {#if collapsible && !showFullBody && !expanded && hasOverflow}
+  {#if collapsible && !showFullBody && !expanded && (hasOverflow || previewCanExpand || fullBodyLoadFailed)}
     <div class="post-expand-overlay pointer-events-none absolute inset-x-0 bottom-0 flex justify-center pt-16">
       <div class="pointer-events-auto flex justify-center w-full bg-gradient-to-b from-transparent to-white dark:to-zinc-900 pb-3">
         <button
           type="button"
           data-post-action-toggle-expand
-          class="mt-6 rounded-xl border border-slate-200 dark:border-zinc-700 bg-white/95 dark:bg-zinc-900/95 px-4 py-2 text-sm font-medium text-slate-700 dark:text-zinc-200 shadow-sm hover:shadow-md transition"
+          class="post-expand-button mt-6"
           on:click={toggleExpand}
+          disabled={fullBodyLoading}
+          aria-busy={fullBodyLoading}
+          aria-label={fullBodyLoading ? 'Загружаем полный текст' : 'Показать полностью'}
         >
-          Показать полностью
+          {#if fullBodyLoading}
+            <span class="post-expand-spinner" aria-hidden="true"></span>
+          {:else}
+            <Icon src={ChevronDown} size="20" mini />
+          {/if}
         </button>
       </div>
     </div>
@@ -3072,6 +3199,57 @@
   .post-collapsed {
     max-height: 600px;
     overflow: hidden;
+  }
+
+  .post-expand-button {
+    display: inline-flex;
+    width: 2.25rem;
+    height: 2.25rem;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    border: 1px solid rgb(226 232 240);
+    background: rgb(255 255 255 / 0.96);
+    color: rgb(51 65 85);
+    box-shadow: 0 6px 18px rgb(15 23 42 / 0.12);
+    transition:
+      transform 0.15s ease,
+      box-shadow 0.15s ease,
+      border-color 0.15s ease;
+  }
+
+  .post-expand-button:hover {
+    transform: translateY(1px);
+    border-color: rgb(203 213 225);
+    box-shadow: 0 8px 24px rgb(15 23 42 / 0.16);
+  }
+
+  .post-expand-button:disabled {
+    cursor: wait;
+    opacity: 0.78;
+    transform: none;
+  }
+
+  .post-expand-spinner {
+    width: 1rem;
+    height: 1rem;
+    border-radius: 999px;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    animation: post-expand-spin 0.7s linear infinite;
+  }
+
+  @keyframes post-expand-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  :global(.dark) .post-expand-button {
+    border-color: rgb(63 63 70);
+    background: rgb(24 24 27 / 0.96);
+    color: rgb(228 228 231);
+    box-shadow: 0 6px 18px rgb(0 0 0 / 0.3);
   }
   
   .custom-gradient {

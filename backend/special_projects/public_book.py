@@ -34,7 +34,8 @@ MODERATION_LOCK_INTERVAL = timedelta(hours=24)
 BLOCKED_WORD_WARNING = "Кажется вы хотите вбить что-то недозволенное, ай-яй-яй."
 DEFAULT_RULES_TEXT = (
     "Каждый зарегистрированный пользователь с привязанным Telegram или VK может добавить "
-    "одно слово в сутки. Слово должно состоять только из букв и быть не длиннее 30 символов. "
+    "одно слово или знак препинания в сутки. Запись должна состоять только из букв "
+    "и знаков препинания и быть не длиннее 30 символов. "
     "Слова из стоп-листа не принимаются. Финальная версия книги будет отцензурирована по "
     "нарушениям закона и выпущена в электронном виде бесплатно."
 )
@@ -423,6 +424,10 @@ def _previous_word_pair_text(previous_word: PublicBookWord | None, current_word:
     return f"{previous_word.word}{current_word}"
 
 
+def _is_public_book_word_character(char: str) -> bool:
+    return char.isalpha() or unicodedata.category(char).startswith("P")
+
+
 def normalize_public_book_word(value: str) -> dict[str, str]:
     word = str(value or "").strip()
     if not word:
@@ -431,8 +436,8 @@ def normalize_public_book_word(value: str) -> dict[str, str]:
         raise ValueError("Можно отправить только одно слово без пробелов.")
     if len(word) > MAX_WORD_LENGTH:
         raise ValueError("Слово не должно быть длиннее 30 символов.")
-    if not all(char.isalpha() for char in word):
-        raise ValueError("Слово должно состоять только из букв.")
+    if not all(_is_public_book_word_character(char) for char in word):
+        raise ValueError("Запись должна состоять только из букв и знаков препинания.")
     normalized = normalize_public_book_moderation_text(word)
     return {"word": word, "normalized_word": normalized}
 

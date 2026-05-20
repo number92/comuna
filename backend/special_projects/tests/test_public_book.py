@@ -64,16 +64,24 @@ class PublicBookTests(TestCase):
             )
         return user
 
-    def test_normalize_requires_one_letter_word(self):
+    def test_normalize_allows_letters_and_punctuation(self):
         self.assertEqual(
             normalize_public_book_word("Ёлка"),
             {"word": "Ёлка", "normalized_word": "елка"},
         )
+        self.assertEqual(
+            normalize_public_book_word("слово!"),
+            {"word": "слово!", "normalized_word": "слово"},
+        )
+        self.assertEqual(
+            normalize_public_book_word("..."),
+            {"word": "...", "normalized_word": ""},
+        )
 
         with self.assertRaisesMessage(ValueError, "одно слово"):
             normalize_public_book_word("два слова")
-        with self.assertRaisesMessage(ValueError, "только из букв"):
-            normalize_public_book_word("слово!")
+        with self.assertRaisesMessage(ValueError, "букв и знаков препинания"):
+            normalize_public_book_word("слово1")
         with self.assertRaisesMessage(ValueError, "30 символов"):
             normalize_public_book_word("а" * 31)
 

@@ -553,7 +553,8 @@ def _maybe_notify_author_comment(post: Post, comment: PostComment) -> None:
         return
 
     site_base = (getattr(settings, "SITE_BASE_URL", "") or "").rstrip("/")
-    post_link = f"{site_base}/b/post/{post.id}#comments" if site_base else ""
+    comment_link = _site_comment_link(post, comment)
+    post_link = f"{site_base}{comment_link}" if site_base and comment_link else comment_link
     commenter_name = _comment_display_username(comment)
     commenter = f"@{commenter_name}" if commenter_name else "Пользователь"
     text = (
@@ -2375,6 +2376,10 @@ def content_page_manage(request: HttpRequest, slug: str) -> HttpResponse:
 
 
 def _post_public_path(post: Post) -> str:
+    raw_data = post.raw_data if isinstance(getattr(post, "raw_data", None), dict) else {}
+    project = raw_data.get("special_project") if isinstance(raw_data.get("special_project"), dict) else {}
+    if project.get("slug") == "book":
+        return "/s/book"
     post_title = _post_display_title(post)
     post_slug = _slugify_title(post_title)
     return f"/b/post/{post.id}-{post_slug}" if post_slug else f"/b/post/{post.id}"

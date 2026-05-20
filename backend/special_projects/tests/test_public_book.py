@@ -10,7 +10,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from feeds.models import Post
+from feeds.models import Post, PostComment
 from special_projects.public_book import (
     BLOCKED_WORD_WARNING,
     DISCUSSION_AUTHOR_TITLE,
@@ -397,6 +397,17 @@ class PublicBookTests(TestCase):
         self.assertEqual(post.raw_data.get("special_project", {}).get("slug"), PROJECT_SLUG)
         self.assertIn("Книга интернет сообщества", post.title)
         self.assertIn(post, Post.objects.filter(is_blocked=False, is_pending=False))
+
+    def test_discussion_comment_links_point_to_book_page(self):
+        from feeds.views import _post_public_path, _site_comment_link
+
+        user = self.make_user("book-comment-link-user", telegram=True)
+        post = ensure_public_book_discussion_post()
+        comment = PostComment.objects.create(post=post, user=user, body="Комментарий")
+
+        self.assertEqual(_post_public_path(post), "/s/book")
+        self.assertEqual(_site_comment_link(post), "/s/book#comments")
+        self.assertEqual(_site_comment_link(post, comment), f"/s/book#site-comment-{comment.id}")
 
     def test_admin_stats_payload_counts_contributors_top_users_and_registrations(self):
         users = [

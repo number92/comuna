@@ -13,7 +13,7 @@ from special_projects.models import PublicBookBlockedWord, PublicBookState, Publ
 User = get_user_model()
 
 PROJECT_SLUG = PublicBookState.PROJECT_SLUG
-MAX_WORDS = 150_000
+MAX_WORDS = 185_000
 SUBMISSION_INTERVAL = timedelta(hours=24)
 DISCUSSION_AUTHOR_USERNAME = "tambur-book"
 DISCUSSION_AUTHOR_TITLE = "Книга одного слова"
@@ -229,7 +229,7 @@ def submit_word(user: User, raw_word: str) -> PublicBookWord:
         state = _book_state_for_update()
 
         if state.total_words >= MAX_WORDS:
-            raise ValueError("Книга уже набрала 150000 слов.")
+            raise ValueError("Книга уже набрала 185000 слов.")
 
         next_available_at = _next_available_at_for_user(user, now=now)
         if next_available_at is not None:

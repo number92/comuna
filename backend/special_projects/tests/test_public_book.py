@@ -78,7 +78,7 @@ class PublicBookTests(TestCase):
         user = User.objects.create_user(username="late-book-user", password="pass")
         PublicBookState.objects.create(project_slug=PROJECT_SLUG, total_words=MAX_WORDS)
 
-        with self.assertRaisesMessage(ValueError, "150000"):
+        with self.assertRaisesMessage(ValueError, "185000"):
             submit_word(user, "Финиш")
 
     def test_discussion_post_is_public(self):

@@ -12,10 +12,10 @@
   import {
     ArrowPath,
     BookOpen,
+    Check,
     Clock,
     Icon,
     LockClosed,
-    PaperAirplane,
   } from 'svelte-hero-icons'
 
   type BookWord = {
@@ -175,7 +175,7 @@
     ? Math.min(100, Math.max(0, (status.total_words / status.max_words) * 100))
     : 0
   $: displayTotalWords = status?.total_words ?? 0
-  $: displayRemainingWords = status?.remaining_words ?? 150000
+  $: displayMaxWords = status?.max_words ?? 185000
   $: bookText = words.map((item) => item.word).join(' ')
   $: canLoadMore = Boolean(status && words.length < status.total_words)
   $: submitDisabled = submitLoading || loading || Boolean(status && !status.can_submit)
@@ -220,36 +220,16 @@
         </p>
       </div>
 
-      <div class="write-panel">
-        <div class="counter-row">
-          <span>{formatNumber(displayTotalWords)} слов</span>
-          <span>{formatNumber(displayRemainingWords)} осталось</span>
+      <div class="book-counter-panel">
+        <div class="counter-title">Объем книги</div>
+        <div class="counter-value">
+          {formatNumber(displayTotalWords)}
+          <span>из</span>
+          {formatNumber(displayMaxWords)}
         </div>
         <div class="progress-track" aria-label="Прогресс книги">
           <span style={`width: ${progressPercent}%`}></span>
         </div>
-
-        <form on:submit|preventDefault={submitWord} class="word-form">
-          <input
-            bind:value={word}
-            on:input={(event) => (word = normalizeInput((event.currentTarget as HTMLInputElement).value))}
-            placeholder="Ваше слово"
-            maxlength="64"
-            autocomplete="off"
-          />
-          {#if !$siteUser}
-            <Button color="primary" disabled={submitLoading} on:click={() => (authOpen = true)}>
-              <Icon src={LockClosed} size="18" mini slot="prefix" />
-              Войти
-            </Button>
-          {:else}
-            <Button color="primary" submit loading={submitLoading} disabled={submitDisabled}>
-              <Icon src={PaperAirplane} size="18" mini slot="prefix" />
-              Добавить
-            </Button>
-          {/if}
-        </form>
-
         {#if status?.next_available_at}
           <div class="cooldown">
             <Icon src={Clock} size="16" mini />
@@ -272,10 +252,51 @@
       <section class="book-sheet" aria-label="Текст книги">
         <div class="sheet-head">
           <span>Текущая версия</span>
-          <span>{formatNumber(words.length)} из {formatNumber(status?.total_words)}</span>
+          <span>{formatNumber(displayTotalWords)} из {formatNumber(displayMaxWords)}</span>
         </div>
         <div class="book-text">
-          {bookText || 'Книга пока пустая.'}
+          {#if bookText}
+            <span>{bookText}</span>
+          {:else}
+            <span class="empty-book">Книга пока пустая.</span>
+          {/if}
+          <form on:submit|preventDefault={submitWord} class="inline-word-form">
+            <input
+              bind:value={word}
+              on:input={(event) => (word = normalizeInput((event.currentTarget as HTMLInputElement).value))}
+              on:focus={() => {
+                if (!$siteUser) authOpen = true
+              }}
+              placeholder="слово"
+              maxlength="64"
+              autocomplete="off"
+              disabled={submitLoading || loading}
+              aria-label="Добавить слово в книгу"
+            />
+            {#if !$siteUser}
+              <button
+                type="button"
+                class="inline-submit"
+                aria-label="Войти, чтобы добавить слово"
+                on:click={() => (authOpen = true)}
+              >
+                <Icon src={LockClosed} size="16" mini />
+              </button>
+            {:else}
+              <button
+                type="submit"
+                class="inline-submit"
+                aria-label="Добавить слово"
+                disabled={submitDisabled}
+              >
+                {#if submitLoading}
+                  <Icon src={ArrowPath} size="16" mini />
+                {:else}
+                  <Icon src={Check} size="16" mini />
+                {/if}
+              </button>
+            {/if}
+          </form>
         </div>
         {#if canLoadMore}
           <div class="load-more">
@@ -350,7 +371,7 @@
     line-height: 1.65;
   }
 
-  .write-panel {
+  .book-counter-panel {
     border: 1px solid #d6c8b6;
     border-radius: 8px;
     background: #fffdf8;
@@ -358,7 +379,6 @@
     padding: 20px;
   }
 
-  .counter-row,
   .sheet-head {
     display: flex;
     align-items: center;
@@ -370,9 +390,33 @@
     text-transform: uppercase;
   }
 
+  .counter-title {
+    color: #6b5f51;
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+
+  .counter-value {
+    margin-top: 8px;
+    color: #1f2933;
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: clamp(32px, 5vw, 54px);
+    line-height: 1;
+    letter-spacing: 0;
+  }
+
+  .counter-value span {
+    margin: 0 8px;
+    color: #8a7a67;
+    font-family: inherit;
+    font-size: 0.46em;
+    font-style: italic;
+  }
+
   .progress-track {
     height: 10px;
-    margin-top: 12px;
+    margin-top: 18px;
     overflow: hidden;
     border: 1px solid #d6c8b6;
     border-radius: 999px;
@@ -383,30 +427,6 @@
     display: block;
     height: 100%;
     background: #2f6f59;
-  }
-
-  .word-form {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 10px;
-    margin-top: 18px;
-  }
-
-  .word-form input {
-    min-width: 0;
-    border: 1px solid #c7b8a4;
-    border-radius: 8px;
-    background: #ffffff;
-    color: #111827;
-    font: inherit;
-    font-size: 18px;
-    padding: 12px 14px;
-    outline: none;
-  }
-
-  .word-form input:focus {
-    border-color: #2f6f59;
-    box-shadow: 0 0 0 3px rgba(47, 111, 89, 0.14);
   }
 
   .cooldown,
@@ -440,6 +460,74 @@
     overflow-wrap: anywhere;
   }
 
+  .empty-book {
+    color: #8a7a67;
+    font-style: italic;
+  }
+
+  .inline-word-form {
+    display: inline-flex;
+    width: auto;
+    align-items: center;
+    gap: 4px;
+    margin-left: 8px;
+    vertical-align: baseline;
+  }
+
+  .inline-word-form input {
+    width: 7.2em;
+    min-width: 92px;
+    max-width: 42vw;
+    border: 0;
+    border-bottom: 2px solid #b79d7c;
+    border-radius: 0;
+    background: rgba(255, 255, 255, 0.58);
+    color: #1f2933;
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 0.86em;
+    letter-spacing: 0;
+    line-height: 1.25;
+    padding: 2px 4px 3px;
+    outline: none;
+  }
+
+  .inline-word-form input:focus {
+    border-bottom-color: #2f6f59;
+    background: #fffdf8;
+  }
+
+  .inline-word-form input::placeholder {
+    color: #a18f77;
+    font-style: italic;
+  }
+
+  .inline-submit {
+    display: inline-flex;
+    width: 28px;
+    height: 28px;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #2f6f59;
+    border-radius: 999px;
+    background: #2f6f59;
+    color: #fffdf8;
+    vertical-align: middle;
+    transition:
+      background 0.15s ease,
+      border-color 0.15s ease,
+      opacity 0.15s ease;
+  }
+
+  .inline-submit:hover:not(:disabled) {
+    border-color: #245946;
+    background: #245946;
+  }
+
+  .inline-submit:disabled {
+    cursor: default;
+    opacity: 0.45;
+  }
+
   .load-more {
     display: flex;
     justify-content: center;
@@ -462,12 +550,12 @@
       padding-top: 42px;
     }
 
-    .word-form {
-      grid-template-columns: 1fr;
-    }
-
     .book-sheet {
       padding: 20px;
+    }
+
+    .inline-word-form {
+      margin-left: 4px;
     }
   }
 </style>

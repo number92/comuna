@@ -21,6 +21,7 @@
       id: number
       title: string
     }
+    link_url?: string | null
   }
 
   let comments: RecentComment[] = []
@@ -28,7 +29,7 @@
   let error: string | null = null
 
   const buildPostLink = (comment: RecentComment) =>
-    `${buildBackendPostPath(comment.post)}#comments`
+    comment.link_url || `${buildBackendPostPath(comment.post)}#comments`
 
   const previewBody = (body: string) => {
     const normalized = body.replace(/\s+/g, ' ').trim()

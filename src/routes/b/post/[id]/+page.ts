@@ -1,6 +1,6 @@
 import { buildPostDetailUrl } from '$lib/api/backend'
 import { slugifyTitle } from '$lib/util/slug'
-import { error } from '@sveltejs/kit'
+import { error, redirect } from '@sveltejs/kit'
 
 export const ssr = true
 
@@ -13,6 +13,15 @@ export const load = async ({ params, fetch }) => {
 
   const response = await fetch(buildPostDetailUrl(id))
   if (!response.ok) {
+    let payload: { redirect_url?: string } = {}
+    try {
+      payload = await response.json()
+    } catch {
+      payload = {}
+    }
+    if (payload.redirect_url) {
+      throw redirect(302, payload.redirect_url)
+    }
     throw error(response.status, 'Пост не найден')
   }
 

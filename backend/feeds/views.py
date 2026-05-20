@@ -576,6 +576,14 @@ def _site_comment_link(post: Post, comment: PostComment | None = None) -> str:
     return f"{base_path}#comments"
 
 
+def _special_project_redirect_path(post: Post) -> str:
+    raw_data = post.raw_data if isinstance(getattr(post, "raw_data", None), dict) else {}
+    project = raw_data.get("special_project") if isinstance(raw_data.get("special_project"), dict) else {}
+    if project.get("slug") == "book":
+        return "/s/book#comments"
+    return ""
+
+
 def _author_owner_users_for_notifications(author: Author) -> list[User]:
     user_ids = set(
         AuthorAdmin.objects.filter(author=author, verified_at__isnull=False).values_list(
@@ -2376,9 +2384,7 @@ def content_page_manage(request: HttpRequest, slug: str) -> HttpResponse:
 
 
 def _post_public_path(post: Post) -> str:
-    raw_data = post.raw_data if isinstance(getattr(post, "raw_data", None), dict) else {}
-    project = raw_data.get("special_project") if isinstance(raw_data.get("special_project"), dict) else {}
-    if project.get("slug") == "book":
+    if _special_project_redirect_path(post):
         return "/s/book"
     post_title = _post_display_title(post)
     post_slug = _slugify_title(post_title)
@@ -2850,6 +2856,7 @@ def recent_comments(request: HttpRequest) -> HttpResponse:
             "created_at": comment.created_at.isoformat(),
             "user": _serialize_comment_user(comment),
             "post": {"id": comment.post_id, "title": _post_display_title(comment.post)},
+            "link_url": _site_comment_link(comment.post, comment),
         }
         for comment in comments
     ]
@@ -3126,6 +3133,16 @@ def post_detail(request: HttpRequest, post_id: int) -> HttpResponse:
         )
     except Post.DoesNotExist:
         return JsonResponse({"ok": False, "error": "post not found"}, status=404)
+    special_project_redirect = _special_project_redirect_path(post)
+    if special_project_redirect:
+        return JsonResponse(
+            {
+                "ok": False,
+                "error": "special project discussion post",
+                "redirect_url": special_project_redirect,
+            },
+            status=410,
+        )
     current_user = _get_user_from_request(request)
     content, poll_payload = _content_with_live_poll(post, current_user)
     template_payload = _serialize_post_template(post)

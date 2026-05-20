@@ -2,8 +2,6 @@
   import { onMount } from 'svelte'
   import { Button, Modal, toast } from 'mono-svelte'
   import {
-    buildSpecialBookAdminSettingsUrl,
-    buildSpecialBookAdminStatsUrl,
     buildSpecialBookFinalNotificationUrl,
     buildSpecialBookReminderUrl,
     buildSpecialBookStatusUrl,
@@ -16,10 +14,8 @@
   import {
     ArrowPath,
     Bell,
-    ChartBar,
     Check,
     Clock,
-    Cog6Tooth,
     Icon,
     LockClosed,
   } from 'svelte-hero-icons'
@@ -68,24 +64,6 @@
     }
   }
 
-  type BookAdminStats = {
-    ok: boolean
-    total_words: number
-    contributors_count: number
-    average_words_per_user: number
-    top_three_words: number
-    registrations_from_page_count: number
-    top_users: Array<{
-      user: {
-        id: number
-        username: string
-        first_name?: string
-        last_name?: string
-      }
-      words_count: number
-    }>
-  }
-
   const PAGE_LIMIT = 700
   const WORD_LIMIT = 30
   const REGISTRATION_SOURCE = 'book'
@@ -105,13 +83,8 @@
   let authInitialMode: 'login' | 'signup' = 'signup'
   let loadedOffset = 0
   let lastToken: string | null = null
-  let adminStats: BookAdminStats | null = null
-  let adminStatsLoading = false
-  let adminStatsError = ''
-  let adminStatsLoadedForToken: string | null = null
   let rulesOpen = false
   let rulesDraft = ''
-  let rulesSaving = false
   let cooldownOpen = false
   let exportOpen = false
   let finalNotificationLoading = false
@@ -140,11 +113,6 @@
     } catch {
       return value
     }
-  }
-
-  const displayUserName = (user: BookAdminStats['top_users'][number]['user']) => {
-    const name = [user.first_name, user.last_name].filter(Boolean).join(' ').trim()
-    return name || user.username || `id ${user.id}`
   }
 
   async function loadStatus() {
@@ -193,26 +161,6 @@
       error = (err as Error)?.message || 'Не удалось загрузить проект'
     }
     loading = false
-  }
-
-  async function loadAdminStats() {
-    if (!$siteToken || !$siteUser?.is_staff) return
-    adminStatsLoading = true
-    adminStatsError = ''
-    try {
-      const response = await fetch(buildSpecialBookAdminStatsUrl(), {
-        credentials: 'include',
-        headers: authHeaders(),
-      })
-      const data = await response.json()
-      if (!response.ok || !data?.ok) {
-        throw new Error(data?.error || 'Не удалось загрузить статистику')
-      }
-      adminStats = data as BookAdminStats
-    } catch (err) {
-      adminStatsError = (err as Error)?.message || 'Не удалось загрузить статистику'
-    }
-    adminStatsLoading = false
   }
 
   async function submitWord() {
@@ -331,32 +279,6 @@
     reminderLoading = false
   }
 
-  async function saveRules() {
-    if (!$siteToken || !$siteUser?.is_staff) return
-    rulesSaving = true
-    try {
-      const response = await fetch(buildSpecialBookAdminSettingsUrl(), {
-        method: 'PATCH',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-          ...authHeaders(),
-        },
-        body: JSON.stringify({ rules_text: rulesDraft }),
-      })
-      const data = await response.json()
-      if (!response.ok || !data?.ok) {
-        throw new Error(data?.error || 'Не удалось сохранить правила')
-      }
-      status = status ? { ...status, rules_text: data.rules_text, final_pdf: data.final_pdf } : status
-      rulesDraft = data.rules_text || DEFAULT_RULES_TEXT
-      toast({ content: 'Правила сохранены', type: 'success' })
-    } catch (err) {
-      toast({ content: (err as Error)?.message || 'Не удалось сохранить правила', type: 'error' })
-    }
-    rulesSaving = false
-  }
-
   async function subscribeFinalNotification() {
     if (!$siteToken || !$siteUser) {
       authInitialMode = 'signup'
@@ -408,17 +330,6 @@
     }
   }
 
-  $: if ($siteUser?.is_staff && $siteToken && adminStatsLoadedForToken !== $siteToken) {
-    adminStatsLoadedForToken = $siteToken
-    loadAdminStats()
-  }
-
-  $: if (!$siteUser?.is_staff) {
-    adminStats = null
-    adminStatsError = ''
-    adminStatsLoadedForToken = null
-  }
-
   onMount(loadProject)
 </script>
 
@@ -442,16 +353,6 @@
   <span slot="title">Правила</span>
   <div class="book-modal-content">
     <p>{displayedRulesText}</p>
-    {#if $siteUser?.is_staff}
-      <label class="rules-editor">
-        <span>Текст правил</span>
-        <textarea bind:value={rulesDraft} rows="8"></textarea>
-      </label>
-      <div class="modal-actions">
-        <Button color="secondary" on:click={() => (rulesOpen = false)}>Закрыть</Button>
-        <Button loading={rulesSaving} disabled={rulesSaving} on:click={saveRules}>Сохранить</Button>
-      </div>
-    {/if}
   </div>
 </Modal>
 
@@ -581,69 +482,6 @@
         Загрузка
       </div>
     {:else}
-      {#if $siteUser?.is_staff}
-        <section class="admin-panel" aria-label="Управление книгой">
-          <div class="admin-panel-head">
-            <div>
-              <div class="admin-kicker">
-                <Icon src={ChartBar} size="16" mini />
-                Статистика
-              </div>
-              <h2>Управление книгой</h2>
-            </div>
-            <a class="manage-link" href="/admin/special_projects/" target="_blank" rel="noreferrer">
-              <Icon src={Cog6Tooth} size="16" mini />
-              Управление проектом
-            </a>
-          </div>
-
-          {#if adminStatsError}
-            <p class="admin-error">{adminStatsError}</p>
-          {:else if adminStatsLoading && !adminStats}
-            <div class="admin-loading">
-              <Icon src={ArrowPath} size="16" mini />
-              Загружаем статистику
-            </div>
-          {:else if adminStats}
-            <div class="admin-stats-grid">
-              <div class="admin-stat">
-                <span>Пользователей внесли слова</span>
-                <strong>{formatNumber(adminStats.contributors_count)}</strong>
-              </div>
-              <div class="admin-stat">
-                <span>В среднем слов на пользователя</span>
-                <strong>{formatNumber(adminStats.average_words_per_user)}</strong>
-              </div>
-              <div class="admin-stat">
-                <span>Слов у первой тройки</span>
-                <strong>{formatNumber(adminStats.top_three_words)}</strong>
-              </div>
-              <div class="admin-stat">
-                <span>Регистраций с этой страницы</span>
-                <strong>{formatNumber(adminStats.registrations_from_page_count)}</strong>
-              </div>
-            </div>
-
-            <div class="top-users">
-              <div class="top-users-title">Первая тройка</div>
-              {#if adminStats.top_users.length}
-                <ol>
-                  {#each adminStats.top_users as item}
-                    <li>
-                      <a href={`/id${item.user.id}`}>{displayUserName(item.user)}</a>
-                      <span>@{item.user.username}</span>
-                      <strong>{formatNumber(item.words_count)}</strong>
-                    </li>
-                  {/each}
-                </ol>
-              {:else}
-                <p>Пока нет добавленных слов.</p>
-              {/if}
-            </div>
-          {/if}
-        </section>
-      {/if}
-
       <section class="book-sheet" aria-label="Текст книги">
         <div class="sheet-head">
           <span>Текущая версия</span>
@@ -763,11 +601,16 @@
 
   h1 {
     margin: 0;
-    max-width: 720px;
+    max-width: none;
     font-family: Georgia, 'Times New Roman', serif;
-    font-size: clamp(46px, 8vw, 92px);
+    font-size: clamp(20px, 7.4cqw, 64px);
     line-height: 0.94;
     letter-spacing: 0;
+    white-space: nowrap;
+  }
+
+  .hero-copy {
+    container-type: inline-size;
   }
 
   .hero-copy p {
@@ -806,30 +649,6 @@
   .book-modal-content p {
     margin: 0;
     white-space: pre-wrap;
-  }
-
-  .rules-editor {
-    display: grid;
-    gap: 8px;
-  }
-
-  .rules-editor span {
-    color: #6b5f51;
-    font-size: 13px;
-    font-weight: 700;
-    text-transform: uppercase;
-  }
-
-  .rules-editor textarea {
-    width: 100%;
-    min-height: 170px;
-    border: 1px solid #d8cbb9;
-    border-radius: 8px;
-    background: #fffdf8;
-    color: #1f2933;
-    font: inherit;
-    line-height: 1.5;
-    padding: 12px;
   }
 
   .modal-actions {
@@ -922,158 +741,6 @@
 
   .book-inner {
     padding: 36px 0 64px;
-  }
-
-  .admin-panel {
-    margin-bottom: 28px;
-    border: 1px solid #d8cbb9;
-    border-radius: 8px;
-    background: #fffdf8;
-    padding: 22px;
-  }
-
-  .admin-panel-head {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 18px;
-  }
-
-  .admin-kicker {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    color: #2f6f59;
-    font-size: 13px;
-    font-weight: 700;
-    text-transform: uppercase;
-  }
-
-  .admin-panel h2 {
-    margin: 6px 0 0;
-    font-family: Georgia, 'Times New Roman', serif;
-    font-size: 28px;
-    line-height: 1.1;
-  }
-
-  .manage-link {
-    display: inline-flex;
-    min-height: 38px;
-    align-items: center;
-    gap: 8px;
-    border: 1px solid #2f6f59;
-    border-radius: 999px;
-    color: #2f6f59;
-    font-size: 14px;
-    font-weight: 700;
-    padding: 8px 14px;
-    text-decoration: none;
-    white-space: nowrap;
-  }
-
-  .manage-link:hover {
-    background: #eef7f1;
-  }
-
-  .admin-stats-grid {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 12px;
-    margin-top: 20px;
-  }
-
-  .admin-stat {
-    border: 1px solid #eadfce;
-    border-radius: 8px;
-    background: #fbf8f2;
-    padding: 14px;
-  }
-
-  .admin-stat span {
-    display: block;
-    min-height: 38px;
-    color: #6b5f51;
-    font-size: 13px;
-    line-height: 1.45;
-  }
-
-  .admin-stat strong {
-    display: block;
-    margin-top: 8px;
-    color: #1f2933;
-    font-family: Georgia, 'Times New Roman', serif;
-    font-size: 30px;
-    font-weight: 700;
-    line-height: 1;
-  }
-
-  .top-users {
-    margin-top: 20px;
-    border-top: 1px solid #eadfce;
-    padding-top: 18px;
-  }
-
-  .top-users-title {
-    color: #6b5f51;
-    font-size: 13px;
-    font-weight: 700;
-    text-transform: uppercase;
-  }
-
-  .top-users ol {
-    display: grid;
-    gap: 8px;
-    margin: 12px 0 0;
-    padding: 0;
-    list-style: none;
-  }
-
-  .top-users li {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
-    gap: 12px;
-    align-items: center;
-    border: 1px solid #eadfce;
-    border-radius: 8px;
-    background: #ffffff;
-    padding: 10px 12px;
-  }
-
-  .top-users a {
-    min-width: 0;
-    color: #1f2933;
-    font-weight: 700;
-    overflow-wrap: anywhere;
-  }
-
-  .top-users span {
-    min-width: 0;
-    color: #6b7280;
-    font-size: 13px;
-    overflow-wrap: anywhere;
-  }
-
-  .top-users strong {
-    color: #2f6f59;
-    font-family: Georgia, 'Times New Roman', serif;
-    font-size: 20px;
-  }
-
-  .admin-loading,
-  .admin-error {
-    margin-top: 16px;
-    color: #6b7280;
-    font-size: 14px;
-  }
-
-  .admin-loading {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .admin-error {
-    color: #b42318;
   }
 
   .book-sheet {
@@ -1207,24 +874,6 @@
       padding-top: 42px;
     }
 
-    .admin-panel-head,
-    .top-users li {
-      grid-template-columns: 1fr;
-    }
-
-    .admin-panel-head {
-      display: grid;
-    }
-
-    .admin-stats-grid {
-      grid-template-columns: 1fr 1fr;
-    }
-
-    .manage-link {
-      width: fit-content;
-      white-space: normal;
-    }
-
     .book-sheet {
       padding: 20px;
     }
@@ -1234,9 +883,4 @@
     }
   }
 
-  @media (max-width: 520px) {
-    .admin-stats-grid {
-      grid-template-columns: 1fr;
-    }
-  }
 </style>

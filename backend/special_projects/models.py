@@ -306,10 +306,13 @@ class PublicBookBlockedWord(models.Model):
         ]
 
     def save(self, *args, **kwargs) -> None:
-        from special_projects.public_book import normalize_public_book_word
+        from special_projects.public_book import normalize_public_book_moderation_text
 
         self.word = str(self.word or "").strip()
-        self.normalized_word = normalize_public_book_word(self.word)["normalized_word"]
+        normalized_word = normalize_public_book_moderation_text(self.word)
+        if not normalized_word:
+            raise ValueError("Запрещенное выражение должно содержать буквы или цифры.")
+        self.normalized_word = normalized_word[:64]
         super().save(*args, **kwargs)
 
     def __str__(self) -> str:

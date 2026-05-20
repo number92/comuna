@@ -86,6 +86,8 @@ from special_projects.views import (
     landname_share_event,
     landname_suggestions,
     landname_tile,
+    public_book_admin_blocked_word_detail,
+    public_book_admin_blocked_words,
     public_book_admin_settings,
     public_book_final_notification,
     public_book_reminder,
@@ -295,6 +297,16 @@ urlpatterns = [
         "api/special-projects/book/admin/settings/",
         public_book_admin_settings,
         name="special-book-admin-settings",
+    ),
+    path(
+        "api/special-projects/book/admin/blocked-words/",
+        public_book_admin_blocked_words,
+        name="special-book-admin-blocked-words",
+    ),
+    path(
+        "api/special-projects/book/admin/blocked-words/<int:item_id>/",
+        public_book_admin_blocked_word_detail,
+        name="special-book-admin-blocked-word-detail",
     ),
     path(
         "api/special-projects/book/words/",

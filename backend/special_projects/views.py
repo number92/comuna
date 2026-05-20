@@ -264,11 +264,58 @@ def public_book_admin_settings(request: HttpRequest) -> HttpResponse:
         return JsonResponse({"ok": True, "project": public_book.PROJECT_SLUG, **public_book.settings_payload()})
     if request.method not in {"POST", "PATCH"}:
         return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)
+    final_pdf = request.FILES.get("final_pdf")
+    if final_pdf is not None:
+        if not str(final_pdf.name or "").lower().endswith(".pdf"):
+            return JsonResponse({"ok": False, "error": "final pdf must be a PDF"}, status=400)
+        payload = {"rules_text": request.POST.get("rules_text", "")}
+    else:
+        try:
+            payload = json.loads(request.body.decode("utf-8") or "{}")
+        except json.JSONDecodeError:
+            return JsonResponse({"ok": False, "error": "invalid json"}, status=400)
+    return JsonResponse(public_book.update_admin_settings(payload, user, final_pdf=final_pdf))
+
+
+@csrf_exempt
+def public_book_admin_blocked_words(request: HttpRequest) -> HttpResponse:
+    user, error_response = _require_staff(request)
+    if error_response is not None:
+        return error_response
+    if request.method == "GET":
+        return JsonResponse(public_book.admin_blocked_words_payload())
+    if request.method != "POST":
+        return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)
     try:
         payload = json.loads(request.body.decode("utf-8") or "{}")
+        item = public_book.upsert_admin_blocked_word(payload, user)
     except json.JSONDecodeError:
         return JsonResponse({"ok": False, "error": "invalid json"}, status=400)
-    return JsonResponse(public_book.update_admin_settings(payload, user))
+    except ValueError as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+    return JsonResponse({"ok": True, "blocked_word": public_book.serialize_blocked_word(item)}, status=201)
+
+
+@csrf_exempt
+def public_book_admin_blocked_word_detail(request: HttpRequest, item_id: int) -> HttpResponse:
+    user, error_response = _require_staff(request)
+    if error_response is not None:
+        return error_response
+    if request.method not in {"PATCH", "DELETE"}:
+        return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)
+    if request.method == "DELETE":
+        public_book.delete_admin_blocked_word(item_id)
+        return JsonResponse({"ok": True})
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+        item = public_book.update_admin_blocked_word(item_id, payload, user)
+    except json.JSONDecodeError:
+        return JsonResponse({"ok": False, "error": "invalid json"}, status=400)
+    except public_book.PublicBookBlockedWord.DoesNotExist:
+        return JsonResponse({"ok": False, "error": "blocked word not found"}, status=404)
+    except ValueError as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+    return JsonResponse({"ok": True, "blocked_word": public_book.serialize_blocked_word(item)})
 
 
 def public_book_words(request: HttpRequest) -> HttpResponse:

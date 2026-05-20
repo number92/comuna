@@ -278,6 +278,14 @@ export const buildSpecialBookAdminSettingsUrl = (): string => {
   return `${getBackendBaseUrl()}/api/special-projects/book/admin/settings/`
 }
 
+export const buildSpecialBookAdminBlockedWordsUrl = (): string => {
+  return `${getBackendBaseUrl()}/api/special-projects/book/admin/blocked-words/`
+}
+
+export const buildSpecialBookAdminBlockedWordUrl = (id: number | string): string => {
+  return `${getBackendBaseUrl()}/api/special-projects/book/admin/blocked-words/${encodeURIComponent(id)}/`
+}
+
 export const buildSpecialBookWordsUrl = (options?: {
   offset?: number
   limit?: number

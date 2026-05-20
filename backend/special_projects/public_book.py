@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import logging
+import re
+import unicodedata
 from datetime import timedelta
 from typing import Any
 
@@ -20,6 +23,7 @@ from special_projects.models import (
 from users.models import SiteUserProfile
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
 
 PROJECT_SLUG = PublicBookState.PROJECT_SLUG
 MAX_WORDS = 185_000
@@ -43,6 +47,34 @@ DISCUSSION_MESSAGE_ID = 150000001
 MAX_WORD_LENGTH = 30
 REMINDER_EVENT_KEY = "public_book_reminder"
 FINAL_PDF_EVENT_KEY = "public_book_final_pdf"
+PUBLIC_BOOK_BANNED_PATTERNS = (
+    r"путинлох",
+    r"путинхуйло",
+    r"смертьпутину",
+)
+INVISIBLE_UNICODE_RE = re.compile(r"[\u200B-\u200D\uFEFF]")
+REPEATED_CHAR_RE = re.compile(r"(.)\1+")
+LATIN_TO_CYRILLIC = str.maketrans(
+    {
+        "a": "а",
+        "b": "в",
+        "c": "с",
+        "e": "е",
+        "k": "к",
+        "m": "м",
+        "h": "н",
+        "o": "о",
+        "p": "р",
+        "t": "т",
+        "x": "х",
+        "y": "у",
+        "0": "о",
+        "3": "з",
+        "4": "ч",
+        "6": "б",
+    }
+)
+RUSSIAN_VOWELS = frozenset("аеёиоуыэюя")
 
 
 def _site_url(path: str) -> str:
@@ -87,13 +119,178 @@ def settings_payload(settings_obj: PublicBookProjectSettings | None = None) -> d
     }
 
 
-def update_admin_settings(payload: dict[str, Any], user: User) -> dict[str, Any]:
+def update_admin_settings(
+    payload: dict[str, Any],
+    user: User,
+    *,
+    final_pdf=None,
+) -> dict[str, Any]:
     settings_obj = project_settings()
+    update_fields = ["updated_by", "updated_at"]
     if "rules_text" in payload:
         settings_obj.rules_text = str(payload.get("rules_text") or "").strip()
+        update_fields.append("rules_text")
+    final_pdf_changed = final_pdf is not None
+    if final_pdf_changed:
+        settings_obj.final_pdf = final_pdf
+        settings_obj.final_pdf_uploaded_at = timezone.now()
+        update_fields.extend(("final_pdf", "final_pdf_uploaded_at"))
     settings_obj.updated_by = user
-    settings_obj.save(update_fields=("rules_text", "updated_by", "updated_at"))
+    settings_obj.save(update_fields=tuple(dict.fromkeys(update_fields)))
+    if final_pdf_changed:
+        notify_final_pdf_subscribers(settings_obj=settings_obj)
     return {"ok": True, "project": PROJECT_SLUG, **settings_payload(settings_obj)}
+
+
+def serialize_blocked_word(item: PublicBookBlockedWord) -> dict[str, Any]:
+    return {
+        "id": item.id,
+        "project_slug": item.project_slug,
+        "word": item.word,
+        "normalized_word": item.normalized_word,
+        "is_active": item.is_active,
+        "note": item.note,
+        "created_at": item.created_at.isoformat(),
+        "updated_at": item.updated_at.isoformat(),
+        "created_by": {
+            "id": item.created_by_id,
+            "username": (getattr(item.created_by, "username", "") or "").strip()
+            if item.created_by_id
+            else "",
+        },
+    }
+
+
+def admin_blocked_words_payload() -> dict[str, Any]:
+    words = (
+        PublicBookBlockedWord.objects.filter(project_slug=PROJECT_SLUG)
+        .select_related("created_by")
+        .order_by("-is_active", "normalized_word", "id")
+    )
+    return {
+        "ok": True,
+        "project": PROJECT_SLUG,
+        "blocked_words": [serialize_blocked_word(item) for item in words],
+    }
+
+
+def _payload_bool(payload: dict[str, Any], key: str, *, default: bool) -> bool:
+    value = payload.get(key)
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() not in {"0", "false", "no", "off", ""}
+
+
+def upsert_admin_blocked_word(payload: dict[str, Any], user: User) -> PublicBookBlockedWord:
+    word = str(payload.get("word") or "").strip()
+    normalized_word = normalize_public_book_moderation_text(word)[:64]
+    if not normalized_word:
+        raise ValueError("Введите запрещенное слово или выражение.")
+    item, created = PublicBookBlockedWord.objects.update_or_create(
+        project_slug=PROJECT_SLUG,
+        normalized_word=normalized_word,
+        defaults={
+            "word": word,
+            "note": str(payload.get("note") or "").strip()[:240],
+            "is_active": _payload_bool(payload, "is_active", default=True),
+            "created_by": user,
+        },
+    )
+    if not created and item.created_by_id is None:
+        item.created_by = user
+        item.save(update_fields=("created_by", "updated_at"))
+    return item
+
+
+def update_admin_blocked_word(item_id: int, payload: dict[str, Any], user: User) -> PublicBookBlockedWord:
+    item = PublicBookBlockedWord.objects.get(id=item_id, project_slug=PROJECT_SLUG)
+    if "word" in payload:
+        item.word = str(payload.get("word") or "").strip()
+    if "note" in payload:
+        item.note = str(payload.get("note") or "").strip()[:240]
+    if "is_active" in payload:
+        item.is_active = _payload_bool(payload, "is_active", default=item.is_active)
+    if item.created_by_id is None:
+        item.created_by = user
+    item.save()
+    return item
+
+
+def delete_admin_blocked_word(item_id: int) -> None:
+    PublicBookBlockedWord.objects.filter(id=item_id, project_slug=PROJECT_SLUG).delete()
+
+
+def normalize_public_book_moderation_text(value: str) -> str:
+    text = unicodedata.normalize("NFKC", str(value or "")).casefold().replace("ё", "е")
+    text = INVISIBLE_UNICODE_RE.sub("", text)
+    text = text.translate(LATIN_TO_CYRILLIC)
+    text = "".join(
+        char
+        for char in text
+        if char.isalnum() and unicodedata.category(char) not in {"Cf", "Mn"}
+    )
+    return REPEATED_CHAR_RE.sub(r"\1", text)
+
+
+def _without_vowels(value: str) -> str:
+    return "".join(char for char in value if char not in RUSSIAN_VOWELS)
+
+
+def _public_book_ban_match(raw_text: str) -> dict[str, str] | None:
+    normalized_text = normalize_public_book_moderation_text(raw_text)
+    if not normalized_text:
+        return None
+    consonants_text = _without_vowels(normalized_text)
+
+    for pattern in PUBLIC_BOOK_BANNED_PATTERNS:
+        consonants_pattern = _without_vowels(normalize_public_book_moderation_text(pattern))
+        if re.search(pattern, normalized_text) or (
+            consonants_text
+            and consonants_pattern
+            and re.search(consonants_pattern, consonants_text)
+        ):
+            return {
+                "normalized_text": normalized_text,
+                "pattern": pattern,
+            }
+
+    blocked_words = PublicBookBlockedWord.objects.filter(
+        project_slug=PROJECT_SLUG,
+        is_active=True,
+    ).values_list("normalized_word", flat=True)
+    for blocked_word in blocked_words:
+        blocked = normalize_public_book_moderation_text(blocked_word)
+        if not blocked:
+            continue
+        blocked_consonants = _without_vowels(blocked)
+        if (
+            normalized_text == blocked
+            or blocked in normalized_text
+            or (blocked_consonants and consonants_text == blocked_consonants)
+            or (blocked_consonants and blocked_consonants in consonants_text)
+        ):
+            return {
+                "normalized_text": normalized_text,
+                "pattern": blocked,
+            }
+    return None
+
+
+def _ensure_public_book_text_allowed(raw_text: str) -> None:
+    match = _public_book_ban_match(raw_text)
+    if match is None:
+        return
+    logger.warning(
+        "public_book_blocked_text_detected",
+        extra={
+            "raw_text": str(raw_text or ""),
+            "normalized_text": match["normalized_text"],
+            "matched_pattern": match["pattern"],
+        },
+    )
+    raise ValueError("Это слово нельзя добавить в книгу.")
 
 
 def normalize_public_book_word(value: str) -> dict[str, str]:
@@ -106,7 +303,7 @@ def normalize_public_book_word(value: str) -> dict[str, str]:
         raise ValueError("Слово не должно быть длиннее 30 символов.")
     if not all(char.isalpha() for char in word):
         raise ValueError("Слово должно состоять только из букв.")
-    normalized = word.casefold().replace("ё", "е")
+    normalized = normalize_public_book_moderation_text(word)
     return {"word": word, "normalized_word": normalized}
 
 
@@ -408,6 +605,7 @@ def words_payload(*, offset: int = 0, limit: int = 500) -> dict[str, Any]:
 
 
 def submit_word(user: User, raw_word: str) -> PublicBookWord:
+    _ensure_public_book_text_allowed(raw_word)
     normalized = normalize_public_book_word(raw_word)
     now = timezone.now()
 
@@ -424,14 +622,6 @@ def submit_word(user: User, raw_word: str) -> PublicBookWord:
         next_available_at = _next_available_at_for_user(user, now=now)
         if next_available_at is not None:
             raise ValueError("Следующее слово можно будет добавить через 24 часа после предыдущего.")
-
-        is_blocked = PublicBookBlockedWord.objects.filter(
-            project_slug=PROJECT_SLUG,
-            normalized_word=normalized["normalized_word"],
-            is_active=True,
-        ).exists()
-        if is_blocked:
-            raise ValueError("Это слово нельзя добавить в книгу.")
 
         word = PublicBookWord.objects.create(
             project_slug=PROJECT_SLUG,

@@ -16,6 +16,7 @@ from special_projects.public_book import (
     admin_stats_payload,
     ensure_public_book_discussion_post,
     notify_final_pdf_subscribers,
+    normalize_public_book_moderation_text,
     normalize_public_book_word,
     project_status_for_user,
     schedule_reminder_for_user,
@@ -66,6 +67,32 @@ class PublicBookTests(TestCase):
             normalize_public_book_word("слово!")
         with self.assertRaisesMessage(ValueError, "30 символов"):
             normalize_public_book_word("а" * 31)
+
+    def test_moderation_normalization_collapses_obfuscation(self):
+        self.assertEqual(
+            normalize_public_book_moderation_text("П\u200b.УууT😊ИИИН-Л000Х"),
+            "путинлох",
+        )
+
+    def test_submit_word_rejects_obfuscated_blocked_phrase(self):
+        user = self.make_user("obfuscated-book-user", telegram=True)
+
+        with self.assertRaisesMessage(ValueError, "нельзя добавить"):
+            submit_word(user, "пуууTин-л000х")
+
+        self.assertFalse(PublicBookWord.objects.exists())
+
+    def test_submit_word_rejects_admin_blocked_word_with_latin_and_without_vowels(self):
+        user = self.make_user("admin-block-book-user", telegram=True)
+        PublicBookBlockedWord.objects.create(word="путин лох")
+
+        with self.assertRaisesMessage(ValueError, "нельзя добавить"):
+            submit_word(user, "птнлх")
+
+        with self.assertRaisesMessage(ValueError, "нельзя добавить"):
+            submit_word(user, "пyтинлoх")
+
+        self.assertFalse(PublicBookWord.objects.exists())
 
     def test_submit_word_creates_position_and_updates_status(self):
         user = self.make_user("book-user", telegram=True)

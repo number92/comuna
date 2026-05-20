@@ -51,6 +51,7 @@
   export let communityUrlOverride: string | undefined = undefined
   export let subscribeUrl: string | undefined = undefined
   export let subscribeLabel: string = 'Подписаться'
+  export let hideSubscribe: boolean = false
   export let disableUserLink: boolean = false
   export let authorNotifyCommentsEnabled: boolean | undefined = undefined
 
@@ -378,7 +379,7 @@
           class="text-slate-500 dark:text-zinc-400 self-center h-8 flex items-center" 
         />
       {/if}
-	      {#if community}
+	      {#if community && !hideSubscribe}
 	        {#if subscribeUrl}
 	            <Button
 	              size="square-md"

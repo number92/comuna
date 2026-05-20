@@ -50,6 +50,7 @@
   export let userUrlOverride: string | undefined = undefined
   export let subscribeUrl: string | null | undefined = undefined
   export let subscribeLabel: string = 'Подписаться'
+  export let hideSubscribe: boolean = false
   export let disableUserLink: boolean | undefined = undefined
 
   $: postUrl = linkOverride ?? postLink(post.post)
@@ -280,6 +281,7 @@
     disableUserLink={autoDisableUserLink}
     subscribeUrl={subscribeUrl ?? undefined}
     {subscribeLabel}
+    {hideSubscribe}
     authorNotifyCommentsEnabled={isBackendPost ? backendAuthorNotifyCommentsEnabled : undefined}
   >
     <slot name="badges" slot="badges" />
@@ -391,7 +393,7 @@
             {/each}
           </div>
         {/if}
-        {#if subscribeUrl}
+        {#if subscribeUrl && !hideSubscribe}
           <div class="mt-4">
             <Button
               size="sm"

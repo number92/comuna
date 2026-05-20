@@ -7,6 +7,7 @@
     backendPostToPostView,
     buildAuthorPostsUrl,
     buildBackendPostPath,
+    isSpecialProjectPost,
   } from '$lib/api/backend'
   import { env } from '$env/dynamic/public'
   import { userSettings } from '$lib/settings'
@@ -193,6 +194,7 @@
           communityUrlOverride={backendPostCommunityPath(backendPost)}
           subscribeUrl={backendPost.channel_url ?? data.author?.channel_url}
           subscribeLabel="Подписаться"
+          hideSubscribe={isSpecialProjectPost(backendPost)}
         />
       {/each}
     </div>

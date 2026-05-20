@@ -9,6 +9,7 @@
     backendPostToPostView,
     buildBackendPostPath,
     buildPublicUserProfileUrl,
+    isSpecialProjectPost,
     type BackendPost,
     type BackendPublicSiteUser,
     type BackendPublicSiteUserAuthor,
@@ -421,6 +422,7 @@
             communityUrlOverride={backendPostCommunityPath(backendPost)}
             subscribeUrl={backendPost.channel_url ?? backendPost.author?.channel_url}
             subscribeLabel="Подписаться"
+            hideSubscribe={isSpecialProjectPost(backendPost)}
           />
         {/each}
       </div>

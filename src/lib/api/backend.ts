@@ -852,6 +852,11 @@ export type BackendPost = {
   author?: BackendAuthor
 }
 
+export const isSpecialProjectPost = (post: BackendPost | null | undefined): boolean => {
+  const username = post?.author?.username?.trim().toLowerCase()
+  return username === 'tambur-1001-films'
+}
+
 export const backendPostCommunityPath = (post: BackendPost): string | undefined => {
   const comunSlug = post.comun?.slug ?? post.comun_slug
   if (comunSlug) return `/comuns/${encodeURIComponent(comunSlug)}`

@@ -12,6 +12,7 @@
     backendPostToPostView,
     buildBackendPostPath,
     buildTagPostsUrl,
+    isSpecialProjectPost,
   } from '$lib/api/backend'
   import { userSettings } from '$lib/settings'
   import { normalizeTag } from '$lib/tags'
@@ -191,6 +192,7 @@
           communityUrlOverride={backendPostCommunityPath(backendPost)}
           subscribeUrl={backendPost.channel_url ?? backendPost.author?.channel_url}
           subscribeLabel="Подписаться"
+          hideSubscribe={isSpecialProjectPost(backendPost)}
         />
       {/each}
     </div>

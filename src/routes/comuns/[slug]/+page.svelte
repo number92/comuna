@@ -13,6 +13,7 @@
     buildBackendPostPath,
     buildComunPostsUrl,
     buildComunUrl,
+    isSpecialProjectPost,
     type BackendComun,
     type BackendComunCategory,
     type BackendPost,
@@ -1293,6 +1294,7 @@
         communityUrlOverride={backendPostCommunityPath(comun.welcome_post)}
         subscribeUrl={comun.welcome_post.channel_url ?? comun.welcome_post.author?.channel_url}
         subscribeLabel="Подписаться"
+        hideSubscribe={isSpecialProjectPost(comun.welcome_post)}
       />
     </section>
   {/if}
@@ -1313,6 +1315,7 @@
             communityUrlOverride={backendPostCommunityPath(backendPost)}
             subscribeUrl={backendPost.channel_url ?? backendPost.author?.channel_url}
             subscribeLabel="Подписаться"
+            hideSubscribe={isSpecialProjectPost(backendPost)}
           />
         </div>
       {/each}

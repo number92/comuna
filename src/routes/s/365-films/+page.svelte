@@ -63,6 +63,27 @@
   const authHeaders = (): Record<string, string> =>
     $siteToken ? { Authorization: `Bearer ${$siteToken}` } : {}
 
+  async function readApiJson(response: Response, fallbackMessage: string) {
+    const text = await response.text()
+    try {
+      return text ? JSON.parse(text) : null
+    } catch {
+      throw new Error(fallbackMessage)
+    }
+  }
+
+  async function ensureUserSession() {
+    if ($siteUser) return $siteUser
+    try {
+      const user = await refreshSiteUser()
+      if (user) return user
+    } catch {
+      // The auth modal below is the user-facing fallback.
+    }
+    authOpen = true
+    return null
+  }
+
   async function loadStatus() {
     loading = true
     error = ''
@@ -71,7 +92,7 @@
         credentials: 'include',
         headers: authHeaders(),
       })
-      const data = await response.json()
+      const data = await readApiJson(response, 'Не удалось загрузить спецпроект')
       if (!response.ok || !data?.ok) {
         throw new Error(data?.error || 'Не удалось загрузить спецпроект')
       }
@@ -83,8 +104,8 @@
   }
 
   async function postAction(url: string, successMessage = 'Готово') {
-    if (!$siteToken) {
-      authOpen = true
+    const user = await ensureUserSession()
+    if (!user) {
       return
     }
     actionLoading = true
@@ -94,13 +115,14 @@
         credentials: 'include',
         headers: authHeaders(),
       })
-      const data = await response.json()
+      const data = await readApiJson(response, 'Не удалось выполнить действие')
       if (!response.ok || !data?.ok) {
         throw new Error(data?.error || 'Не удалось выполнить действие')
       }
       status = {
         ok: true,
         total_count: data.subscription?.total_count ?? status?.total_count ?? 0,
+        landing_images: status?.landing_images ?? [],
         subscription: data.subscription,
       }
       toast({ content: successMessage, type: 'success' })
@@ -111,11 +133,9 @@
   }
 
   async function startJourney() {
-    if (!$siteToken || !$siteUser) {
-      authOpen = true
-      return
-    }
-    if (!$siteUser.telegram_linked) {
+    const user = await ensureUserSession()
+    if (!user) return
+    if (!user.telegram_linked) {
       telegramPromptOpen = true
       toast({
         content: 'Фильмы будут приходить в Telegram-бота и на сайт. Давайте сначала привяжем Telegram.',
@@ -130,11 +150,9 @@
   }
 
   async function resumeJourney() {
-    if (!$siteToken || !$siteUser) {
-      authOpen = true
-      return
-    }
-    if (!$siteUser.telegram_linked) {
+    const user = await ensureUserSession()
+    if (!user) return
+    if (!user.telegram_linked) {
       telegramPromptOpen = true
       toast({
         content: 'Чтобы продолжить с оповещениями, давайте привяжем Telegram.',
@@ -182,7 +200,10 @@
     )
   })
 
-  onMount(loadStatus)
+  onMount(async () => {
+    await refreshSiteUser().catch(() => null)
+    await loadStatus()
+  })
 </script>
 
 <svelte:head>
@@ -211,7 +232,7 @@
             <Icon src={ArrowPath} size="18" mini slot="prefix" />
             Загрузка
           </Button>
-        {:else if !$siteToken || !$siteUser}
+        {:else if !$siteUser}
           <Button size="lg" color="primary" on:click={() => (authOpen = true)}>
             <Icon src={LockClosed} size="18" mini slot="prefix" />
             Зарегистрироваться и начать

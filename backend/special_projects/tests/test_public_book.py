@@ -377,7 +377,7 @@ class PublicBookTests(TestCase):
         self.assertFalse(post.is_pending)
         self.assertFalse(post.is_blocked)
         self.assertEqual(post.raw_data.get("special_project", {}).get("slug"), PROJECT_SLUG)
-        self.assertIn("Книга сообщества интернет", post.title)
+        self.assertIn("Книга интернет сообщества", post.title)
         self.assertIn(post, Post.objects.filter(is_blocked=False, is_pending=False))
 
     def test_admin_stats_payload_counts_contributors_top_users_and_registrations(self):

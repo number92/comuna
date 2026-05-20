@@ -258,7 +258,7 @@
 </script>
 
 <svelte:head>
-  <title>Книга сообщества интернет: управление</title>
+  <title>Книга интернет сообщества: управление</title>
   <meta name="robots" content="noindex,nofollow" />
 </svelte:head>
 
@@ -266,7 +266,7 @@
   <header class="admin-header">
     <div>
       <a class="back-link" href="/s/book">к книге</a>
-      <h1>Книга сообщества интернет</h1>
+      <h1>Книга интернет сообщества</h1>
       <p>Управление проектом</p>
     </div>
     <Button on:click={loadAdmin} disabled={loading}>

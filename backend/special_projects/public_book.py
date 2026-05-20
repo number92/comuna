@@ -39,13 +39,15 @@ DEFAULT_RULES_TEXT = (
     "нарушениям закона и выпущена в электронном виде бесплатно."
 )
 DISCUSSION_AUTHOR_USERNAME = "tambur-book"
-DISCUSSION_AUTHOR_TITLE = "Книга сообщества интернет"
+DISCUSSION_AUTHOR_TITLE = "Книга интернет сообщества"
 DISCUSSION_AUTHOR_DESCRIPTION = (
     "https://tambur.pub/s/book/\n\n"
-    "Мы люди из интернет-сообщества вместе напишем книгу о том, что думаем, "
-    "видим, чувствуем. После завершения книга будет отцензурирована и выпущена "
-    "в электронном виде доступном бесплатно каждому и в печатном виде. Каждый "
-    "может добавлять только одно слово в сутки."
+    "Мы люди из интернет-сообщества совместно напишем книгу о том, что думаем, "
+    "видим, чувствуем - это полная свобода самовыражения. Книга будет длинной "
+    "185 000 слов, что примерно 500 страниц. Каждый пользователь пишет только "
+    "одно слово в сутки. Финальная версия будет опубликована в PDF и доступна "
+    "всем, а также будет возможность для печати бумажной версии. Проводится "
+    "проверка публикации на законность и контент может быть отцензурирован."
 )
 DISCUSSION_MESSAGE_ID = 150000001
 MAX_WORD_LENGTH = 30
@@ -611,9 +613,10 @@ def ensure_public_book_discussion_post():
 
     author = _discussion_author()
     content = (
-        "Обсуждение «Книги сообщества интернет». Здесь можно спорить о словах, "
+        "Обсуждение «Книги интернет сообщества». Здесь можно спорить о словах, "
         "правилах, финальной редактуре и бумажной версии."
     )
+    title = "Обсуждение книги интернет сообщества"
     raw_data = {
         "source": "special_project",
         "special_project": {
@@ -624,7 +627,7 @@ def ensure_public_book_discussion_post():
         author=author,
         message_id=DISCUSSION_MESSAGE_ID,
         defaults={
-            "title": "Обсуждение книги сообщества интернет",
+            "title": title,
             "content": content,
             "source_url": _site_url("/s/book"),
             "is_pending": False,
@@ -634,8 +637,8 @@ def ensure_public_book_discussion_post():
         },
     )
     updates: list[str] = []
-    if post.title != "Обсуждение книги сообщества интернет":
-        post.title = "Обсуждение книги сообщества интернет"
+    if post.title != title:
+        post.title = title
         updates.append("title")
     if post.content != content:
         post.content = content
@@ -1097,7 +1100,7 @@ def send_due_reminders(*, now=None, limit: int = 500) -> int:
             user=reminder.user,
             event_key=REMINDER_EVENT_KEY,
             title="Можно добавить слово в книгу",
-            message="Прошли 24 часа. Добавьте следующее слово в «Книгу сообщества интернет».",
+            message="Прошли 24 часа. Добавьте следующее слово в «Книгу интернет сообщества».",
             link_url="/s/book",
             payload={"project": PROJECT_SLUG, "reminder_id": reminder.id},
             force_site=False,

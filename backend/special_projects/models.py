@@ -135,8 +135,8 @@ class PublicBookState(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        verbose_name = "Состояние книги спецпроекта"
-        verbose_name_plural = "Состояния книги спецпроекта"
+        verbose_name = "Состояние книги сообщества"
+        verbose_name_plural = "Состояния книги сообщества"
 
     def __str__(self) -> str:
         return f"{self.project_slug}:{self.total_words}"
@@ -157,8 +157,8 @@ class PublicBookWord(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        verbose_name = "Слово книги спецпроекта"
-        verbose_name_plural = "Слова книги спецпроекта"
+        verbose_name = "Слово книги сообщества"
+        verbose_name_plural = "Слова книги сообщества"
         ordering = ("project_slug", "position")
         constraints = [
             models.UniqueConstraint(
@@ -175,6 +175,39 @@ class PublicBookWord(models.Model):
 
     def __str__(self) -> str:
         return f"{self.position}. {self.word}"
+
+
+class PublicBookReminder(models.Model):
+    PROJECT_SLUG = PublicBookState.PROJECT_SLUG
+
+    project_slug = models.SlugField(max_length=80, default=PROJECT_SLUG)
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="public_book_reminders",
+    )
+    scheduled_at = models.DateTimeField()
+    sent_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Напоминание книги сообщества"
+        verbose_name_plural = "Напоминания книги сообщества"
+        ordering = ("scheduled_at", "id")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("project_slug", "user", "scheduled_at"),
+                name="special_projects_public_book_unique_reminder",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=("project_slug", "sent_at", "scheduled_at")),
+            models.Index(fields=("user", "sent_at", "scheduled_at")),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.project_slug}:{self.user_id}:{self.scheduled_at:%Y-%m-%d %H:%M}"
 
 
 class PublicBookBlockedWord(models.Model):

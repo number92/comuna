@@ -86,6 +86,7 @@ from special_projects.views import (
     landname_share_event,
     landname_suggestions,
     landname_tile,
+    public_book_reminder,
     public_book_status,
     public_book_submit,
     public_book_words,
@@ -291,6 +292,11 @@ urlpatterns = [
         "api/special-projects/book/submit/",
         public_book_submit,
         name="special-book-submit",
+    ),
+    path(
+        "api/special-projects/book/reminder/",
+        public_book_reminder,
+        name="special-book-reminder",
     ),
     path(
         "api/special-projects/365-films/status/",

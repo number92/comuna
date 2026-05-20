@@ -81,6 +81,14 @@ NOTIFICATION_EVENT_DEFINITIONS: list[dict[str, Any]] = [
         "default_telegram_enabled": True,
         "default_push_enabled": True,
     },
+    {
+        "key": "public_book_reminder",
+        "title": "Напоминание книги сообщества",
+        "description": "Одноразовое напоминание добавить следующее слово в книгу.",
+        "default_site_enabled": False,
+        "default_telegram_enabled": True,
+        "default_push_enabled": False,
+    },
 ]
 
 _NOTIFICATION_EVENT_MAP = {

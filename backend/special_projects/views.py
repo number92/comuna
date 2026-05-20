@@ -286,6 +286,35 @@ def public_book_submit(request: HttpRequest) -> HttpResponse:
     )
 
 
+@csrf_exempt
+def public_book_reminder(request: HttpRequest) -> HttpResponse:
+    user = _get_user_from_request(request)
+    if user is None:
+        return JsonResponse({"ok": False, "error": "unauthorized"}, status=401)
+    if request.method != "POST":
+        return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)
+    try:
+        reminder = public_book.schedule_reminder_for_user(user)
+    except ValueError as exc:
+        return JsonResponse(
+            {
+                "ok": False,
+                "error": str(exc),
+                "requires_telegram": "Telegram" in str(exc),
+                **public_book.can_submit_payload(user),
+            },
+            status=400,
+        )
+    return JsonResponse(
+        {
+            "ok": True,
+            "reminder": public_book.serialize_reminder(reminder),
+            **public_book.project_status_for_user(user),
+        },
+        status=201,
+    )
+
+
 def film_journey_status(request: HttpRequest) -> HttpResponse:
     if request.method != "GET":
         return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)

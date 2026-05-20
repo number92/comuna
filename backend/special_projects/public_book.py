@@ -8,7 +8,12 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 from django.utils import timezone
 
-from special_projects.models import PublicBookBlockedWord, PublicBookState, PublicBookWord
+from special_projects.models import (
+    PublicBookBlockedWord,
+    PublicBookReminder,
+    PublicBookState,
+    PublicBookWord,
+)
 
 User = get_user_model()
 
@@ -16,13 +21,17 @@ PROJECT_SLUG = PublicBookState.PROJECT_SLUG
 MAX_WORDS = 185_000
 SUBMISSION_INTERVAL = timedelta(hours=24)
 DISCUSSION_AUTHOR_USERNAME = "tambur-book"
-DISCUSSION_AUTHOR_TITLE = "Книга одного слова"
+DISCUSSION_AUTHOR_TITLE = "Книга сообщества интернет"
 DISCUSSION_AUTHOR_DESCRIPTION = (
     "https://tambur.pub/s/book/\n\n"
-    "Ироничный спецпроект Tambur: каждый зарегистрированный пользователь может "
-    "добавить одно слово в общую книгу не чаще раза в 24 часа."
+    "Мы люди из интернет-сообщества вместе напишем книгу о том, что думаем, "
+    "видим, чувствуем. После завершения книга будет отцензурирована и выпущена "
+    "в электронном виде доступном бесплатно каждому и в печатном виде. Каждый "
+    "может добавлять только одно слово в сутки."
 )
 DISCUSSION_MESSAGE_ID = 150000001
+MAX_WORD_LENGTH = 30
+REMINDER_EVENT_KEY = "public_book_reminder"
 
 
 def _site_url(path: str) -> str:
@@ -40,8 +49,8 @@ def normalize_public_book_word(value: str) -> dict[str, str]:
         raise ValueError("Введите одно слово.")
     if any(char.isspace() for char in word):
         raise ValueError("Можно отправить только одно слово без пробелов.")
-    if len(word) > 64:
-        raise ValueError("Слово слишком длинное.")
+    if len(word) > MAX_WORD_LENGTH:
+        raise ValueError("Слово не должно быть длиннее 30 символов.")
     if not all(char.isalpha() for char in word):
         raise ValueError("Слово должно состоять только из букв.")
     normalized = word.casefold().replace("ё", "е")
@@ -88,11 +97,71 @@ def _next_available_at_for_user(user: User | None, now=None):
     return candidate if candidate > current else None
 
 
+def _latest_word_for_user(user: User | None) -> PublicBookWord | None:
+    if user is None:
+        return None
+    return (
+        PublicBookWord.objects.filter(project_slug=PROJECT_SLUG, submitted_by=user)
+        .order_by("-created_at", "-id")
+        .first()
+    )
+
+
+def _user_has_telegram(user: User | None) -> bool:
+    return bool(user is not None and hasattr(user, "telegram_account"))
+
+
+def _user_has_vk(user: User | None) -> bool:
+    return bool(user is not None and hasattr(user, "vk_account"))
+
+
+def _user_has_social_identity(user: User | None) -> bool:
+    return _user_has_telegram(user) or _user_has_vk(user)
+
+
+def reminder_payload_for_user(user: User | None, now=None) -> dict[str, Any]:
+    latest = _latest_word_for_user(user)
+    if user is None or latest is None:
+        return {"scheduled": False, "scheduled_at": None, "sent_at": None}
+    scheduled_at = latest.created_at + SUBMISSION_INTERVAL
+    if scheduled_at <= (now or timezone.now()):
+        return {"scheduled": False, "scheduled_at": None, "sent_at": None}
+    reminder = (
+        PublicBookReminder.objects.filter(
+            project_slug=PROJECT_SLUG,
+            user=user,
+            scheduled_at=scheduled_at,
+        )
+        .order_by("-id")
+        .first()
+    )
+    return {
+        "scheduled": bool(reminder and reminder.sent_at is None),
+        "scheduled_at": reminder.scheduled_at.isoformat() if reminder else None,
+        "sent_at": reminder.sent_at.isoformat() if reminder and reminder.sent_at else None,
+    }
+
+
 def can_submit_payload(user: User | None, now=None) -> dict[str, Any]:
     next_available_at = _next_available_at_for_user(user, now=now)
+    has_social_identity = _user_has_social_identity(user)
+    can_submit = bool(user is not None and has_social_identity and next_available_at is None)
+    if user is None:
+        reason = "auth_required"
+    elif not has_social_identity:
+        reason = "social_required"
+    elif next_available_at is not None:
+        reason = "cooldown"
+    else:
+        reason = ""
     return {
-        "can_submit": bool(user is not None and next_available_at is None),
+        "can_submit": can_submit,
+        "submit_block_reason": reason,
         "next_available_at": next_available_at.isoformat() if next_available_at else None,
+        "telegram_linked": _user_has_telegram(user),
+        "vk_linked": _user_has_vk(user),
+        "has_social_identity": has_social_identity,
+        "reminder": reminder_payload_for_user(user, now=now),
     }
 
 
@@ -125,7 +194,7 @@ def ensure_public_book_discussion_post():
 
     author = _discussion_author()
     content = (
-        "Обсуждение спецпроекта «Книга одного слова». Здесь можно спорить о словах, "
+        "Обсуждение «Книги сообщества интернет». Здесь можно спорить о словах, "
         "правилах, финальной редактуре и бумажной версии."
     )
     raw_data = {
@@ -138,7 +207,7 @@ def ensure_public_book_discussion_post():
         author=author,
         message_id=DISCUSSION_MESSAGE_ID,
         defaults={
-            "title": "Обсуждение книги одного слова",
+            "title": "Обсуждение книги сообщества интернет",
             "content": content,
             "source_url": _site_url("/s/book"),
             "is_pending": False,
@@ -148,8 +217,8 @@ def ensure_public_book_discussion_post():
         },
     )
     updates: list[str] = []
-    if post.title != "Обсуждение книги одного слова":
-        post.title = "Обсуждение книги одного слова"
+    if post.title != "Обсуждение книги сообщества интернет":
+        post.title = "Обсуждение книги сообщества интернет"
         updates.append("title")
     if post.content != content:
         post.content = content
@@ -231,6 +300,9 @@ def submit_word(user: User, raw_word: str) -> PublicBookWord:
         if state.total_words >= MAX_WORDS:
             raise ValueError("Книга уже набрала 185000 слов.")
 
+        if not _user_has_social_identity(user):
+            raise ValueError("Чтобы добавить слово, привяжите Telegram или VK к учетной записи.")
+
         next_available_at = _next_available_at_for_user(user, now=now)
         if next_available_at is not None:
             raise ValueError("Следующее слово можно будет добавить через 24 часа после предыдущего.")
@@ -253,3 +325,63 @@ def submit_word(user: User, raw_word: str) -> PublicBookWord:
         state.total_words += 1
         state.save(update_fields=("total_words", "updated_at"))
         return word
+
+
+def schedule_reminder_for_user(user: User) -> PublicBookReminder:
+    if not _user_has_telegram(user):
+        raise ValueError("Чтобы получить напоминание, привяжите Telegram к учетной записи.")
+
+    latest = _latest_word_for_user(user)
+    if latest is None:
+        raise ValueError("Сначала добавьте слово в книгу.")
+
+    scheduled_at = latest.created_at + SUBMISSION_INTERVAL
+    if scheduled_at <= timezone.now():
+        raise ValueError("Вы уже можете добавить следующее слово.")
+
+    reminder, _created = PublicBookReminder.objects.get_or_create(
+        project_slug=PROJECT_SLUG,
+        user=user,
+        scheduled_at=scheduled_at,
+    )
+    return reminder
+
+
+def serialize_reminder(reminder: PublicBookReminder) -> dict[str, Any]:
+    return {
+        "scheduled": reminder.sent_at is None,
+        "scheduled_at": reminder.scheduled_at.isoformat(),
+        "sent_at": reminder.sent_at.isoformat() if reminder.sent_at else None,
+    }
+
+
+def send_due_reminders(*, now=None, limit: int = 500) -> int:
+    from notifications.service import create_user_notification
+
+    current_time = now or timezone.now()
+    sent = 0
+    reminders = list(
+        PublicBookReminder.objects.select_related("user")
+        .filter(project_slug=PROJECT_SLUG, sent_at__isnull=True, scheduled_at__lte=current_time)
+        .order_by("scheduled_at", "id")[: max(int(limit or 1), 1)]
+    )
+    for reminder in reminders:
+        if not _user_has_telegram(reminder.user):
+            reminder.sent_at = current_time
+            reminder.save(update_fields=("sent_at", "updated_at"))
+            continue
+        create_user_notification(
+            user=reminder.user,
+            event_key=REMINDER_EVENT_KEY,
+            title="Можно добавить слово в книгу",
+            message="Прошли 24 часа. Добавьте следующее слово в «Книгу сообщества интернет».",
+            link_url="/s/book",
+            payload={"project": PROJECT_SLUG, "reminder_id": reminder.id},
+            force_site=False,
+            force_telegram=True,
+            force_push=False,
+        )
+        reminder.sent_at = current_time
+        reminder.save(update_fields=("sent_at", "updated_at"))
+        sent += 1
+    return sent

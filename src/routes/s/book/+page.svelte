@@ -2,6 +2,7 @@
   import { onMount } from 'svelte'
   import { Button, toast } from 'mono-svelte'
   import {
+    buildSpecialBookReminderUrl,
     buildSpecialBookStatusUrl,
     buildSpecialBookSubmitUrl,
     buildSpecialBookWordsUrl,
@@ -11,7 +12,7 @@
   import { siteToken, siteUser } from '$lib/siteAuth'
   import {
     ArrowPath,
-    BookOpen,
+    Bell,
     Check,
     Clock,
     Icon,
@@ -35,7 +36,16 @@
     total_words: number
     remaining_words: number
     can_submit: boolean
+    submit_block_reason?: string
     next_available_at?: string | null
+    telegram_linked?: boolean
+    vk_linked?: boolean
+    has_social_identity?: boolean
+    reminder?: {
+      scheduled: boolean
+      scheduled_at?: string | null
+      sent_at?: string | null
+    }
     discussion_post?: {
       id: number
       comments_count: number
@@ -43,15 +53,18 @@
   }
 
   const PAGE_LIMIT = 700
+  const WORD_LIMIT = 30
 
   let status: BookStatus | null = null
   let words: BookWord[] = []
   let loading = true
   let wordsLoading = false
   let submitLoading = false
+  let reminderLoading = false
   let error = ''
   let word = ''
   let authOpen = false
+  let authInitialMode: 'login' | 'signup' = 'signup'
   let loadedOffset = 0
   let lastToken: string | null = null
 
@@ -62,7 +75,7 @@
     value
       .replace(/\s+/g, '')
       .replace(/[^\p{L}]/gu, '')
-      .slice(0, 64)
+      .slice(0, WORD_LIMIT)
 
   const formatNumber = (value?: number | null) =>
     new Intl.NumberFormat('ru-RU').format(value ?? 0)
@@ -130,7 +143,14 @@
 
   async function submitWord() {
     if (!$siteToken || !$siteUser) {
+      authInitialMode = 'signup'
       authOpen = true
+      return
+    }
+    if (!$siteUser.telegram_linked && !$siteUser.vk_linked) {
+      authInitialMode = 'login'
+      authOpen = true
+      toast({ content: 'Привяжите Telegram или VK, чтобы добавить слово.', type: 'info' })
       return
     }
     const cleanWord = normalizeInput(word)
@@ -158,6 +178,11 @@
               ...status,
               can_submit: Boolean(data?.can_submit),
               next_available_at: data?.next_available_at ?? status.next_available_at,
+              submit_block_reason: data?.submit_block_reason ?? status.submit_block_reason,
+              telegram_linked: data?.telegram_linked ?? status.telegram_linked,
+              vk_linked: data?.vk_linked ?? status.vk_linked,
+              has_social_identity: data?.has_social_identity ?? status.has_social_identity,
+              reminder: data?.reminder ?? status.reminder,
             }
           : status
         throw new Error(data?.error || 'Не удалось добавить слово')
@@ -171,6 +196,53 @@
     submitLoading = false
   }
 
+  async function scheduleReminder() {
+    if (!$siteToken || !$siteUser) {
+      authInitialMode = 'login'
+      authOpen = true
+      return
+    }
+    if (!$siteUser.telegram_linked) {
+      authInitialMode = 'login'
+      authOpen = true
+      toast({ content: 'Привяжите Telegram, чтобы получить напоминание.', type: 'info' })
+      return
+    }
+
+    reminderLoading = true
+    try {
+      const response = await fetch(buildSpecialBookReminderUrl(), {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          ...authHeaders(),
+        },
+      })
+      const data = await response.json()
+      if (!response.ok || !data?.ok) {
+        status = status
+          ? {
+              ...status,
+              reminder: data?.reminder ?? status.reminder,
+              can_submit: Boolean(data?.can_submit),
+              next_available_at: data?.next_available_at ?? status.next_available_at,
+            }
+          : status
+        if (data?.requires_telegram) {
+          authInitialMode = 'login'
+          authOpen = true
+        }
+        throw new Error(data?.error || 'Не удалось поставить напоминание')
+      }
+      status = data as BookStatus
+      toast({ content: 'Напоминание в Telegram включено', type: 'success' })
+    } catch (err) {
+      toast({ content: (err as Error)?.message || 'Не удалось поставить напоминание', type: 'error' })
+    }
+    reminderLoading = false
+  }
+
   $: progressPercent = status
     ? Math.min(100, Math.max(0, (status.total_words / status.max_words) * 100))
     : 0
@@ -179,6 +251,9 @@
   $: bookText = words.map((item) => item.word).join(' ')
   $: canLoadMore = Boolean(status && words.length < status.total_words)
   $: submitDisabled = submitLoading || loading || Boolean(status && !status.can_submit)
+  $: needsSocialLink = Boolean($siteUser && !$siteUser.telegram_linked && !$siteUser.vk_linked)
+  $: canShowReminder = Boolean($siteUser && status?.next_available_at)
+  $: reminderScheduled = Boolean(status?.reminder?.scheduled)
 
   $: if ($siteToken !== lastToken) {
     lastToken = $siteToken
@@ -193,30 +268,26 @@
 </script>
 
 <svelte:head>
-  <title>Книга одного слова — спецпроект Tambur</title>
+  <title>Книга сообщества интернет — Tambur</title>
   <meta
     name="description"
-    content="Ироничный спецпроект Tambur: каждый зарегистрированный пользователь может добавить одно слово в общую книгу."
+    content="Мы люди из интернет-сообщества вместе напишем книгу о том, что думаем, видим, чувствуем."
   />
   <link rel="canonical" href="/s/book" />
 </svelte:head>
 
-<LoginModal bind:open={authOpen} initialMode="signup" />
+<LoginModal bind:open={authOpen} initialMode={authInitialMode} />
 
 <section class="book-page">
   <div class="hero-band">
     <div class="hero-inner">
       <div class="hero-copy">
-        <div class="project-mark">
-          <Icon src={BookOpen} size="18" mini />
-          спецпроект
-        </div>
-        <h1>Книга одного слова</h1>
+        <h1>Книга сообщества интернет</h1>
         <p>
-          Это ироничный проект, создающий артефакт интернета, который дает свободу
-          написать, что думает сообщество совместными усилиями. Финальная версия
-          будет отцензурирована по нарушениям закона и выпущена в виде бумажной
-          версии и PDF, доступной бесплатно любому.
+          Мы люди из интернет-сообщества вместе напишем книгу о том, что думаем,
+          видим, чувствуем. После завершения книга будет отцензурирована и выпущена
+          в электронном виде доступном бесплатно каждому и в печатном виде. Каждый
+          может добавлять только одно слово в сутки.
         </p>
       </div>
 
@@ -234,6 +305,11 @@
           <div class="cooldown">
             <Icon src={Clock} size="16" mini />
             Следующее слово: {formatDate(status.next_available_at)}
+          </div>
+        {/if}
+        {#if needsSocialLink}
+          <div class="counter-note">
+            Чтобы добавить слово, привяжите Telegram или VK к учетной записи.
           </div>
         {/if}
       </div>
@@ -265,10 +341,13 @@
               bind:value={word}
               on:input={(event) => (word = normalizeInput((event.currentTarget as HTMLInputElement).value))}
               on:focus={() => {
-                if (!$siteUser) authOpen = true
+                if (!$siteUser) {
+                  authInitialMode = 'signup'
+                  authOpen = true
+                }
               }}
               placeholder="слово"
-              maxlength="64"
+              maxlength={WORD_LIMIT}
               autocomplete="off"
               disabled={submitLoading || loading}
               aria-label="Добавить слово в книгу"
@@ -278,7 +357,22 @@
                 type="button"
                 class="inline-submit"
                 aria-label="Войти, чтобы добавить слово"
-                on:click={() => (authOpen = true)}
+                on:click={() => {
+                  authInitialMode = 'signup'
+                  authOpen = true
+                }}
+              >
+                <Icon src={LockClosed} size="16" mini />
+              </button>
+            {:else if needsSocialLink}
+              <button
+                type="button"
+                class="inline-submit"
+                aria-label="Привязать Telegram или VK"
+                on:click={() => {
+                  authInitialMode = 'login'
+                  authOpen = true
+                }}
               >
                 <Icon src={LockClosed} size="16" mini />
               </button>
@@ -298,6 +392,26 @@
             {/if}
           </form>
         </div>
+        {#if canShowReminder}
+          <div class="reminder-row">
+            {#if reminderScheduled}
+              <Button color="secondary" disabled>
+                <Icon src={Bell} size="18" mini slot="prefix" />
+                Напоминание включено
+              </Button>
+            {:else if $siteUser?.telegram_linked}
+              <Button color="secondary" loading={reminderLoading} disabled={reminderLoading} on:click={scheduleReminder}>
+                <Icon src={Bell} size="18" mini slot="prefix" />
+                Напомнить через 24 часа
+              </Button>
+            {:else}
+              <Button color="secondary" disabled={reminderLoading} on:click={scheduleReminder}>
+                <Icon src={Bell} size="18" mini slot="prefix" />
+                Привязать Telegram для напоминания
+              </Button>
+            {/if}
+          </div>
+        {/if}
         {#if canLoadMore}
           <div class="load-more">
             <Button color="secondary" loading={wordsLoading} disabled={wordsLoading} on:click={() => loadWords()}>
@@ -341,17 +455,6 @@
     gap: 48px;
     align-items: end;
     padding: 64px 0 42px;
-  }
-
-  .project-mark {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 16px;
-    color: #2f6f59;
-    font-size: 13px;
-    font-weight: 700;
-    text-transform: uppercase;
   }
 
   h1 {
@@ -437,6 +540,13 @@
     margin-top: 14px;
     color: #6b7280;
     font-size: 14px;
+  }
+
+  .counter-note {
+    margin-top: 14px;
+    color: #7c5f2f;
+    font-size: 14px;
+    line-height: 1.45;
   }
 
   .book-inner {
@@ -532,6 +642,12 @@
     display: flex;
     justify-content: center;
     margin-top: 24px;
+  }
+
+  .reminder-row {
+    display: flex;
+    justify-content: flex-start;
+    margin-top: 20px;
   }
 
   .error {

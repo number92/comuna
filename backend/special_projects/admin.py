@@ -6,6 +6,7 @@ from special_projects.models import (
     FilmJourneyFilm,
     FilmJourneySubscription,
     PublicBookBlockedWord,
+    PublicBookReminder,
     PublicBookState,
     PublicBookWord,
     SpecialProjectGeneratedPhrase,
@@ -90,6 +91,16 @@ class PublicBookBlockedWordAdmin(admin.ModelAdmin):
         if not obj.created_by_id:
             obj.created_by = request.user
         super().save_model(request, obj, form, change)
+
+
+@admin.register(PublicBookReminder)
+class PublicBookReminderAdmin(admin.ModelAdmin):
+    list_display = ("project_slug", "user", "scheduled_at", "sent_at", "created_at")
+    list_filter = ("project_slug", "scheduled_at", "sent_at", "created_at")
+    search_fields = ("user__username", "user__email")
+    autocomplete_fields = ("user",)
+    readonly_fields = ("created_at", "updated_at")
+    ordering = ("scheduled_at", "id")
 
 
 @admin.register(FilmJourneyFilm)

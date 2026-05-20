@@ -26,6 +26,20 @@ services:
       - media_data:/app/media
       - static_data:/app/staticfiles
 
+  public-book-reminders:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.backend
+    restart: unless-stopped
+    command: sh -c "while true; do python manage.py send_public_book_reminders_due || true; sleep 60; done"
+    env_file:
+      - .env.backend
+    extra_hosts:
+      - "api.telegram.org:149.154.167.220"
+      - "oauth.telegram.org:149.154.167.220"
+    depends_on:
+      - db
+
   frontend:
     build:
       context: ..

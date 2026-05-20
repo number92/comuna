@@ -289,6 +289,10 @@ export const buildSpecialBookSubmitUrl = (): string => {
   return `${getBackendBaseUrl()}/api/special-projects/book/submit/`
 }
 
+export const buildSpecialBookReminderUrl = (): string => {
+  return `${getBackendBaseUrl()}/api/special-projects/book/reminder/`
+}
+
 export const buildSpecial1001FilmsStatusUrl = (): string => {
   return `${getBackendBaseUrl()}/api/special-projects/365-films/status/`
 }

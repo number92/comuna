@@ -32,6 +32,10 @@ SUBMISSION_INTERVAL = timedelta(hours=24)
 MODERATION_VIOLATION_LIMIT = 3
 MODERATION_LOCK_INTERVAL = timedelta(hours=24)
 BLOCKED_WORD_WARNING = "Кажется вы хотите вбить что-то недозволенное, ай-яй-яй."
+SOCIAL_IDENTITY_REQUIRED_MESSAGE = (
+    "Только пользователи с привязанным телеграм или вк могут писать эту книгу - "
+    "привязать можно одной кнопкой в настройках: https://tambur.pub/settings"
+)
 DEFAULT_RULES_TEXT = (
     "Каждый зарегистрированный пользователь с привязанным Telegram или VK может добавить "
     "одно слово или знак препинания в сутки. Запись должна состоять только из букв "
@@ -493,6 +497,11 @@ def _latest_word_for_user(user: User | None) -> PublicBookWord | None:
     )
 
 
+def _expected_reminder_at_for_user(user: User | None):
+    latest = _latest_word_for_user(user)
+    return latest.created_at + SUBMISSION_INTERVAL if latest is not None else None
+
+
 def moderation_lock_until_for_user(user: User | None, now=None):
     if user is None:
         return None
@@ -518,10 +527,9 @@ def _user_has_social_identity(user: User | None) -> bool:
 
 
 def reminder_payload_for_user(user: User | None, now=None) -> dict[str, Any]:
-    latest = _latest_word_for_user(user)
-    if user is None or latest is None:
+    scheduled_at = _expected_reminder_at_for_user(user)
+    if user is None or scheduled_at is None:
         return {"scheduled": False, "scheduled_at": None, "sent_at": None}
-    scheduled_at = latest.created_at + SUBMISSION_INTERVAL
     if scheduled_at <= (now or timezone.now()):
         return {"scheduled": False, "scheduled_at": None, "sent_at": None}
     reminder = (
@@ -974,7 +982,7 @@ def submit_word(user: User, raw_word: str) -> PublicBookWord:
             raise ValueError("Книга уже набрала 185000 слов.")
 
         if not _user_has_social_identity(user):
-            raise ValueError("Чтобы добавить слово, привяжите Telegram или VK к учетной записи.")
+            raise ValueError(SOCIAL_IDENTITY_REQUIRED_MESSAGE)
 
         next_available_at = _next_available_at_for_user(user, now=now)
         if next_available_at is not None:
@@ -1013,13 +1021,18 @@ def schedule_reminder_for_user(user: User) -> PublicBookReminder:
     if not _user_has_telegram(user):
         raise ValueError("Чтобы получить напоминание, привяжите Telegram к учетной записи.")
 
-    latest = _latest_word_for_user(user)
-    if latest is None:
+    scheduled_at = _expected_reminder_at_for_user(user)
+    if scheduled_at is None:
         raise ValueError("Сначала добавьте слово в книгу.")
 
-    scheduled_at = latest.created_at + SUBMISSION_INTERVAL
     if scheduled_at <= timezone.now():
         raise ValueError("Вы уже можете добавить следующее слово.")
+
+    PublicBookReminder.objects.filter(
+        project_slug=PROJECT_SLUG,
+        user=user,
+        sent_at__isnull=True,
+    ).exclude(scheduled_at=scheduled_at).delete()
 
     reminder, _created = PublicBookReminder.objects.get_or_create(
         project_slug=PROJECT_SLUG,
@@ -1103,6 +1116,10 @@ def send_due_reminders(*, now=None, limit: int = 500) -> int:
         .order_by("scheduled_at", "id")[: max(int(limit or 1), 1)]
     )
     for reminder in reminders:
+        expected_scheduled_at = _expected_reminder_at_for_user(reminder.user)
+        if expected_scheduled_at != reminder.scheduled_at:
+            reminder.delete()
+            continue
         if not _user_has_telegram(reminder.user):
             reminder.sent_at = current_time
             reminder.save(update_fields=("sent_at", "updated_at"))

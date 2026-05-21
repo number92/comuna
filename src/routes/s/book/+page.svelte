@@ -77,6 +77,8 @@
   const WORD_LIMIT = 30
   const REGISTRATION_SOURCE = 'book'
   const REGISTRATION_PATH = '/s/book'
+  const SOCIAL_LINK_REQUIRED_MESSAGE =
+    'Только пользователи с привязанным телеграм или вк могут писать эту книгу - привязать можно одной кнопкой в настройках: https://tambur.pub/settings'
   const DEFAULT_RULES_TEXT =
     'Каждый зарегистрированный пользователь с привязанным Telegram или VK может добавить одно слово или знак препинания в сутки. Запись должна состоять только из букв и знаков препинания и быть не длиннее 30 символов. Слова из стоп-листа не принимаются. Финальная версия книги будет отцензурирована по нарушениям закона и выпущена в электронном виде бесплатно.'
 
@@ -185,9 +187,7 @@
       return
     }
     if (!$siteUser.telegram_linked && !$siteUser.vk_linked) {
-      authInitialMode = 'login'
-      authOpen = true
-      toast({ content: 'Привяжите Telegram или VK, чтобы добавить слово.', type: 'info' })
+      toast({ content: SOCIAL_LINK_REQUIRED_MESSAGE, type: 'info' })
       return
     }
     if (status && !status.can_submit) {
@@ -608,7 +608,8 @@
         {/if}
         {#if needsSocialLink}
           <div class="counter-note">
-            Чтобы добавить слово, привяжите Telegram или VK к учетной записи.
+            Только пользователи с привязанным телеграм или вк могут писать эту книгу -
+            <a href="/settings">привязать можно одной кнопкой в настройках</a>.
           </div>
         {/if}
         {#if canShowReminder}
@@ -693,6 +694,8 @@
               placeholder="слово"
               maxlength={WORD_LIMIT}
               autocomplete="off"
+              autocapitalize="none"
+              spellcheck="false"
               disabled={submitLoading || loading}
               aria-label="Добавить слово в книгу"
             />
@@ -710,13 +713,9 @@
               </button>
             {:else if needsSocialLink}
               <button
-                type="button"
+                type="submit"
                 class="inline-submit"
                 aria-label="Привязать Telegram или VK"
-                on:click={() => {
-                  authInitialMode = 'login'
-                  authOpen = true
-                }}
               >
                 <Icon src={LockClosed} size="16" mini />
               </button>

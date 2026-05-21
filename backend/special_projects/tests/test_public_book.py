@@ -16,6 +16,7 @@ from special_projects.public_book import (
     DISCUSSION_AUTHOR_TITLE,
     MAX_WORDS,
     PROJECT_SLUG,
+    SOCIAL_IDENTITY_REQUIRED_MESSAGE,
     admin_stats_payload,
     censor_admin_selection,
     censor_admin_word,
@@ -181,11 +182,11 @@ class PublicBookTests(TestCase):
     def test_submit_word_creates_position_and_updates_status(self):
         user = self.make_user("book-user", telegram=True)
 
-        word = submit_word(user, "Свобода")
+        word = submit_word(user, "сВоБоДа")
         status = project_status_for_user(user)
 
         self.assertEqual(word.position, 1)
-        self.assertEqual(word.word, "Свобода")
+        self.assertEqual(word.word, "сВоБоДа")
         self.assertEqual(word.normalized_word, "свобода")
         self.assertEqual(PublicBookState.objects.get(project_slug=PROJECT_SLUG).total_words, 1)
         self.assertEqual(status["total_words"], 1)
@@ -204,7 +205,7 @@ class PublicBookTests(TestCase):
         self.assertFalse(status["can_submit"])
         self.assertEqual(status["submit_block_reason"], "social_required")
 
-        with self.assertRaisesMessage(ValueError, "Telegram или VK"):
+        with self.assertRaisesMessage(ValueError, SOCIAL_IDENTITY_REQUIRED_MESSAGE):
             submit_word(user, "Свобода")
 
     def test_submit_word_allows_vk_link(self):
@@ -387,6 +388,28 @@ class PublicBookTests(TestCase):
         self.assertTrue(send_mock.called)
         reminder.refresh_from_db()
         self.assertIsNotNone(reminder.sent_at)
+
+    def test_send_due_reminders_skips_stale_reminder_after_new_word(self):
+        user = self.make_user("stale-reminder-book-user", telegram=True)
+        now = timezone.now()
+        first_word = submit_word(user, "Первое")
+        first_word.created_at = now - timedelta(hours=25)
+        first_word.save(update_fields=("created_at",))
+        stale_reminder = PublicBookReminder.objects.create(
+            project_slug=PROJECT_SLUG,
+            user=user,
+            scheduled_at=first_word.created_at + timedelta(hours=24),
+        )
+        second_word = submit_word(user, "Второе")
+        second_word.created_at = now
+        second_word.save(update_fields=("created_at",))
+
+        with patch("notifications.service.send_site_notification_to_telegram") as send_mock:
+            sent = send_due_reminders(now=now)
+
+        self.assertEqual(sent, 0)
+        self.assertFalse(send_mock.called)
+        self.assertFalse(PublicBookReminder.objects.filter(id=stale_reminder.id).exists())
 
     def test_discussion_post_is_public(self):
         post = ensure_public_book_discussion_post()

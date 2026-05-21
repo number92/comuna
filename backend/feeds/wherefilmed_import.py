@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hmac
 import json
+import logging
 import os
 import re
 import secrets
@@ -12,6 +13,7 @@ from html import escape
 from typing import Any
 
 from django.conf import settings
+from django.core.exceptions import RequestDataTooBig
 from django.db import IntegrityError, transaction
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
@@ -27,6 +29,8 @@ WHEREFILMED_CATEGORY_NAME = "локации"
 WHEREFILMED_AUTHOR_USERNAME = "wherefilmed"
 WHEREFILMED_MESSAGE_ID_BASE = -3_000_000_000_000
 WHEREFILMED_IMAGE_MAX_BYTES = 15 * 1024 * 1024
+
+logger = logging.getLogger(__name__)
 
 
 class WhereFilmedImportError(Exception):
@@ -174,7 +178,10 @@ def _download_image(url: str, *, movie_id: int) -> str:
     if not ext or len(ext) > 8:
         ext = ".jpg"
     filename = f"posts/wherefilmed/{movie_id}/{secrets.token_hex(10)}{ext}"
-    image_set = save_image_with_variants(data=data, original_path=filename)
+    try:
+        image_set = save_image_with_variants(data=data, original_path=filename)
+    except Exception as exc:
+        raise WhereFilmedImportError(f"failed to store image: {source_url}", 502) from exc
     return build_public_storage_url(image_set.default_url)
 
 
@@ -449,6 +456,7 @@ def _import_payload(payload: dict[str, Any]) -> tuple[Post, bool]:
     content, saved_images, image_payload = _build_content(payload, movie_id=movie_id)
     raw_data = _raw_data(payload, movie_id=movie_id, saved_images=saved_images, image_payload=image_payload)
     source = payload.get("source") if isinstance(payload.get("source"), dict) else {}
+    source_url = _public_url(source.get("url"))
 
     try:
         with transaction.atomic():
@@ -492,8 +500,15 @@ def wherefilmed_import(request: HttpRequest) -> HttpResponse:
         post, created = _import_payload(payload)
     except json.JSONDecodeError:
         return JsonResponse({"ok": False, "error": "invalid json"}, status=400)
+    except RequestDataTooBig:
+        return JsonResponse({"ok": False, "error": "payload is too large"}, status=413)
     except WhereFilmedImportError as exc:
+        if exc.status >= 500:
+            logger.warning("wherefilmed import failed: %s", exc, exc_info=True)
         return JsonResponse({"ok": False, "error": str(exc)}, status=exc.status)
+    except Exception as exc:
+        logger.exception("wherefilmed import failed with an unexpected error")
+        return JsonResponse({"ok": False, "error": f"internal import error: {type(exc).__name__}"}, status=500)
 
     status = 201 if created else 200
     return JsonResponse({"id": str(post.id), "url": _post_public_url(post)}, status=status)

@@ -87,6 +87,7 @@ class WhereFilmedImportTests(TestCase):
         post = Post.objects.get(author=author, message_id=-3000000000123)
         self.assertEqual(payload["id"], str(post.id))
         self.assertEqual(post.title, "Где снимали «Дружба / Friendship (2024)»")
+        self.assertEqual(post.source_url, "https://wherefilmed.org/ru/example-movie/")
         self.assertEqual(post.raw_data["source"], "manual_comun")
         self.assertEqual(post.raw_data["comun_slug"], "wherefilmed")
         self.assertEqual(post.raw_data["wherefilmed"]["movie_id"], 123)

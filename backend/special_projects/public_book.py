@@ -1042,6 +1042,15 @@ def schedule_reminder_for_user(user: User) -> PublicBookReminder:
     return reminder
 
 
+def cancel_reminder_for_user(user: User) -> int:
+    deleted_count, _deleted_by_model = PublicBookReminder.objects.filter(
+        project_slug=PROJECT_SLUG,
+        user=user,
+        sent_at__isnull=True,
+    ).delete()
+    return deleted_count
+
+
 def serialize_reminder(reminder: PublicBookReminder) -> dict[str, Any]:
     return {
         "scheduled": reminder.sent_at is None,

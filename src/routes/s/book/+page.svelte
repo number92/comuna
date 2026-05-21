@@ -105,6 +105,7 @@
   let selectedText = ''
   let selectionCensorButtonStyle = ''
   let selectionCensorLoading = false
+  let reminderDisabledNotice = false
 
   const authHeaders = (): Record<string, string> =>
     $siteToken ? { Authorization: `Bearer ${$siteToken}` } : {}
@@ -296,10 +297,38 @@
         throw new Error(data?.error || 'Не удалось поставить напоминание')
       }
       status = data as BookStatus
+      reminderDisabledNotice = false
       toast({ content: 'Напоминание в Telegram включено', type: 'success' })
       cooldownOpen = false
     } catch (err) {
       toast({ content: (err as Error)?.message || 'Не удалось поставить напоминание', type: 'error' })
+    }
+    reminderLoading = false
+  }
+
+  async function cancelReminder() {
+    if (!$siteToken || !$siteUser) {
+      authInitialMode = 'login'
+      authOpen = true
+      return
+    }
+
+    reminderLoading = true
+    try {
+      const response = await fetch(buildSpecialBookReminderUrl(), {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: authHeaders(),
+      })
+      const data = await response.json()
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error || 'Не удалось выключить напоминание')
+      }
+      status = data as BookStatus
+      reminderDisabledNotice = true
+      toast({ content: 'Напоминание выключено', type: 'success' })
+    } catch (err) {
+      toast({ content: (err as Error)?.message || 'Не удалось выключить напоминание', type: 'error' })
     }
     reminderLoading = false
   }
@@ -463,6 +492,11 @@
   $: moderationLockedUntil = status?.moderation_locked_until || null
   $: canShowReminder = Boolean($siteUser && status?.next_available_at)
   $: reminderScheduled = Boolean(status?.reminder?.scheduled)
+  $: reminderToggleLabel = reminderScheduled
+    ? 'Напоминание включено'
+    : reminderDisabledNotice
+      ? 'Напоминание выключено'
+      : 'Напомнить через 24 часа'
   $: displayedRulesText = status?.rules_text || rulesDraft || DEFAULT_RULES_TEXT
   $: finalNotificationSubscribed = Boolean(status?.final_notification?.subscribed)
 
@@ -512,7 +546,7 @@
 </Modal>
 
 <Modal bind:open={cooldownOpen}>
-  <span slot="title">Второе слово можно добавить только через 24 часа</span>
+  <span slot="title">Следующее слово можно добавить только через 24 часа</span>
   <div class="book-modal-content">
     {#if status?.next_available_at}
       <p>Следующее слово можно будет добавить {formatDate(status.next_available_at)}. Напомнить?</p>
@@ -522,9 +556,14 @@
     <div class="modal-actions">
       <Button color="secondary" on:click={() => (cooldownOpen = false)}>Не сейчас</Button>
       {#if reminderScheduled}
-        <Button disabled>
+        <Button loading={reminderLoading} disabled={reminderLoading} on:click={cancelReminder}>
           <Icon src={Bell} size="18" mini slot="prefix" />
-          Напоминание включено
+          {reminderToggleLabel}
+        </Button>
+      {:else if reminderDisabledNotice}
+        <Button loading={reminderLoading} disabled={reminderLoading} on:click={scheduleReminder}>
+          <Icon src={Bell} size="18" mini slot="prefix" />
+          {reminderToggleLabel}
         </Button>
       {:else if $siteUser?.telegram_linked}
         <Button loading={reminderLoading} disabled={reminderLoading} on:click={scheduleReminder}>
@@ -615,14 +654,19 @@
         {#if canShowReminder}
           <div class="counter-reminder">
             {#if reminderScheduled}
-              <Button color="secondary" disabled>
+              <Button color="secondary" loading={reminderLoading} disabled={reminderLoading} on:click={cancelReminder}>
                 <Icon src={Bell} size="18" mini slot="prefix" />
-                Напоминание включено
+                {reminderToggleLabel}
+              </Button>
+            {:else if reminderDisabledNotice}
+              <Button color="secondary" loading={reminderLoading} disabled={reminderLoading} on:click={scheduleReminder}>
+                <Icon src={Bell} size="18" mini slot="prefix" />
+                {reminderToggleLabel}
               </Button>
             {:else if $siteUser?.telegram_linked}
               <Button color="secondary" loading={reminderLoading} disabled={reminderLoading} on:click={scheduleReminder}>
                 <Icon src={Bell} size="18" mini slot="prefix" />
-                Напомнить через 24 часа
+                {reminderToggleLabel}
               </Button>
             {:else}
               <Button color="secondary" disabled={reminderLoading} on:click={scheduleReminder}>

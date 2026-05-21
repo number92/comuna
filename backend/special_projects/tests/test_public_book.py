@@ -18,6 +18,7 @@ from special_projects.public_book import (
     PROJECT_SLUG,
     SOCIAL_IDENTITY_REQUIRED_MESSAGE,
     admin_stats_payload,
+    cancel_reminder_for_user,
     censor_admin_selection,
     censor_admin_word,
     ensure_public_book_discussion_post,
@@ -336,6 +337,17 @@ class PublicBookTests(TestCase):
 
         self.assertEqual(second.position, 2)
 
+        second.created_at = now + timedelta(hours=25)
+        second.save(update_fields=("created_at",))
+        with patch("special_projects.public_book.timezone.now", return_value=now + timedelta(hours=48)):
+            with self.assertRaisesMessage(ValueError, "24 часа"):
+                submit_word(user, "Третье")
+
+        with patch("special_projects.public_book.timezone.now", return_value=now + timedelta(hours=50)):
+            third = submit_word(user, "Третье")
+
+        self.assertEqual(third.position, 3)
+
     def test_staff_user_is_limited_by_24_hour_submission_interval(self):
         user = self.make_user("staff-book-user", telegram=True)
         user.is_staff = True
@@ -388,6 +400,19 @@ class PublicBookTests(TestCase):
         self.assertTrue(send_mock.called)
         reminder.refresh_from_db()
         self.assertIsNotNone(reminder.sent_at)
+
+    def test_cancel_reminder_removes_pending_reminders(self):
+        user = self.make_user("cancel-reminder-book-user", telegram=True)
+        now = timezone.now()
+        word = submit_word(user, "Слово")
+        word.created_at = now - timedelta(hours=23)
+        word.save(update_fields=("created_at",))
+        schedule_reminder_for_user(user)
+
+        deleted = cancel_reminder_for_user(user)
+
+        self.assertEqual(deleted, 1)
+        self.assertFalse(PublicBookReminder.objects.filter(user=user, sent_at__isnull=True).exists())
 
     def test_send_due_reminders_skips_stale_reminder_after_new_word(self):
         user = self.make_user("stale-reminder-book-user", telegram=True)

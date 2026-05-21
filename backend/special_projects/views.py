@@ -413,6 +413,9 @@ def public_book_reminder(request: HttpRequest) -> HttpResponse:
     user = _get_user_from_request(request)
     if user is None:
         return JsonResponse({"ok": False, "error": "unauthorized"}, status=401)
+    if request.method == "DELETE":
+        public_book.cancel_reminder_for_user(user)
+        return JsonResponse(public_book.project_status_for_user(user), status=200)
     if request.method != "POST":
         return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)
     try:

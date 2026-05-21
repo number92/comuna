@@ -96,9 +96,14 @@ class WhereFilmedImportTests(TestCase):
         self.assertEqual(post.raw_data["template"]["type"], "movie_review")
         self.assertEqual(post.raw_data["template"]["data"]["title"], "Дружба")
         self.assertEqual(post.raw_data["template"]["data"]["original_title"], "Friendship")
+        self.assertNotIn("poster_url", post.raw_data["template"]["data"])
         self.assertEqual(
-            post.raw_data["template"]["data"]["poster_url"],
+            post.raw_data["wherefilmed"]["images"]["poster_url"],
             "https://tambur.pub/media/posts/wherefilmed/123/poster-960.webp",
+        )
+        self.assertNotIn(
+            "https://tambur.pub/media/posts/wherefilmed/123/poster-960.webp",
+            post.raw_data["gallery_urls"],
         )
 
         assignment = ComunPostCategoryAssignment.objects.select_related("category").get(
@@ -123,7 +128,7 @@ class WhereFilmedImportTests(TestCase):
                 "paragraph",
             ],
         )
-        self.assertIn("Описание [ru]:", content["blocks"][0]["data"]["text"])
+        self.assertEqual(content["blocks"][0]["data"]["text"], "Описание фильма")
         self.assertEqual(content["blocks"][1]["data"]["text"], "Локации съемок:")
         self.assertEqual(content["blocks"][3]["data"]["text"], "В кино")
         self.assertEqual(content["blocks"][6]["data"]["text"], "В реальности")

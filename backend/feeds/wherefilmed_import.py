@@ -318,16 +318,11 @@ def _build_content(
     saved_images: list[str] = []
 
     poster_url = _download_image(str(movie.get("poster_url") or ""), movie_id=movie_id)
-    if poster_url:
-        saved_images.append(poster_url)
 
     description_html = str(movie.get("description_html") or "").strip()
     description_text = _text(movie.get("description_text"))
     description_value = description_html or escape(description_text)
-    description_block = _paragraph_block(
-        _prefixed_paragraph_html("Описание [ru]:", description_value),
-        "wf-description",
-    )
+    description_block = _paragraph_block(description_value, "wf-description")
     if description_block:
         blocks.append(description_block)
 
@@ -420,15 +415,12 @@ def _raw_data(
     template_data: dict[str, object] = {}
     title = _text(movie.get("title"), 255)
     original_title = _text(movie.get("original_title"), 255)
-    poster_url = _public_url(image_payload.get("poster_url"))
     genre = _movie_genre(movie)
     year = _as_int(movie.get("year"))
     if title:
         template_data["title"] = title
     if original_title:
         template_data["original_title"] = original_title
-    if poster_url:
-        template_data["poster_url"] = poster_url
     if genre:
         template_data["genre"] = genre
     if year:

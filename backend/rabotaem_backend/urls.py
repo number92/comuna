@@ -48,6 +48,7 @@ from feeds.views import (
     tags_list,
     tag_posts,
 )
+from feeds.wherefilmed_import import wherefilmed_import
 from my_feed.views import (
     auth_feed_settings,
     my_feed,
@@ -172,6 +173,7 @@ urlpatterns = [
         name="comun-post-category-update",
     ),
     path("api/search/", search_content, name="search-content"),
+    path("api/wherefilmed/import/", wherefilmed_import, name="wherefilmed-import"),
     path("api/authors/top/", top_authors, name="top-authors"),
     path("api/authors/top-month/", top_authors_month, name="top-authors-month"),
     path("api/auth/register/", register_user, name="auth-register"),

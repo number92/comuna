@@ -101,6 +101,8 @@
   let selectionCensorButtonStyle = ''
   let selectionCensorLoading = false
   let reminderDisabledNotice = false
+  let backgroundRefreshInFlight = false
+  let backgroundRefreshPromise: Promise<void> | null = null
 
   const authHeaders = (): Record<string, string> =>
     $siteToken ? { Authorization: `Bearer ${$siteToken}` } : {}
@@ -141,8 +143,10 @@
     rulesDraft = data.rules_text || rulesDraft || DEFAULT_RULES_TEXT
   }
 
-  async function loadWords(options: { reset?: boolean } = {}) {
-    wordsLoading = true
+  async function loadWords(options: { reset?: boolean; silent?: boolean } = {}) {
+    if (!options.silent) {
+      wordsLoading = true
+    }
     const offset = options.reset ? 0 : loadedOffset
     try {
       const response = await fetch(buildSpecialBookWordsUrl({ offset, limit: PAGE_LIMIT }), {
@@ -159,9 +163,15 @@
         status = { ...status, total_words: data.total_words ?? status.total_words }
       }
     } catch (err) {
-      toast({ content: (err as Error)?.message || 'Не удалось загрузить слова', type: 'error' })
+      if (!options.silent) {
+        toast({ content: (err as Error)?.message || 'Не удалось загрузить слова', type: 'error' })
+      }
+      throw err
+    } finally {
+      if (!options.silent) {
+        wordsLoading = false
+      }
     }
-    wordsLoading = false
   }
 
   async function loadProject() {
@@ -176,6 +186,39 @@
     loading = false
   }
 
+  async function refreshBookSilently(options: { force?: boolean } = {}) {
+    if (backgroundRefreshPromise) {
+      if (options.force) {
+        await backgroundRefreshPromise
+      }
+      return
+    }
+    if (!options.force && (loading || submitLoading)) return
+
+    backgroundRefreshInFlight = true
+    backgroundRefreshPromise = (async () => {
+      try {
+        await loadStatus()
+        const targetTotal = status?.total_words ?? loadedOffset
+        if (targetTotal < loadedOffset) {
+          await loadWords({ reset: true, silent: true })
+          return
+        }
+        while (loadedOffset < targetTotal) {
+          const previousOffset = loadedOffset
+          await loadWords({ silent: true })
+          if (loadedOffset <= previousOffset) break
+        }
+      } catch {
+        // Фоновое обновление не должно мешать пользователю читать или вводить слово.
+      } finally {
+        backgroundRefreshInFlight = false
+        backgroundRefreshPromise = null
+      }
+    })()
+    await backgroundRefreshPromise
+  }
+
   async function submitWord() {
     if (!$siteToken || !$siteUser) {
       authInitialMode = 'signup'
@@ -186,6 +229,7 @@
       toast({ content: SOCIAL_LINK_REQUIRED_MESSAGE, type: 'info' })
       return
     }
+    await refreshBookSilently({ force: true })
     if (status && !status.can_submit) {
       if (status.submit_block_reason === 'moderation_lock' || status.moderation_locked_until) {
         toast({
@@ -510,8 +554,12 @@
 
   onMount(() => {
     loadProject()
+    const refreshTimer = window.setInterval(() => {
+      refreshBookSilently()
+    }, 5000)
     document.addEventListener('selectionchange', updateCensorSelection)
     return () => {
+      window.clearInterval(refreshTimer)
       document.removeEventListener('selectionchange', updateCensorSelection)
     }
   })

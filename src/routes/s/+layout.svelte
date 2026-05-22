@@ -328,7 +328,7 @@
 
     .mobile-menu-bar {
       position: sticky;
-      top: 72px;
+      top: 64px;
       z-index: 30;
       display: flex;
       justify-content: flex-start;

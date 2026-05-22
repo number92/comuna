@@ -9,11 +9,13 @@
   import SignupForm from './SignupForm.svelte'
   import ResetPasswordForm from './ResetPasswordForm.svelte'
   import { Envelope, Icon } from 'svelte-hero-icons'
+  import { createEventDispatcher } from 'svelte'
 
   export let open = false
   export let initialMode: 'login' | 'signup' = 'login'
   export let registrationSource = ''
   export let registrationPath = ''
+  const dispatch = createEventDispatcher<{ success: void }>()
   let authMode: 'login' | 'signup' | 'reset' = initialMode
   let wasOpen = false
   let telegramButtonModulePromise: Promise<{ default: ComponentType }> | null = null
@@ -28,6 +30,7 @@
 
   function handleSuccessfulAuth() {
     open = false
+    dispatch('success')
     loginData = {
       username: '',
       password: '',

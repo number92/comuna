@@ -13,4 +13,4 @@ class AuthorRatingEventAdmin(admin.ModelAdmin):
 
 @admin.register(RatingSettings)
 class RatingSettingsAdmin(admin.ModelAdmin):
-    list_display = ("id", "updated_at")
+    list_display = ("id", "home_posts_per_community_per_day", "updated_at")

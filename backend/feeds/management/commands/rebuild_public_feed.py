@@ -8,7 +8,12 @@ from django.utils import timezone
 from communities.models import Comun, ComunPostCategoryAssignment
 from feeds.models import Author, Post, PublicFeedItem, Tag
 from feeds.views import _publish_ready_filter
-from ratings.service import calculate_author_ratings, calculate_post_total_rating
+from ratings.service import (
+    calculate_author_ratings,
+    calculate_post_total_rating,
+    get_rating_settings,
+    home_feed_community_day_key,
+)
 
 
 class Command(BaseCommand):
@@ -65,11 +70,18 @@ class Command(BaseCommand):
             .order_by("-created_at")[: limit * fetch_multiplier]
         )
 
+        rating_settings = get_rating_settings()
         author_rating_map = calculate_author_ratings(
-            Author.objects.filter(id__in={post.author_id for post in candidates})
+            Author.objects.filter(id__in={post.author_id for post in candidates}),
+            settings=rating_settings,
+        )
+        home_posts_per_community_per_day = max(
+            int(getattr(rating_settings, "home_posts_per_community_per_day", 3) or 3),
+            1,
         )
 
         selected: list[Post] = []
+        community_day_counts: dict[tuple[int, object], int] = {}
         remaining = candidates[:]
         last_author_id = None
         while remaining and len(selected) < limit:
@@ -83,10 +95,17 @@ class Command(BaseCommand):
             post = remaining.pop(next_index)
             post_score = calculate_post_total_rating(
                 post,
+                settings=rating_settings,
                 author_rating=author_rating_map.get(post.author_id, 0),
             )
             if post_score < 0:
                 continue
+            community_day_key = home_feed_community_day_key(post)
+            if community_day_key is not None:
+                community_day_count = community_day_counts.get(community_day_key, 0)
+                if community_day_count >= home_posts_per_community_per_day:
+                    continue
+                community_day_counts[community_day_key] = community_day_count + 1
             selected.append(post)
             post.feed_score = post_score
             last_author_id = post.author_id

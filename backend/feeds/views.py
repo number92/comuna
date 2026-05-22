@@ -135,6 +135,8 @@ from ratings.service import (
     calculate_author_ratings as _calculate_author_ratings,
     calculate_post_total_rating as _calculate_post_total_rating,
     format_rating_value as _format_rating_value,
+    get_rating_settings as _get_rating_settings,
+    home_feed_community_day_key as _home_feed_community_day_key,
     user_max_author_rating as _user_max_author_rating,
 )
 from telegram_integration.media import download_telegram_file_by_path
@@ -3373,6 +3375,12 @@ def home_feed(request: HttpRequest) -> HttpResponse:
             author_id: round(float(value), 2)
             for author_id, value in _calculate_author_ratings(authors_for_rating).items()
         }
+    rating_settings = _get_rating_settings()
+    home_posts_per_community_per_day = max(
+        int(getattr(rating_settings, "home_posts_per_community_per_day", 3) or 3),
+        1,
+    )
+    community_day_counts: dict[tuple[int, object], int] = {}
 
     serialized_posts = []
     remaining = posts[:]
@@ -3391,6 +3399,12 @@ def home_feed(request: HttpRequest) -> HttpResponse:
         combined_rating = _post_rating_score(post, author_rating=author_rating)
         if combined_rating < 0:
             continue
+        community_day_key = _home_feed_community_day_key(post)
+        if community_day_key is not None:
+            community_day_count = community_day_counts.get(community_day_key, 0)
+            if community_day_count >= home_posts_per_community_per_day:
+                continue
+            community_day_counts[community_day_key] = community_day_count + 1
         if card_mode:
             serialized_posts.append(
                 _serialize_lightweight_post_card(
@@ -3559,7 +3573,7 @@ def _serialize_lightweight_post_card(
     now=None,
     is_favorite: bool = False,
     author_rating: int | float = 0,
-    score_override: int | None = None,
+    score_override: int | float | None = None,
 ) -> dict:
     now = now or timezone.now()
     _content, poll_payload = _content_with_live_poll(post, current_user)
@@ -3611,19 +3625,48 @@ def _materialized_home_feed_response(
         PublicFeedItem.objects.filter(feed=PublicFeedItem.FEED_HOME)
         .select_related("post", "post__author")
         .prefetch_related("post__tags")
-        .order_by("rank")[offset : offset + limit]
+        .order_by("rank")
     )
     if not items:
         return None
+
+    rating_settings = _get_rating_settings()
+    home_posts_per_community_per_day = max(
+        int(getattr(rating_settings, "home_posts_per_community_per_day", 3) or 3),
+        1,
+    )
+    author_rating_map = {
+        author_id: round(float(value), 2)
+        for author_id, value in _calculate_author_ratings(
+            Author.objects.filter(id__in={item.post.author_id for item in items})
+        ).items()
+    }
+    visible_items = []
+    community_day_counts: dict[tuple[int, object], int] = {}
+    for item in items:
+        author_rating = author_rating_map.get(item.post.author_id, 0)
+        score = _post_rating_score(item.post, author_rating=author_rating)
+        if score < 0:
+            continue
+        community_day_key = _home_feed_community_day_key(item.post)
+        if community_day_key is not None:
+            community_day_count = community_day_counts.get(community_day_key, 0)
+            if community_day_count >= home_posts_per_community_per_day:
+                continue
+            community_day_counts[community_day_key] = community_day_count + 1
+        visible_items.append((item, score))
+        if len(visible_items) >= offset + limit:
+            break
+
     serialized = [
         _serialize_lightweight_post_card(
             request,
             item.post,
             None,
             now=now,
-            score_override=item.score,
+            score_override=score,
         )
-        for item in items
+        for item, score in visible_items[offset : offset + limit]
     ]
     return JsonResponse(
         {

@@ -76,6 +76,7 @@
     post_author_rating_weight: number
     community_post_rating_weight: number
     community_post_rating_days: number
+    home_posts_per_community_per_day: number
     author_post_rating_weight: number
     author_comment_like_weight: number
     updated_at?: string | null
@@ -176,6 +177,14 @@
       max: '365',
     },
     {
+      key: 'home_posts_per_community_per_day',
+      label: 'Постов сообщества на главной в день',
+      description: 'Максимум постов одного сообщества за один день в ленте «Горячее».',
+      step: '1',
+      min: '1',
+      max: '100',
+    },
+    {
       key: 'author_post_rating_weight',
       label: 'Посты в рейтинге автора',
       description: 'Множитель рейтинга постов автора.',
@@ -249,6 +258,13 @@
       month: '2-digit',
       year: 'numeric',
     }).format(new Date(value))
+  async function readModeratorJson<T>(response: Response): Promise<T> {
+    const contentType = response.headers.get('content-type') ?? ''
+    if (!contentType.includes('application/json')) {
+      throw new Error(`Сервер вернул не JSON (${response.status})`)
+    }
+    return (await response.json()) as T
+  }
 
   async function loadAnalytics() {
     if (!$siteUser?.is_staff) return
@@ -261,7 +277,7 @@
         credentials: 'include',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       })
-      const data = (await response.json()) as AnalyticsResponse
+      const data = await readModeratorJson<AnalyticsResponse>(response)
       if (!response.ok || !data.ok) {
         throw new Error(data.error || 'Не удалось загрузить аналитику')
       }
@@ -288,7 +304,7 @@
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         }
       )
-      const data = (await response.json()) as PostViewSettingsResponse
+      const data = await readModeratorJson<PostViewSettingsResponse>(response)
       if (!response.ok || !data.ok) {
         throw new Error(data.error || 'Не удалось загрузить просмотры')
       }
@@ -318,7 +334,7 @@
         },
         body: JSON.stringify({ display_views_target: nextTarget }),
       })
-      const data = (await response.json()) as PostViewSettingsResponse
+      const data = await readModeratorJson<PostViewSettingsResponse>(response)
       if (!response.ok || !data.ok || !data.post) {
         throw new Error(data.error || 'Не удалось сохранить просмотры')
       }
@@ -343,7 +359,7 @@
         credentials: 'include',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       })
-      const data = (await response.json()) as RatingSettingsResponse
+      const data = await readModeratorJson<RatingSettingsResponse>(response)
       if (!response.ok || !data.ok || !data.settings) {
         throw new Error(data.error || 'Не удалось загрузить настройки рейтинга')
       }
@@ -374,7 +390,7 @@
         },
         body: JSON.stringify(ratingSettings),
       })
-      const data = (await response.json()) as RatingSettingsResponse
+      const data = await readModeratorJson<RatingSettingsResponse>(response)
       if (!response.ok || !data.ok || !data.settings) {
         throw new Error(data.error || 'Не удалось сохранить настройки рейтинга')
       }
@@ -621,7 +637,7 @@
 
       {#if ratingSettingsLoading}
         <div class="rating-settings-grid">
-          {#each Array(9) as _}
+          {#each Array(10) as _}
             <div class="rating-setting-card skeleton"></div>
           {/each}
         </div>
@@ -629,6 +645,7 @@
         <div class="formula-strip">
           <span>Пост = голоса + комментарии + лайки комментариев + сообщество + автор</span>
           <span>Сообщество = посты за первые {ratingSettings.community_post_rating_days} дней * {ratingSettings.community_post_rating_weight}</span>
+          <span>Главная = до {ratingSettings.home_posts_per_community_per_day} постов сообщества в день</span>
           <span>Автор = посты автора + лайки его комментариев</span>
         </div>
 

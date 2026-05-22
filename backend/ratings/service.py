@@ -75,6 +75,7 @@ def serialize_rating_settings(settings: RatingSettings | None = None) -> dict:
         "post_author_rating_weight": _rating_float(settings.post_author_rating_weight),
         "community_post_rating_weight": _rating_float(settings.community_post_rating_weight),
         "community_post_rating_days": int(settings.community_post_rating_days or 0),
+        "home_posts_per_community_per_day": int(settings.home_posts_per_community_per_day or 0),
         "author_post_rating_weight": _rating_float(settings.author_post_rating_weight),
         "author_comment_like_weight": _rating_float(settings.author_comment_like_weight),
         "updated_at": settings.updated_at.isoformat() if settings.updated_at else None,
@@ -107,6 +108,14 @@ def update_rating_settings(payload: dict) -> RatingSettings:
         if days < 1 or days > 365:
             raise ValueError("community_post_rating_days must be between 1 and 365")
         settings.community_post_rating_days = days
+    if "home_posts_per_community_per_day" in payload:
+        try:
+            limit = int(payload.get("home_posts_per_community_per_day"))
+        except (TypeError, ValueError):
+            raise ValueError("home_posts_per_community_per_day must be an integer")
+        if limit < 1 or limit > 100:
+            raise ValueError("home_posts_per_community_per_day must be between 1 and 100")
+        settings.home_posts_per_community_per_day = limit
     settings.save()
     return settings
 
@@ -283,9 +292,19 @@ def _candidate_comun_ids_for_post(post) -> list[int]:
     return list(
         Comun.objects.filter(combined_filter, is_active=True)
         .exclude(slug__iexact="faq")
+        .order_by("-rating_score", "id")
         .values_list("id", flat=True)
-        .distinct()
     )
+
+
+def home_feed_community_day_key(post) -> tuple[int, object] | None:
+    comun_ids = _candidate_comun_ids_for_post(post)
+    if not comun_ids:
+        return None
+    created_at = getattr(post, "created_at", None)
+    if created_at is None:
+        return None
+    return (int(comun_ids[0]), timezone.localdate(created_at))
 
 
 def calculate_post_community_rating(post, *, settings: RatingSettings | None = None) -> Decimal:
@@ -454,6 +473,7 @@ __all__ = [
     "calculate_posts_base_rating",
     "format_rating_value",
     "get_rating_settings",
+    "home_feed_community_day_key",
     "list_top_comuns",
     "list_top_authors",
     "normalize_top_authors_period",

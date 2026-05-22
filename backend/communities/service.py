@@ -7,7 +7,8 @@ import re
 import secrets
 import urllib.parse
 from collections import defaultdict
-from decimal import Decimal, ROUND_HALF_UP
+from datetime import timedelta
+from decimal import Decimal
 
 try:
     import pymorphy2
@@ -16,7 +17,7 @@ except ImportError:  # optional dependency for lemmatization
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, Q
 from django.http import HttpRequest
 from django.utils import timezone
 from django.utils.text import slugify
@@ -40,7 +41,13 @@ from feeds.models import (
     PostRead,
     Tag,
 )
-from ratings.service import author_rating_value, format_rating_value, user_max_author_rating
+from ratings.service import (
+    calculate_author_rating,
+    calculate_community_rating_for_posts,
+    format_rating_value,
+    get_rating_settings,
+    user_max_author_rating,
+)
 from telegram_integration.media import safe_public_url
 from users.models import AuthorAdmin
 
@@ -74,7 +81,6 @@ _INTERNAL_COMUNA_HOSTS = frozenset(
 _COMUN_EXTERNAL_LINKS_FORBIDDEN_ERROR = (
     "В этом сообществе запрещены внешние ссылки. Удалите ссылки из текста и шаблона публикации."
 )
-_COMUN_COMMENT_RATING_WEIGHT = Decimal("0.1")
 _MORPH_ANALYZER = None
 
 
@@ -855,14 +861,14 @@ def _comun_post_access_state(
         return True, minimum_rating, None
 
     if author is not None:
-        author_rating = author_rating_value(getattr(author, "rating_total", 0))
+        author_rating = round(float(calculate_author_rating(author)), 2)
         return author_rating >= minimum_rating, minimum_rating, author_rating
 
     personal_author = _personal_user_author(user)
     if not personal_author:
         return False, minimum_rating, 0.0
 
-    personal_author_rating = author_rating_value(getattr(personal_author, "rating_total", 0))
+    personal_author_rating = round(float(calculate_author_rating(personal_author)), 2)
     return personal_author_rating >= minimum_rating, minimum_rating, personal_author_rating
 
 
@@ -1030,13 +1036,6 @@ def _comun_categories_count(comun: Comun) -> int:
     return len(_comun_categories_list(comun))
 
 
-def _comun_rating_value(post_rating_total: int | None, comments_total: int | None) -> Decimal:
-    rating = Decimal(int(post_rating_total or 0)) + (
-        Decimal(int(comments_total or 0)) * _COMUN_COMMENT_RATING_WEIGHT
-    )
-    return rating.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-
-
 def _recalculate_comun_rating(comun_id: int) -> tuple[int, int, Decimal]:
     comun = (
         Comun.objects.filter(id=comun_id)
@@ -1052,14 +1051,10 @@ def _recalculate_comun_rating(comun_id: int) -> tuple[int, int, Decimal]:
     )
     votes_up = int(counts.get("up") or 0)
     votes_down = int(counts.get("down") or 0)
-    post_totals = _comun_posts_base_queryset(comun).aggregate(
-        post_rating_total=Sum("rating"),
-        comments_total=Sum("comments_count"),
-    )
-    rating_score = _comun_rating_value(
-        post_totals.get("post_rating_total"),
-        post_totals.get("comments_total"),
-    )
+    settings = get_rating_settings()
+    cutoff = timezone.now() - timedelta(days=int(settings.community_post_rating_days or 7))
+    posts = _comun_posts_base_queryset(comun).filter(created_at__gte=cutoff)
+    rating_score = calculate_community_rating_for_posts(posts, settings=settings)
     Comun.objects.filter(id=comun_id).update(
         votes_up=votes_up,
         votes_down=votes_down,
@@ -1231,7 +1226,6 @@ def _maybe_notify_post_published_to_subscribers(
 __all__ = [
     "_COMUN_ACTIVITY_POINTS",
     "_COMUN_EXTERNAL_LINKS_FORBIDDEN_ERROR",
-    "_COMUN_COMMENT_RATING_WEIGHT",
     "_active_comun_category_queryset",
     "_active_comun_glossary_queryset",
     "_allowed_template_overrides_for_comun_category",

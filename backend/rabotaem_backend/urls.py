@@ -57,6 +57,8 @@ from moderator.views import (
     moderator_analytics,
     moderator_post_view_setting_update,
     moderator_post_view_settings,
+    moderator_rating_settings,
+    moderator_rating_settings_update,
 )
 from notifications.views import (
     auth_notification_read,
@@ -229,6 +231,16 @@ urlpatterns = [
         "api/moderator/posts/<int:post_id>/view-settings/",
         moderator_post_view_setting_update,
         name="moderator-post-view-setting-update",
+    ),
+    path(
+        "api/moderator/rating-settings/",
+        moderator_rating_settings,
+        name="moderator-rating-settings",
+    ),
+    path(
+        "api/moderator/rating-settings/update/",
+        moderator_rating_settings_update,
+        name="moderator-rating-settings-update",
     ),
     path("api/auth/posts/<int:post_id>/", user_post_update, name="auth-post-update"),
     path(

@@ -31,8 +31,11 @@ def serialize_top_author_item(
     request: HttpRequest | None = None,
     period: str = "month",
 ) -> dict[str, Any]:
-    rating_total = getattr(author, "period_rating_total", 0) or 0
-    rating_value = author_rating_value(rating_total)
+    if hasattr(author, "period_rating_score"):
+        rating_value = round(float(getattr(author, "period_rating_score", 0) or 0), 2)
+    else:
+        rating_total = getattr(author, "period_rating_total", 0) or 0
+        rating_value = author_rating_value(rating_total)
     posts_count = getattr(author, "posts_count", 0) or 0
     item: dict[str, Any] = {
         "username": author.username,
@@ -42,7 +45,7 @@ def serialize_top_author_item(
         "rating": rating_value,
         "score": rating_value,
         "posts_count": posts_count,
-        "author_rating": author_rating_value(getattr(author, "rating_total", 0)),
+        "author_rating": round(float(getattr(author, "rating_score", rating_value) or 0), 2),
         "period": period,
     }
     if period == "month":

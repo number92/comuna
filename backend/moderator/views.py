@@ -10,6 +10,11 @@ from django.views.decorators.csrf import csrf_exempt
 
 from communities.models import Comun
 from feeds.models import Author, Post, PostComment, PostCommentLike, PostLike
+from ratings.service import (
+    get_rating_settings,
+    serialize_rating_settings,
+    update_rating_settings,
+)
 from users.service import _get_user_from_request
 
 _SITE_POST_SOURCES = {"manual", "manual_comun"}
@@ -239,8 +244,61 @@ def moderator_post_view_setting_update(request: HttpRequest, post_id: int) -> Ht
     return JsonResponse({"ok": True, "post": _serialize_post_view_settings(post)})
 
 
+def moderator_rating_settings(request: HttpRequest) -> HttpResponse:
+    if request.method != "GET":
+        return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)
+
+    _user, auth_response = _staff_user_or_response(request)
+    if auth_response is not None:
+        return auth_response
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "settings": serialize_rating_settings(get_rating_settings()),
+        }
+    )
+
+
+@csrf_exempt
+def moderator_rating_settings_update(request: HttpRequest) -> HttpResponse:
+    if request.method not in {"PATCH", "POST"}:
+        return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)
+
+    _user, auth_response = _staff_user_or_response(request)
+    if auth_response is not None:
+        return auth_response
+
+    try:
+        payload = json.loads(request.body.decode("utf-8") or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"ok": False, "error": "invalid json"}, status=400)
+
+    try:
+        settings = update_rating_settings(payload)
+    except ValueError as exc:
+        return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+
+    from communities import service as community_service
+
+    recalculated = 0
+    for comun_id in Comun.objects.filter(is_active=True).values_list("id", flat=True):
+        community_service._recalculate_comun_rating(comun_id)
+        recalculated += 1
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "settings": serialize_rating_settings(settings),
+            "recalculated_comuns": recalculated,
+        }
+    )
+
+
 __all__ = [
     "moderator_analytics",
     "moderator_post_view_settings",
     "moderator_post_view_setting_update",
+    "moderator_rating_settings",
+    "moderator_rating_settings_update",
 ]

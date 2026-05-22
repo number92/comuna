@@ -131,7 +131,9 @@ from my_feed import service as my_feed_service
 from my_feed.models import UserFeedSettings
 from ratings.service import (
     apply_author_rating_delta as _apply_author_rating_delta,
-    author_rating_value as _author_rating_value,
+    calculate_author_rating as _calculate_author_rating,
+    calculate_author_ratings as _calculate_author_ratings,
+    calculate_post_total_rating as _calculate_post_total_rating,
     format_rating_value as _format_rating_value,
     user_max_author_rating as _user_max_author_rating,
 )
@@ -1247,6 +1249,19 @@ _post_display_views_current = _post_fake_views_current
 def _post_total_views(post: Post, now=None) -> int:
     real_views = max(int(getattr(post, "real_views_count", 0) or 0), 0)
     return real_views + _post_fake_views_current(post, now=now)
+
+
+def _post_rating_score(post: Post, *, author_rating=None, base_rating=None) -> float:
+    return round(
+        float(
+            _calculate_post_total_rating(
+                post,
+                author_rating=author_rating,
+                base_rating=base_rating,
+            )
+        ),
+        2,
+    )
 
 
 def _author_posts_rating_filter(now) -> Q:
@@ -2686,14 +2701,7 @@ def comment_like(request: HttpRequest, comment_id: int) -> HttpResponse:
         delta = 1
 
     if delta:
-        _apply_author_rating_delta(
-            author_id=comment.post.author_id,
-            delta=delta,
-            event_type=AuthorRatingEvent.EVENT_TYPE_COMMENT_LIKE,
-            actor_id=user.id,
-            post_id=comment.post_id,
-            comment_id=comment.id,
-        )
+        community_service._recalculate_comun_ratings_for_post(comment.post_id)
 
     likes_count = PostCommentLike.objects.filter(comment=comment).count()
 
@@ -2953,7 +2961,7 @@ def author_posts(request: HttpRequest, username: str) -> HttpResponse:
                 "description": author.description,
                 "subscribers_count": author.subscribers_count,
                 "posts_count": posts_count,
-                "author_rating": _author_rating_value(author.rating_total),
+                "author_rating": round(float(_calculate_author_rating(author)), 2),
                 "site_user_id": site_user_id,
                 "linked_comun_slug": linked_comun.slug if linked_comun and linked_comun.is_active else None,
                 "linked_comun_name": linked_comun.name if linked_comun and linked_comun.is_active else None,
@@ -3273,9 +3281,6 @@ def home_feed(request: HttpRequest) -> HttpResponse:
         return JsonResponse({"ok": False, "error": "unauthorized"}, status=401)
     target_count = limit + offset
     fetch_size = max(target_count * 5, limit * 5)
-    combined_scaled = Cast(F("rating"), IntegerField()) * Value(20) + Cast(
-        F("author__rating_total"), IntegerField()
-    )
     hidden_home_tag_qs = Tag.objects.filter(
         posts__id=OuterRef("pk"),
         hide_from_home=True,
@@ -3294,10 +3299,8 @@ def home_feed(request: HttpRequest) -> HttpResponse:
         )
         .filter(_publish_ready_filter(now))
         .filter(Q(author__shadow_banned=False) | Q(author__force_home=True))
-        .annotate(combined_scaled=combined_scaled)
         .annotate(has_hidden_home_tag=Exists(hidden_home_tag_qs))
         .filter(has_hidden_home_tag=False)
-        .filter(combined_scaled__gte=0)
         .exclude(id__in=hidden_home_comun_category_post_ids)
     )
     if hidden_home_comun_slugs:
@@ -3328,7 +3331,7 @@ def home_feed(request: HttpRequest) -> HttpResponse:
         favorite_post_ids = _favorite_post_ids_for_user(posts_page, current_user)
         serialized = []
         for post in posts_page:
-            author_rating = _author_rating_value(post.author.rating_total)
+            author_rating = round(float(_calculate_author_rating(post.author)), 2)
             if card_mode:
                 serialized.append(
                     _serialize_lightweight_post_card(
@@ -3365,11 +3368,10 @@ def home_feed(request: HttpRequest) -> HttpResponse:
     author_ids = {post.author_id for post in posts}
     author_rating_map = {}
     if author_ids:
+        authors_for_rating = list(Author.objects.filter(id__in=author_ids))
         author_rating_map = {
-            row["id"]: _author_rating_value(row["rating_total"])
-            for row in Author.objects.filter(id__in=author_ids).values(
-                "id", "rating_total"
-            )
+            author_id: round(float(value), 2)
+            for author_id, value in _calculate_author_ratings(authors_for_rating).items()
         }
 
     serialized_posts = []
@@ -3386,7 +3388,7 @@ def home_feed(request: HttpRequest) -> HttpResponse:
             next_index = 0
         post = remaining.pop(next_index)
         author_rating = author_rating_map.get(post.author_id, 0)
-        combined_rating = post.rating + author_rating
+        combined_rating = _post_rating_score(post, author_rating=author_rating)
         if combined_rating < 0:
             continue
         if card_mode:
@@ -3490,7 +3492,7 @@ def favorites_feed(request: HttpRequest) -> HttpResponse:
                 },
                 "tags": _serialize_tags(post.tags.all()),
                 "is_favorite": post.id in favorite_post_ids,
-                "score": post.rating + post.comments_count * 5,
+                "score": _post_rating_score(post),
                 "rating": post.rating,
                 "comments_count": post.comments_count,
                 "likes_count": post.rating,
@@ -3541,7 +3543,7 @@ def _serialize_backend_post_card(
         },
         "tags": _serialize_tags(post.tags.all()),
         "is_favorite": is_favorite,
-        "score": post.rating + post.comments_count * 5 + author_rating,
+        "score": _post_rating_score(post, author_rating=author_rating),
         "rating": post.rating,
         "comments_count": post.comments_count,
         "likes_count": post.rating,
@@ -3590,7 +3592,7 @@ def _serialize_lightweight_post_card(
         },
         "tags": _serialize_tags(post.tags.all()),
         "is_favorite": is_favorite,
-        "score": score_override if score_override is not None else post.rating + post.comments_count * 5 + author_rating,
+        "score": score_override if score_override is not None else _post_rating_score(post, author_rating=author_rating),
         "rating": post.rating,
         "comments_count": post.comments_count,
         "likes_count": post.rating,
@@ -3644,7 +3646,7 @@ def _serialize_search_author_result(
         "description": author.description,
         "channel_url": author_channel_url or "",
         "subscribers_count": author.subscribers_count,
-        "author_rating": _author_rating_value(author.rating_total),
+        "author_rating": round(float(_calculate_author_rating(author)), 2),
     }
 
 

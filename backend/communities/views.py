@@ -42,7 +42,7 @@ from feeds.models import (
     Tag,
 )
 from rabotaem_backend.cache import anonymous_cache
-from ratings.service import author_rating_value, format_rating_value, user_max_author_rating
+from ratings.service import calculate_author_rating, format_rating_value, user_max_author_rating
 from users.models import AuthorAdmin
 from users import views as user_views
 
@@ -586,7 +586,7 @@ def _comun_post_access_state(
         return True, minimum_rating, None
 
     if author is not None:
-        author_rating = author_rating_value(getattr(author, "rating_total", 0))
+        author_rating = round(float(calculate_author_rating(author)), 2)
         return author_rating >= minimum_rating, minimum_rating, author_rating
 
     author_ids, _author_links = _fv()._public_user_author_ids(user)
@@ -594,8 +594,8 @@ def _comun_post_access_state(
         return False, minimum_rating, 0.0
 
     max_author_rating = 0.0
-    for total_rating in Author.objects.filter(id__in=author_ids).values_list("rating_total", flat=True):
-        max_author_rating = max(max_author_rating, author_rating_value(total_rating))
+    for linked_author in Author.objects.filter(id__in=author_ids):
+        max_author_rating = max(max_author_rating, round(float(calculate_author_rating(linked_author)), 2))
     return max_author_rating >= minimum_rating, minimum_rating, max_author_rating
 
 

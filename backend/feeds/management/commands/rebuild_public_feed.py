@@ -2,14 +2,13 @@ from __future__ import annotations
 
 from django.core.management.base import BaseCommand
 from django.db import transaction
-from django.db.models import Exists, F, IntegerField, OuterRef, Q, Value
-from django.db.models.functions import Cast
+from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
 
 from communities.models import Comun, ComunPostCategoryAssignment
 from feeds.models import Author, Post, PublicFeedItem, Tag
 from feeds.views import _publish_ready_filter
-from ratings.service import author_rating_value
+from ratings.service import calculate_author_ratings, calculate_post_total_rating
 
 
 class Command(BaseCommand):
@@ -26,9 +25,6 @@ class Command(BaseCommand):
         dry_run = bool(options["dry_run"])
         now = timezone.now()
 
-        combined_scaled = Cast(F("rating"), IntegerField()) * Value(20) + Cast(
-            F("author__rating_total"), IntegerField()
-        )
         hidden_home_tag_qs = Tag.objects.filter(
             posts__id=OuterRef("pk"),
             hide_from_home=True,
@@ -45,10 +41,8 @@ class Command(BaseCommand):
             )
             .filter(_publish_ready_filter(now))
             .filter(Q(author__shadow_banned=False) | Q(author__force_home=True))
-            .annotate(combined_scaled=combined_scaled)
             .annotate(has_hidden_home_tag=Exists(hidden_home_tag_qs))
             .filter(has_hidden_home_tag=False)
-            .filter(combined_scaled__gte=0)
             .exclude(id__in=hidden_home_comun_category_post_ids)
         )
 
@@ -71,12 +65,9 @@ class Command(BaseCommand):
             .order_by("-created_at")[: limit * fetch_multiplier]
         )
 
-        author_rating_map = {
-            row["id"]: author_rating_value(row["rating_total"])
-            for row in Author.objects.filter(id__in={post.author_id for post in candidates}).values(
-                "id", "rating_total"
-            )
-        }
+        author_rating_map = calculate_author_ratings(
+            Author.objects.filter(id__in={post.author_id for post in candidates})
+        )
 
         selected: list[Post] = []
         remaining = candidates[:]
@@ -90,9 +81,14 @@ class Command(BaseCommand):
             if next_index is None:
                 next_index = 0
             post = remaining.pop(next_index)
-            if post.rating + author_rating_map.get(post.author_id, 0) < 0:
+            post_score = calculate_post_total_rating(
+                post,
+                author_rating=author_rating_map.get(post.author_id, 0),
+            )
+            if post_score < 0:
                 continue
             selected.append(post)
+            post.feed_score = post_score
             last_author_id = post.author_id
 
         items = [
@@ -100,7 +96,7 @@ class Command(BaseCommand):
                 feed=PublicFeedItem.FEED_HOME,
                 post=post,
                 rank=index + 1,
-                score=int(post.rating + post.comments_count * 5 + author_rating_map.get(post.author_id, 0)),
+                score=int(getattr(post, "feed_score", 0) or 0),
                 post_created_at=post.created_at,
                 author_id_snapshot=post.author_id,
             )

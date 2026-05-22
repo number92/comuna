@@ -213,6 +213,14 @@ export const buildModeratorPostViewSettingUrl = (id: number | string): string =>
   return `${getBackendBaseUrl()}/api/moderator/posts/${encodeURIComponent(id)}/view-settings/`
 }
 
+export const buildModeratorRatingSettingsUrl = (): string => {
+  return `${getBackendBaseUrl()}/api/moderator/rating-settings/`
+}
+
+export const buildModeratorRatingSettingsUpdateUrl = (): string => {
+  return `${getBackendBaseUrl()}/api/moderator/rating-settings/update/`
+}
+
 export const buildSpecialLandnameUrl = (text: string = '', options?: { track?: boolean }): string => {
   const params = new URLSearchParams()
   if (text) {

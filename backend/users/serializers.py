@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.http import HttpRequest
 
 from communities import service as community_service
-from ratings.service import author_rating_value
+from ratings.service import calculate_author_rating
 from telegram_integration.media import safe_public_url
 from users.models import AuthorAdmin
 
@@ -47,7 +47,7 @@ def _serialize_user(user: User) -> dict:
                 "publish_delay_days": author.publish_delay_days,
                 "notify_comments": author.notify_comments,
                 "invite_url": author.invite_url,
-                "author_rating": author_rating_value(author.rating_total),
+                "author_rating": round(float(calculate_author_rating(author)), 2),
                 "linked_comun_slug": linked_comun.slug if linked_comun and linked_comun.is_active else None,
                 "linked_comun_name": linked_comun.name if linked_comun and linked_comun.is_active else None,
             }

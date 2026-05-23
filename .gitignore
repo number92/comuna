@@ -19,6 +19,9 @@ __pycache__/
 *.py[cod]
 .venv/
 backend/media/
+backend/secrets/
+deploy/secrets/
+*firebase-adminsdk*.json
 
 
 .deploy/.env.*

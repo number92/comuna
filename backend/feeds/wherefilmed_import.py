@@ -180,7 +180,11 @@ def _download_image(url: str, *, movie_id: int) -> str:
         ext = ".jpg"
     filename = f"posts/wherefilmed/{movie_id}/{secrets.token_hex(10)}{ext}"
     try:
-        image_set = save_image_with_variants(data=data, original_path=filename)
+        image_set = save_image_with_variants(
+            data=data,
+            original_path=filename,
+            keep_original=False,
+        )
     except Exception as exc:
         raise WhereFilmedImportError(f"failed to store image: {source_url}", 502) from exc
     return build_public_storage_url(image_set.default_url)

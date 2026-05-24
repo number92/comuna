@@ -55,6 +55,7 @@ def save_image_with_variants(
     data: bytes,
     original_path: str,
     variant_widths: tuple[int, ...] = IMAGE_VARIANT_WIDTHS,
+    keep_original: bool = True,
 ) -> SavedImageSet:
     original_path = default_storage.save(original_path, ContentFile(data))
     original_url = _storage_url(original_path)
@@ -100,6 +101,11 @@ def save_image_with_variants(
         )
 
     default_variant = variants[-1]
+    if not keep_original and original_path != default_variant.path:
+        default_storage.delete(original_path)
+        original_path = default_variant.path
+        original_url = default_variant.url
+
     return SavedImageSet(
         original_path=original_path,
         original_url=original_url,

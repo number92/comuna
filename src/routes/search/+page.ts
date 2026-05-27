@@ -1,6 +1,7 @@
 import { env } from '$env/dynamic/public'
 import { profile } from '$lib/auth.js'
 import {
+  type BackendComun,
   type BackendPost,
   backendPostCommunityPath,
   buildBackendPostPath,
@@ -44,8 +45,10 @@ export async function load({ url, fetch }): Promise<any> {
     const payload: {
       posts?: BackendPost[]
       authors?: unknown[]
+      communities?: BackendComun[]
       total_posts?: number
       total_authors?: number
+      total_communities?: number
       limit?: number
     } = await response.json()
 
@@ -58,6 +61,7 @@ export async function load({ url, fetch }): Promise<any> {
     }))
 
     const authors = payload.authors ?? []
+    const communities = payload.communities ?? []
 
     return {
       backend: true,
@@ -66,8 +70,10 @@ export async function load({ url, fetch }): Promise<any> {
       type: type,
       query: query,
       results: {
+        communities,
         posts,
         authors,
+        total_communities: payload.total_communities ?? communities.length,
         total_posts: payload.total_posts ?? posts.length,
         total_authors: payload.total_authors ?? authors.length,
         limit: payload.limit ?? 20,

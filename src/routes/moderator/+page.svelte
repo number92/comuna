@@ -8,6 +8,10 @@
     buildModeratorRatingSettingsUrl,
     buildModeratorRatingSettingsUpdateUrl,
   } from '$lib/api/backend'
+  import {
+    EDITABLE_STATIC_PAGE_META,
+    type EditableStaticPageSlug,
+  } from '$lib/staticPageContent'
   import { refreshSiteUser, siteToken, siteUser } from '$lib/siteAuth'
   import { onMount } from 'svelte'
   import {
@@ -16,6 +20,7 @@
     Eye,
     Heart,
     Newspaper,
+    PencilSquare,
     UserGroup,
     Users,
     Icon,
@@ -89,7 +94,7 @@
     recalculated_comuns?: number
   }
 
-  type ModeratorTab = 'analytics' | 'views' | 'rating'
+  type ModeratorTab = 'analytics' | 'views' | 'rating' | 'static-pages'
 
   const dateValue = (date: Date) => {
     const year = date.getFullYear()
@@ -117,6 +122,21 @@
   let ratingSettingsError = ''
   let ratingSettingsNotice = ''
   let ratingSettings: RatingSettings | null = null
+  const staticPages = (Object.entries(EDITABLE_STATIC_PAGE_META) as Array<
+    [EditableStaticPageSlug, (typeof EDITABLE_STATIC_PAGE_META)[EditableStaticPageSlug]]
+  >).map(([slug, meta]) => ({
+    slug,
+    editPath: `/edit-page/${slug}`,
+    publicPath: slug === 'about' ? '/about' : `/${slug}`,
+    ...meta,
+  }))
+
+  const dashboardTitle = (tab: ModeratorTab) => {
+    if (tab === 'views') return 'Настройки просмотров'
+    if (tab === 'rating') return 'Настройки рейтинга'
+    if (tab === 'static-pages') return 'Статичные страницы'
+    return 'Аналитика сайта'
+  }
 
   const ratingFields: {
     key: Exclude<keyof RatingSettings, 'updated_at'>
@@ -439,7 +459,7 @@
   <section class="dashboard-header">
     <div>
       <p class="eyebrow">Модераторская</p>
-      <h1>Аналитика сайта</h1>
+      <h1>{dashboardTitle(activeTab)}</h1>
     </div>
 
     {#if activeTab === 'analytics'}
@@ -485,6 +505,13 @@
       on:click={() => (activeTab = 'rating')}
     >
       Рейтинг
+    </button>
+    <button
+      type="button"
+      class:active={activeTab === 'static-pages'}
+      on:click={() => (activeTab = 'static-pages')}
+    >
+      Статичные страницы
     </button>
   </nav>
 
@@ -669,6 +696,39 @@
       {/if}
     </section>
   {/if}
+
+  {#if activeTab === 'static-pages'}
+    <section class="static-pages-section">
+      <div class="section-header">
+        <div>
+          <p class="section-label">Раздел</p>
+          <h2>Статичные страницы</h2>
+        </div>
+      </div>
+
+      <div class="static-pages-list">
+        {#each staticPages as staticPage (staticPage.slug)}
+          <article class="static-page-row">
+            <div class="static-page-info">
+              <strong>{staticPage.heading}</strong>
+              <span>{staticPage.description}</span>
+              <a href={staticPage.publicPath} target="_blank" rel="noopener noreferrer">
+                {staticPage.publicPath}
+              </a>
+            </div>
+            <a
+              class="icon-action"
+              href={staticPage.editPath}
+              aria-label={`Редактировать страницу «${staticPage.heading}»`}
+              title="Редактировать"
+            >
+              <Icon src={PencilSquare} size="18" micro />
+            </a>
+          </article>
+        {/each}
+      </div>
+    </section>
+  {/if}
 </div>
 
 <style>
@@ -841,7 +901,8 @@
 
   .analytics-section,
   .view-settings-section,
-  .rating-settings-section {
+  .rating-settings-section,
+  .static-pages-section {
     border: 1px solid rgb(226 232 240);
     border-radius: 8px;
     background: white;
@@ -918,6 +979,67 @@
   .view-settings-table {
     display: grid;
     gap: 10px;
+  }
+
+  .static-pages-list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .static-page-row {
+    min-height: 84px;
+    border: 1px solid rgb(226 232 240);
+    border-radius: 8px;
+    padding: 14px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 14px;
+    align-items: center;
+    background: rgb(248 250 252);
+  }
+
+  .static-page-info {
+    min-width: 0;
+    display: grid;
+    gap: 5px;
+  }
+
+  .static-page-info strong {
+    color: rgb(15 23 42);
+    font-size: 15px;
+    line-height: 1.25;
+  }
+
+  .static-page-info span,
+  .static-page-info a {
+    color: rgb(100 116 139);
+    font-size: 13px;
+    line-height: 1.35;
+  }
+
+  .static-page-info a {
+    width: fit-content;
+    text-decoration: none;
+  }
+
+  .static-page-info a:hover {
+    color: rgb(37 99 235);
+  }
+
+  .icon-action {
+    width: 38px;
+    height: 38px;
+    border: 1px solid rgb(203 213 225);
+    border-radius: 8px;
+    display: grid;
+    place-items: center;
+    background: white;
+    color: rgb(15 23 42);
+  }
+
+  .icon-action:hover {
+    border-color: rgb(37 99 235);
+    color: rgb(37 99 235);
   }
 
   .formula-strip {
@@ -1081,6 +1203,8 @@
   :global(.dark) .period-form label,
   :global(.dark) .moderator-tabs button,
   :global(.dark) .post-info span,
+  :global(.dark) .static-page-info span,
+  :global(.dark) .static-page-info a,
   :global(.dark) .view-cell span,
   :global(.dark) .display-input span,
   :global(.dark) .rating-setting-card small,
@@ -1098,7 +1222,9 @@
   :global(.dark) .rating-setting-card span,
   :global(.dark) .rating-setting-card input,
   :global(.dark) .secondary-button,
+  :global(.dark) .icon-action,
   :global(.dark) .post-info strong,
+  :global(.dark) .static-page-info strong,
   :global(.dark) .view-cell strong {
     color: white;
   }
@@ -1107,7 +1233,9 @@
   :global(.dark) .analytics-section,
   :global(.dark) .view-settings-section,
   :global(.dark) .rating-settings-section,
+  :global(.dark) .static-pages-section,
   :global(.dark) .view-settings-row,
+  :global(.dark) .static-page-row,
   :global(.dark) .rating-setting-card,
   :global(.dark) .preset-group,
   :global(.dark) .period-form input,
@@ -1115,6 +1243,7 @@
   :global(.dark) .display-input input,
   :global(.dark) .rating-setting-card input,
   :global(.dark) .secondary-button,
+  :global(.dark) .icon-action,
   :global(.dark) .empty-state {
     border-color: rgb(63 63 70);
     background: rgb(24 24 27);

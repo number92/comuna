@@ -37,8 +37,15 @@ export const selectSidebarComuns = (
   const subscribedSlugSet = new Set(
     (subscribedSlugs ?? []).map(normalizeComunSlug).filter(Boolean)
   )
+  const implicitManagedSlugSet = new Set(
+    rankedComuns
+      .filter((comun) => Boolean(comun.can_moderate))
+      .map((comun) => normalizeComunSlug(comun.slug))
+      .filter(Boolean)
+  )
   const subscribedComuns = rankedComuns.filter((comun) =>
-    subscribedSlugSet.has(normalizeComunSlug(comun.slug))
+    subscribedSlugSet.has(normalizeComunSlug(comun.slug)) ||
+    implicitManagedSlugSet.has(normalizeComunSlug(comun.slug))
   )
   const sourceComuns = subscribedComuns.length ? subscribedComuns : rankedComuns
 

@@ -933,6 +933,7 @@ def _serialize_comun_sidebar_item(request: HttpRequest, comun: Comun) -> dict:
         "slug": comun.slug,
         "logo_url": _comun_logo_url(request, comun),
         "sort_order": comun.sort_order,
+        "can_moderate": bool(getattr(comun, "_sidebar_can_moderate", False)),
         "rating": {
             "score": rating_score,
             "upvotes": getattr(comun, "votes_up", 0) or 0,
@@ -945,6 +946,16 @@ def _serialize_comun_sidebar_item(request: HttpRequest, comun: Comun) -> dict:
 def comuns_sidebar(request: HttpRequest) -> HttpResponse:
     if request.method not in {"GET", "HEAD"}:
         return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)
+
+    current_user = user_views._get_user_from_request(request)
+    manageable_ids: set[int] = set()
+    if current_user:
+        manageable_ids = set(
+            Comun.objects.filter(is_active=True)
+            .filter(Q(creator_id=current_user.id) | Q(moderators=current_user))
+            .values_list("id", flat=True)
+            .distinct()
+        )
 
     comuns = list(
         Comun.objects.filter(is_active=True)
@@ -961,6 +972,8 @@ def comuns_sidebar(request: HttpRequest) -> HttpResponse:
         )
         .order_by("-rating_score", "sort_order", "name")
     )
+    for comun in comuns:
+        comun._sidebar_can_moderate = comun.id in manageable_ids
     return JsonResponse(
         {
             "ok": True,

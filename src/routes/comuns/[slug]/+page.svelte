@@ -582,7 +582,10 @@
       const headers = $siteToken ? { Authorization: `Bearer ${$siteToken}` } : undefined
       const results = await Promise.all(
         stagesSnapshot.map(async (stage) => {
-          const url = new URL(buildComunPostsUrl(slug, { categorySlug: stage.category.slug }))
+          const url = new URL(
+            buildComunPostsUrl(slug, { categorySlug: stage.category.slug }),
+            $page.url.origin
+          )
           url.searchParams.set('limit', String(ROADMAP_PREVIEW_FETCH_LIMIT))
           url.searchParams.set('offset', '0')
           const response = await fetch(url.toString(), headers ? { headers } : undefined)
@@ -729,7 +732,10 @@
 
   const buildPostsUrl = (offset: number) => {
     if (!comun?.slug) return ''
-    const url = new URL(buildComunPostsUrl(comun.slug, { categorySlug: selectedCategorySlug || undefined }))
+    const url = new URL(
+      buildComunPostsUrl(comun.slug, { categorySlug: selectedCategorySlug || undefined }),
+      $page.url.origin
+    )
     url.searchParams.set('limit', String(pageSize))
     url.searchParams.set('offset', String(offset))
     return url.toString()
@@ -754,7 +760,10 @@
     } else if (nextPosts.length) {
       posts = [...posts, ...nextPosts]
     }
-    hasMore = nextPosts.length === pageSize
+    hasMore =
+      typeof totalPostsCount === 'number'
+        ? posts.length < totalPostsCount
+        : nextPosts.length === pageSize
   }
 
   const loadPosts = async (reset = false) => {
@@ -779,6 +788,9 @@
     } finally {
       loadingMore = false
       loadingCategory = false
+      if (browser && hasMore) {
+        window.requestAnimationFrame(maybeLoadMore)
+      }
     }
   }
 

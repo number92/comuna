@@ -1971,13 +1971,14 @@
 
     constructor({ data, config, api }: { data?: { file: { url: string; alt: string; title: string }; caption: string }, config?: any, api?: any }) {
       this.api = api
+      const caption = data?.caption || data?.file?.alt || data?.file?.title || ''
       this.data = {
         file: {
           url: data?.file?.url || '',
-          alt: data?.file?.alt || '',
+          alt: caption,
           title: data?.file?.title || ''
         },
-        caption: data?.caption || ''
+        caption
       }
       this.config = config || {}
       this.shouldAutoOpenPicker = !Boolean(data?.file?.url)
@@ -2045,30 +2046,13 @@
       
       const caption = document.createElement('textarea')
       caption.classList.add('image-tool__caption')
-      caption.placeholder = 'Введите подпись к изображению...'
+      caption.setAttribute('aria-label', 'Подпись изображения')
+      caption.placeholder = 'Подпись изображения'
       caption.value = this.data.caption
-      caption.onchange = () => {
+      caption.oninput = () => {
         this.data.caption = caption.value
-      }
-      
-      const altInput = document.createElement('input')
-      altInput.type = 'text'
-      altInput.classList.add('image-tool__alt')
-      altInput.placeholder = 'Описание изображения для поисковиков (ALT)'
-      altInput.value = this.data.file.alt
-      altInput.onchange = () => {
-        this.data.file.alt = altInput.value
-        image.alt = altInput.value
-      }
-      
-      const titleInput = document.createElement('input')
-      titleInput.type = 'text'
-      titleInput.classList.add('image-tool__title')
-      titleInput.placeholder = 'Подпись к изображению'
-      titleInput.value = this.data.file.title
-      titleInput.onchange = () => {
-        this.data.file.title = titleInput.value
-        image.title = titleInput.value
+        this.data.file.alt = caption.value
+        image.alt = caption.value
       }
       
       const input = document.createElement('input')
@@ -2149,8 +2133,6 @@
       wrapper.appendChild(input)
       
       wrapper.appendChild(caption)
-      wrapper.appendChild(altInput)
-      wrapper.appendChild(titleInput)
 
       // When a new image block is added from the toolbox, immediately open
       // the file picker to avoid an extra click on the upload button.

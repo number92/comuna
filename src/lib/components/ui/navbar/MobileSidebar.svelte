@@ -190,11 +190,9 @@
           <span slot="label">{comun.name}</span>
         </SidebarButton>
       {/each}
-      {#if sidebarComunsTotal > 10}
-        <SidebarButton href="/comuns" on:click={handleNavigation} icon={ChevronDown}>
-          <span slot="label">Все сообщества</span>
-        </SidebarButton>
-      {/if}
+      <SidebarButton href="/comuns" on:click={handleNavigation} icon={ChevronDown}>
+        <span slot="label">Все сообщества</span>
+      </SidebarButton>
   </div>
 
   <div class="flex flex-col gap-2">

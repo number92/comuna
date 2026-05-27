@@ -28,12 +28,33 @@ def _trusted_hosts() -> set[str]:
     return hosts
 
 
+def _telegram_auth_origin_hosts() -> set[str]:
+    hosts: set[str] = set()
+    for value in getattr(settings, "TELEGRAM_AUTH_ALLOWED_ORIGINS", []):
+        host = _origin_host(str(value))
+        if host:
+            hosts.add(host)
+    return hosts
+
+
+def _is_telegram_auth_origin(request: HttpRequest, origin: str) -> bool:
+    path = request.path_info.rstrip("/")
+    if path != "/api/auth/telegram":
+        return False
+    origin_host = _origin_host(origin)
+    return bool(origin_host and origin_host in _telegram_auth_origin_hosts())
+
+
 def _is_allowed_origin(request: HttpRequest, origin: str) -> bool:
     origin_host = _origin_host(origin)
     if not origin_host:
         return True
     request_host = request.get_host().lower()
-    return origin_host == request_host or origin_host in _trusted_hosts()
+    return (
+        origin_host == request_host
+        or origin_host in _trusted_hosts()
+        or _is_telegram_auth_origin(request, origin)
+    )
 
 
 class UnsafeOriginProtectionMiddleware:

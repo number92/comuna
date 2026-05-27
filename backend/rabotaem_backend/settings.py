@@ -5,6 +5,14 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+
+def _csv_env(name: str, default: str = "") -> list[str]:
+    return [
+        value.strip().rstrip("/")
+        for value in os.environ.get(name, default).split(",")
+        if value.strip()
+    ]
+
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY", "")
 DEBUG = os.environ.get("DJANGO_DEBUG", "0") == "1"
 
@@ -150,6 +158,10 @@ TELEGRAM_OIDC_JWKS_URL = os.environ.get(
     "TELEGRAM_OIDC_JWKS_URL",
     "https://oauth.telegram.org/.well-known/jwks.json",
 )
+TELEGRAM_AUTH_ALLOWED_ORIGINS = _csv_env(
+    "TELEGRAM_AUTH_ALLOWED_ORIGINS",
+    "https://app1299099924-login.tg.dev",
+)
 PUSH_FCM_PROJECT_ID = os.environ.get("PUSH_FCM_PROJECT_ID", "")
 PUSH_FCM_SERVICE_ACCOUNT_JSON = os.environ.get("PUSH_FCM_SERVICE_ACCOUNT_JSON", "")
 PUSH_FCM_SERVICE_ACCOUNT_FILE = os.environ.get("PUSH_FCM_SERVICE_ACCOUNT_FILE", "")
@@ -212,14 +224,13 @@ DEFAULT_FROM_EMAIL = os.environ.get(
 
 CORS_ALLOW_ALL_ORIGINS = DEBUG
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOWED_ORIGINS = [
-    origin.strip()
-    for origin in os.environ.get("CORS_ALLOWED_ORIGINS", "").split(",")
-    if origin.strip()
-]
+CORS_ALLOWED_ORIGINS = list(
+    dict.fromkeys(
+        [
+            *_csv_env("CORS_ALLOWED_ORIGINS"),
+            *TELEGRAM_AUTH_ALLOWED_ORIGINS,
+        ]
+    )
+)
 
-CSRF_TRUSTED_ORIGINS = [
-    origin.strip()
-    for origin in os.environ.get("CSRF_TRUSTED_ORIGINS", "").split(",")
-    if origin.strip()
-]
+CSRF_TRUSTED_ORIGINS = _csv_env("CSRF_TRUSTED_ORIGINS")

@@ -19,6 +19,7 @@ class TelegramIntegrationRoutesTests(SimpleTestCase):
 
 
 User = get_user_model()
+TELEGRAM_NATIVE_ORIGIN = "https://app1299099924-login.tg.dev"
 
 
 @override_settings(TELEGRAM_OIDC_CLIENT_ID="123456789")
@@ -31,6 +32,52 @@ class TelegramOidcAuthTests(TestCase):
             "/api/auth/telegram/",
             data=json.dumps(payload),
             content_type="application/json",
+        )
+
+    def test_oidc_login_accepts_telegram_native_origin(self):
+        with patch(
+            "telegram_integration.views.validate_telegram_oidc_token",
+            return_value={
+                "id": 987654321,
+                "sub": "1234123412341234123",
+                "name": "Reader One",
+                "preferred_username": "reader_tg",
+            },
+        ):
+            response = self.client.post(
+                "/api/auth/telegram/",
+                data=json.dumps({"id_token": "token", "auth_intent": "login"}),
+                content_type="application/json",
+                HTTP_ORIGIN=TELEGRAM_NATIVE_ORIGIN,
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["token"])
+
+    def test_oidc_login_rejects_untrusted_cross_origin(self):
+        response = self.client.post(
+            "/api/auth/telegram/",
+            data=json.dumps({"id_token": "token", "auth_intent": "login"}),
+            content_type="application/json",
+            HTTP_ORIGIN="https://evil.example",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.json()["error"], "forbidden origin")
+
+    @override_settings(CORS_ALLOWED_ORIGINS=[TELEGRAM_NATIVE_ORIGIN])
+    def test_telegram_native_origin_gets_cors_preflight(self):
+        response = self.client.options(
+            "/api/auth/telegram/",
+            HTTP_ORIGIN=TELEGRAM_NATIVE_ORIGIN,
+            HTTP_ACCESS_CONTROL_REQUEST_METHOD="POST",
+            HTTP_ACCESS_CONTROL_REQUEST_HEADERS="content-type",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.headers.get("access-control-allow-origin"),
+            TELEGRAM_NATIVE_ORIGIN,
         )
 
     def test_oidc_payload_maps_phone_claim(self):

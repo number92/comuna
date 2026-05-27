@@ -5,8 +5,8 @@
   import Header from '$lib/components/ui/layout/pages/Header.svelte'
   import EditorAutosaveNotice from '$lib/components/editor/EditorAutosaveNotice.svelte'
   import { Button, Spinner, TextInput, toast } from 'mono-svelte'
-  import TipTapEditor from '$lib/components/editor/TipTapEditor.svelte'
   import EditorJS from '$lib/components/editor/EditorJS.svelte'
+  import { normalizeEditorJsContent } from '$lib/editorJsContent'
   import PostTemplateFields from '$lib/components/site/post-templates/PostTemplateFields.svelte'
   import { buildBackendPostPath, buildComunsUrl, type BackendComun } from '$lib/api/backend'
   import {
@@ -96,7 +96,6 @@
   let editAuthor = ''
   let editComunSlug = ''
   let editComunCategoryId = ''
-  let isJsonContent = true
   let editTemplateType: '' | PostTemplateType = ''
   let editMovieReviewData: MovieReviewTemplateData = createEmptyMovieReviewTemplateData()
   let editPostVotePollData: PostVotePollTemplateData = createEmptyPostVotePollTemplateData()
@@ -188,30 +187,6 @@
       : ''
   $: draftShareUrl = draftSharePath ? `${$page.url.origin}${draftSharePath}` : ''
   $: profileDraftsPath = $siteUser?.id ? `/id${$siteUser.id}` : '/settings'
-
-  const detectContentType = (content: string): boolean => {
-    if (!content || content.trim() === '') {
-      return true
-    }
-    if (content.trim().startsWith('<') && content.trim().endsWith('>')) {
-      return false
-    }
-    try {
-      const parsed = JSON.parse(content)
-      return parsed && typeof parsed === 'object' && 'blocks' in parsed
-    } catch {
-      try {
-        const isBase64 = /^[A-Za-z0-9+/]*={0,2}$/.test(content)
-        if (!isBase64) {
-          return false
-        }
-        const decoded = deserializeEditorModel(content)
-        return decoded && typeof decoded === 'object' && 'blocks' in decoded
-      } catch {
-        return false
-      }
-    }
-  }
 
   const stripHtml = (value: string) =>
     value.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim()
@@ -331,7 +306,7 @@
 
   const fillForm = (currentPost: SiteUserPost) => {
     editTitle = currentPost.title || ''
-    editContent = currentPost.content || ''
+    editContent = normalizeEditorJsContent(currentPost.content || '')
     editComunSlug =
       currentPost.comun_slug ||
       currentPost.comun?.slug ||
@@ -358,7 +333,6 @@
       typeof tag === 'string' ? tag : tag.name
     )
     editTags = tagNames.join(', ')
-    isJsonContent = detectContentType(editContent)
     const snapshot = JSON.stringify(buildEditPayload())
     lastObservedEditSnapshot = snapshot
     lastSavedEditSnapshot = snapshot
@@ -494,12 +468,7 @@
       return false
     }
     const trimmedContent = editContent.trim()
-    if (isJsonContent) {
-      if (!trimmedContent) {
-        saveError = 'Текст поста не может быть пустым'
-        return false
-      }
-    } else if (stripHtml(trimmedContent).length === 0) {
+    if (!trimmedContent || isEditorContentEmpty(trimmedContent)) {
       saveError = 'Текст поста не может быть пустым'
       return false
     }
@@ -933,40 +902,31 @@
         />
 
         <div class="flex flex-col gap-2">
-          {#if isJsonContent}
-            {#key `edit-editor-template-${editorTemplateBlocksKey}`}
-              <EditorJS
-                bind:value={editContent}
-                placeholder="Текст поста"
-                postTemplateType={editTemplateType}
-                enabledTemplateEditorBlockTypes={editorEnabledTemplateBlockTypes}
-                glossaryTerms={
-                  selectedComun?.glossary_enabled ? selectedComun?.glossary_terms ?? [] : []
-                }
-                enableAutosave={false}
-                postId={post.id}
-                showPostSettings={false}
-              />
-            {/key}
-            {#if isTweetTemplateType(editTemplateType)}
-              <div class={`rounded-xl border px-3 py-2 text-sm ${
-                tweetCharacterCountValue > TWEET_TEMPLATE_MAX_LENGTH
-                  ? 'border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/20 dark:text-rose-300'
-                  : 'border-slate-200 bg-slate-50 text-slate-600 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-300'
-              }`}>
-                <div class="flex flex-wrap items-center justify-between gap-2">
-                  <span>Текст твита: {tweetCharacterCountValue} / {TWEET_TEMPLATE_MAX_LENGTH}</span>
-                  <span>Разрешен один медиаблок с изображениями</span>
-                </div>
-              </div>
-            {/if}
-          {:else}
-            <TipTapEditor
+          {#key `edit-editor-template-${editorTemplateBlocksKey}`}
+            <EditorJS
               bind:value={editContent}
               placeholder="Текст поста"
-              includeMetaTags={false}
-              allowMedia={false}
+              postTemplateType={editTemplateType}
+              enabledTemplateEditorBlockTypes={editorEnabledTemplateBlockTypes}
+              glossaryTerms={
+                selectedComun?.glossary_enabled ? selectedComun?.glossary_terms ?? [] : []
+              }
+              enableAutosave={false}
+              postId={post.id}
+              showPostSettings={false}
             />
+          {/key}
+          {#if isTweetTemplateType(editTemplateType)}
+            <div class={`rounded-xl border px-3 py-2 text-sm ${
+              tweetCharacterCountValue > TWEET_TEMPLATE_MAX_LENGTH
+                ? 'border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-900/40 dark:bg-rose-950/20 dark:text-rose-300'
+                : 'border-slate-200 bg-slate-50 text-slate-600 dark:border-zinc-800 dark:bg-zinc-900/60 dark:text-zinc-300'
+            }`}>
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <span>Текст твита: {tweetCharacterCountValue} / {TWEET_TEMPLATE_MAX_LENGTH}</span>
+                <span>Разрешен один медиаблок с изображениями</span>
+              </div>
+            </div>
           {/if}
         </div>
 

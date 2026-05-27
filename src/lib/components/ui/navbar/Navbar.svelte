@@ -446,11 +446,9 @@
               <span slot="label">{comun.name}</span>
             </SidebarButton>
           {/each}
-          {#if sidebarComunsTotal > 10}
-            <SidebarButton href="/comuns" icon={ChevronDown} on:click={() => { sidebarOpen = false; }}>
-              <span slot="label">Все сообщества</span>
-            </SidebarButton>
-          {/if}
+          <SidebarButton href="/comuns" icon={ChevronDown} on:click={() => { sidebarOpen = false; }}>
+            <span slot="label">Все сообщества</span>
+          </SidebarButton>
       </div>
 
       <div class="flex flex-col gap-2">

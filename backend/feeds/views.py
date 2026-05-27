@@ -3708,6 +3708,27 @@ def _serialize_search_site_user_result(
     }
 
 
+def _serialize_search_comun_result(
+    request: HttpRequest,
+    comun: Comun,
+) -> dict:
+    rating_value = getattr(comun, "rating_score", 0) or 0
+    try:
+        rating_score = float(rating_value)
+    except (TypeError, ValueError):
+        rating_score = 0.0
+    return {
+        "id": comun.id,
+        "name": comun.name,
+        "slug": comun.slug,
+        "logo_url": community_service._comun_logo_url(request, comun),
+        "product_description": comun.product_description,
+        "target_audience": comun.target_audience,
+        "website_url": comun.website_url,
+        "rating_score": rating_score,
+    }
+
+
 def _search_author_result_rank(item: dict, query: str) -> tuple[int, str]:
     normalized_query = (query or "").strip().lower()
     username = str(item.get("username") or "").strip().lower()
@@ -3729,6 +3750,34 @@ def _search_author_result_rank(item: dict, query: str) -> tuple[int, str]:
     return (6, username)
 
 
+def _search_comun_result_rank(item: dict, query: str) -> tuple[int, float, str]:
+    normalized_query = (query or "").strip().lower()
+    name = str(item.get("name") or "").strip().lower()
+    slug = str(item.get("slug") or "").strip().lower()
+    product_description = str(item.get("product_description") or "").strip().lower()
+    target_audience = str(item.get("target_audience") or "").strip().lower()
+    rating_score = float(item.get("rating_score") or 0)
+    if not normalized_query:
+        return (10, -rating_score, name)
+    if name == normalized_query:
+        return (0, -rating_score, name)
+    if slug == normalized_query:
+        return (1, -rating_score, name)
+    if name.startswith(normalized_query):
+        return (2, -rating_score, name)
+    if slug.startswith(normalized_query):
+        return (3, -rating_score, name)
+    if normalized_query in name:
+        return (4, -rating_score, name)
+    if normalized_query in slug:
+        return (5, -rating_score, name)
+    if normalized_query in product_description:
+        return (6, -rating_score, name)
+    if normalized_query in target_audience:
+        return (7, -rating_score, name)
+    return (8, -rating_score, name)
+
+
 @anonymous_cache(prefix="search", seconds=30)
 def search_content(request: HttpRequest) -> HttpResponse:
     query = (request.GET.get("q") or "").strip()
@@ -3741,8 +3790,10 @@ def search_content(request: HttpRequest) -> HttpResponse:
                 "limit": 0,
                 "posts": [],
                 "authors": [],
+                "communities": [],
                 "total_posts": 0,
                 "total_authors": 0,
+                "total_communities": 0,
             }
         )
 
@@ -3765,8 +3816,26 @@ def search_content(request: HttpRequest) -> HttpResponse:
 
     posts: list[dict] = []
     authors: list[dict] = []
+    communities: list[dict] = []
     total_posts = 0
     total_authors = 0
+    total_communities = 0
+
+    if type_filter in ("all", "communities"):
+        comun_query = (
+            Q(name__icontains=query)
+            | Q(slug__icontains=query)
+            | Q(product_description__icontains=query)
+            | Q(target_audience__icontains=query)
+        )
+        comun_qs = Comun.objects.filter(is_active=True).filter(comun_query).order_by("name")
+        serialized_comuns = [
+            _serialize_search_comun_result(request, comun)
+            for comun in comun_qs
+        ]
+        serialized_comuns.sort(key=lambda item: _search_comun_result_rank(item, query))
+        total_communities = len(serialized_comuns)
+        communities.extend(serialized_comuns[offset : offset + limit])
 
     if type_filter in ("all", "posts"):
         post_query = Q(title__icontains=query) | Q(content__icontains=query)
@@ -3884,8 +3953,10 @@ def search_content(request: HttpRequest) -> HttpResponse:
             "limit": limit,
             "posts": posts,
             "authors": authors,
+            "communities": communities,
             "total_posts": total_posts,
             "total_authors": total_authors,
+            "total_communities": total_communities,
         }
     )
 

@@ -300,6 +300,7 @@ def _serialize_comun(
     include_manage_fields: bool = False,
     include_options: bool = False,
     include_activity: bool = False,
+    include_counts: bool = True,
 ) -> dict:
     categories = community_service._comun_categories_list(comun)
     roadmap_category_ids = set(
@@ -335,27 +336,10 @@ def _serialize_comun(
         if welcome_post:
             welcome_post_payload = editor_service._serialize_post_for_user(request, welcome_post, current_user)
 
-    subscribers_count = (
-        UserFeedSettings.objects.filter(
-            Q(my_feed_comuns__contains=[comun.slug]) | Q(my_feed_comun_categories__has_key=comun.slug)
-        )
-        .distinct()
-        .count()
-    )
-    authors_count = (
-        community_service._comun_posts_base_queryset(comun)
-        .exclude(author_id__isnull=True)
-        .values("author_id")
-        .distinct()
-        .count()
-    )
-
     payload = {
         "id": comun.id,
         "name": comun.name,
         "slug": comun.slug,
-        "subscribers_count": subscribers_count,
-        "authors_count": authors_count,
         "website_url": comun.website_url,
         "logo_url": community_service._comun_logo_url(request, comun),
         "product_description": comun.product_description,
@@ -467,6 +451,22 @@ def _serialize_comun(
         "can_post_category_ids": can_post_category_ids,
         "can_start_post": bool(can_post_without_category or can_post_category_ids),
     }
+    if include_counts:
+        payload["subscribers_count"] = (
+            UserFeedSettings.objects.filter(
+                Q(my_feed_comuns__contains=[comun.slug])
+                | Q(my_feed_comun_categories__has_key=comun.slug)
+            )
+            .distinct()
+            .count()
+        )
+        payload["authors_count"] = (
+            community_service._comun_posts_base_queryset(comun)
+            .exclude(author_id__isnull=True)
+            .values("author_id")
+            .distinct()
+            .count()
+        )
     if include_activity:
         payload["activity"] = _serialize_comun_activity(request, comun)
     if include_manage_fields:

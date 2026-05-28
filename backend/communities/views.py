@@ -1363,7 +1363,15 @@ def comuns_list_create(request: HttpRequest) -> HttpResponse:
             .prefetch_related("moderators", "excluded_authors", "categories", "tags", "blocked_tags")
             .order_by("-rating_score", "sort_order", "name")
         )
-        payload = [_serialize_comun(request, comun, current_user=current_user) for comun in comuns]
+        payload = [
+            _serialize_comun(
+                request,
+                comun,
+                current_user=current_user,
+                include_counts=False,
+            )
+            for comun in comuns
+        ]
         return JsonResponse(
             {
                 "ok": True,

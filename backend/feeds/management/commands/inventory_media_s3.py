@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import csv
 import json
+import mimetypes
 import posixpath
 import re
+import threading
 from collections import Counter
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -86,6 +89,18 @@ class Command(BaseCommand):
             default=500,
             help="Database iterator chunk size.",
         )
+        parser.add_argument(
+            "--workers",
+            type=int,
+            default=8,
+            help="Concurrent S3 upload workers used with --copy.",
+        )
+        parser.add_argument(
+            "--progress-every",
+            type=int,
+            default=1000,
+            help="Print copy progress every N processed files.",
+        )
 
     def handle(self, *args, **options) -> None:
         media_root = Path(settings.MEDIA_ROOT)
@@ -102,11 +117,14 @@ class Command(BaseCommand):
         s3_storage = self._s3_storage()
         if copy_enabled and s3_storage is None:
             raise CommandError("S3 storage is not configured; cannot copy files.")
+        s3_objects = self._list_s3_objects(s3_storage) if s3_storage else None
 
         started_at = timezone.now()
         self.stdout.write(f"Media root: {media_root}")
         self.stdout.write(f"Report dir: {report_dir}")
         self.stdout.write(f"S3 configured: {'yes' if s3_storage else 'no'}")
+        if s3_objects is not None:
+            self.stdout.write(f"S3 objects listed: {len(s3_objects)}")
 
         local_files = self._collect_local_files(
             media_root=media_root,
@@ -123,11 +141,11 @@ class Command(BaseCommand):
 
         local_keys = {item.key for item in local_files}
         reference_keys = {item.key for item in references}
-        file_rows, status_counts = self._build_file_rows(local_files, s3_storage)
+        file_rows, status_counts = self._build_file_rows(local_files, s3_objects)
         reference_rows, reference_counts = self._build_reference_rows(
             references,
-            local_storage,
-            s3_storage,
+            local_keys,
+            s3_objects,
         )
 
         copy_counts: Counter[str] = Counter()
@@ -137,7 +155,16 @@ class Command(BaseCommand):
                 file_rows=file_rows,
                 local_storage=local_storage,
                 s3_storage=s3_storage,
+                s3_objects=s3_objects or {},
                 overwrite_mismatched=overwrite_mismatched,
+                workers=max(1, int(options["workers"] or 1)),
+                progress_every=max(0, int(options["progress_every"] or 0)),
+            )
+            status_counts = Counter(str(row["s3_status"]) for row in file_rows)
+            reference_rows, reference_counts = self._build_reference_rows(
+                references,
+                local_keys,
+                s3_objects or {},
             )
 
         finished_at = timezone.now()
@@ -233,12 +260,12 @@ class Command(BaseCommand):
     def _build_file_rows(
         self,
         local_files: list[LocalMediaFile],
-        s3_storage,
+        s3_objects: dict[str, int] | None,
     ) -> tuple[list[dict[str, Any]], Counter[str]]:
         rows: list[dict[str, Any]] = []
         counts: Counter[str] = Counter()
         for item in local_files:
-            status, s3_size, error = self._s3_status(s3_storage, item.key, item.size)
+            status, s3_size, error = self._s3_status(s3_objects, item.key, item.size)
             counts[status] += 1
             rows.append(
                 {
@@ -257,31 +284,18 @@ class Command(BaseCommand):
     def _build_reference_rows(
         self,
         references: list[MediaReference],
-        local_storage: FileSystemStorage,
-        s3_storage,
+        local_keys: set[str],
+        s3_objects: dict[str, int] | None,
     ) -> tuple[list[dict[str, Any]], Counter[str]]:
         rows: list[dict[str, Any]] = []
         counts: Counter[str] = Counter()
 
-        local_exists_cache: dict[str, bool] = {}
-        s3_exists_cache: dict[str, bool] = {}
-
         for reference in references:
-            if reference.key not in local_exists_cache:
-                local_exists_cache[reference.key] = self._storage_exists(
-                    local_storage,
-                    reference.key,
-                )
-            local_exists = local_exists_cache[reference.key]
-            if s3_storage is None:
+            local_exists = reference.key in local_keys
+            if s3_objects is None:
                 s3_exists: bool | None = None
             else:
-                if reference.key not in s3_exists_cache:
-                    s3_exists_cache[reference.key] = self._storage_exists(
-                        s3_storage,
-                        reference.key,
-                    )
-                s3_exists = s3_exists_cache[reference.key]
+                s3_exists = reference.key in s3_objects
 
             if not local_exists:
                 counts["local_missing"] += 1
@@ -306,62 +320,122 @@ class Command(BaseCommand):
         file_rows: list[dict[str, Any]],
         local_storage: FileSystemStorage,
         s3_storage,
+        s3_objects: dict[str, int],
         overwrite_mismatched: bool,
+        workers: int,
+        progress_every: int,
     ) -> Counter[str]:
         counts: Counter[str] = Counter()
         files_by_key = {item.key: item for item in local_files}
+        thread_state = threading.local()
 
-        for row in file_rows:
+        def worker_storage():
+            storage = getattr(thread_state, "s3_storage", None)
+            if storage is None:
+                storage = s3_storage.__class__()
+                thread_state.s3_storage = storage
+            return storage
+
+        def upload_one(row: dict[str, Any]) -> dict[str, Any]:
             key = row["key"]
             local_file = files_by_key[key]
             status = row["s3_status"]
 
             if status == "same_size":
-                row["copy_status"] = "skipped_exists"
-                counts["skipped_exists"] += 1
-                continue
+                return {"copy_status": "skipped_exists"}
             if status == "size_mismatch" and not overwrite_mismatched:
-                row["copy_status"] = "skipped_size_mismatch"
-                counts["skipped_size_mismatch"] += 1
-                continue
+                return {"copy_status": "skipped_size_mismatch"}
             if status not in {"missing", "size_mismatch"}:
-                row["copy_status"] = f"skipped_{status}"
-                counts[f"skipped_{status}"] += 1
-                continue
+                return {"copy_status": f"skipped_{status}"}
 
             try:
+                active_s3_storage = worker_storage()
                 if status == "size_mismatch" and overwrite_mismatched:
-                    s3_storage.delete(key)
+                    active_s3_storage.delete(key)
                 with local_storage.open(key, "rb") as source:
-                    saved_key = s3_storage.save(key, File(source, name=posixpath.basename(key)))
-                row["saved_key"] = saved_key
+                    content = File(source, name=posixpath.basename(key))
+                    content_type, _ = mimetypes.guess_type(key)
+                    if content_type:
+                        content.content_type = content_type
+                    save = getattr(active_s3_storage, "_save", active_s3_storage.save)
+                    saved_key = save(key, content)
                 if saved_key != key:
-                    row["copy_status"] = "uploaded_renamed"
-                    counts["uploaded_renamed"] += 1
-                else:
-                    copied_status, copied_size, copied_error = self._s3_status(
-                        s3_storage,
-                        key,
-                        local_file.size,
-                    )
-                    if copied_status == "same_size":
-                        row["copy_status"] = "uploaded"
-                        row["s3_status"] = copied_status
-                        row["s3_size"] = copied_size
-                        row["error"] = copied_error
-                        counts["uploaded"] += 1
-                    else:
-                        row["copy_status"] = f"uploaded_verify_{copied_status}"
-                        row["s3_status"] = copied_status
-                        row["s3_size"] = copied_size
-                        row["error"] = copied_error
-                        counts[f"uploaded_verify_{copied_status}"] += 1
+                    return {
+                        "copy_status": "uploaded_renamed",
+                        "saved_key": saved_key,
+                    }
+                return {
+                    "copy_status": "uploaded",
+                    "saved_key": saved_key,
+                    "s3_status": "same_size",
+                    "s3_size": local_file.size,
+                    "error": "",
+                }
             except Exception as exc:  # noqa: BLE001 - keep migration running and report per-file failures.
-                row["copy_status"] = "error"
-                row["error"] = str(exc)
-                counts["error"] += 1
+                return {"copy_status": "error", "error": str(exc)}
+
+        def apply_result(row: dict[str, Any], result: dict[str, Any]) -> None:
+            row.update(result)
+            copy_status = str(result.get("copy_status") or "unknown")
+            counts[copy_status] += 1
+            if copy_status == "uploaded":
+                s3_objects[row["key"]] = int(row["local_size"])
+
+        rows_iter = iter(file_rows)
+        processed = 0
+        pending = set()
+        future_rows = {}
+
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            for _ in range(max(workers * 2, 1)):
+                try:
+                    row = next(rows_iter)
+                except StopIteration:
+                    break
+                future = executor.submit(upload_one, row)
+                pending.add(future)
+                future_rows[future] = row
+
+            while pending:
+                done, pending = wait(pending, return_when=FIRST_COMPLETED)
+                for future in done:
+                    row = future_rows.pop(future)
+                    apply_result(row, future.result())
+                    processed += 1
+                    if progress_every and processed % progress_every == 0:
+                        self.stdout.write(
+                            f"Copy progress: {processed}/{len(file_rows)} processed, "
+                            f"uploaded={counts.get('uploaded', 0)}, "
+                            f"errors={counts.get('error', 0)}"
+                        )
+
+                    try:
+                        next_row = next(rows_iter)
+                    except StopIteration:
+                        continue
+                    next_future = executor.submit(upload_one, next_row)
+                    pending.add(next_future)
+                    future_rows[next_future] = next_row
 
         return counts
+
+    def _list_s3_objects(self, s3_storage) -> dict[str, int]:
+        objects: dict[str, int] = {}
+        location = str(getattr(s3_storage, "location", "") or "").strip("/")
+        prefix = f"{location}/" if location else ""
+
+        try:
+            iterator = s3_storage.bucket.objects.filter(Prefix=prefix)
+            for item in iterator:
+                key = str(item.key)
+                if prefix and key.startswith(prefix):
+                    key = key[len(prefix):]
+                if key:
+                    objects[key] = int(item.size)
+        except Exception as exc:  # noqa: BLE001 - surface storage-specific failure.
+            raise CommandError(f"Could not list S3 objects: {exc}") from exc
+
+        return objects
 
     def _write_reports(
         self,
@@ -493,25 +567,15 @@ class Command(BaseCommand):
         return getattr(default_storage, "s3_storage", None)
 
     @staticmethod
-    def _s3_status(s3_storage, key: str, local_size: int) -> tuple[str, int | str, str]:
-        if s3_storage is None:
+    def _s3_status(s3_objects: dict[str, int] | None, key: str, local_size: int) -> tuple[str, int | str, str]:
+        if s3_objects is None:
             return "unavailable", "", ""
-        try:
-            if not s3_storage.exists(key):
-                return "missing", "", ""
-            s3_size = int(s3_storage.size(key))
-            if s3_size == local_size:
-                return "same_size", s3_size, ""
-            return "size_mismatch", s3_size, ""
-        except Exception as exc:  # noqa: BLE001 - report storage-specific errors without aborting inventory.
-            return "error", "", str(exc)
-
-    @staticmethod
-    def _storage_exists(storage, key: str) -> bool:
-        try:
-            return bool(storage.exists(key))
-        except Exception:
-            return False
+        if key not in s3_objects:
+            return "missing", "", ""
+        s3_size = int(s3_objects[key])
+        if s3_size == local_size:
+            return "same_size", s3_size, ""
+        return "size_mismatch", s3_size, ""
 
     @staticmethod
     def _is_inside(path: Path, directory: Path) -> bool:

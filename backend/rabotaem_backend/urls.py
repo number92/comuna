@@ -49,6 +49,14 @@ from feeds.views import (
     tag_posts,
 )
 from feeds.wherefilmed_import import wherefilmed_import
+from landing_pages.views import (
+    admin_landing_page_detail,
+    admin_landing_page_image_detail,
+    admin_landing_page_images,
+    admin_landing_pages,
+    landing_page_detail,
+    landing_page_leads,
+)
 from my_feed.views import (
     auth_feed_settings,
     my_feed,
@@ -176,6 +184,24 @@ urlpatterns = [
     ),
     path("api/search/", search_content, name="search-content"),
     path("api/wherefilmed/import/", wherefilmed_import, name="wherefilmed-import"),
+    path("api/landing-pages/<slug:slug>/", landing_page_detail, name="landing-page-detail"),
+    path("api/landing-pages/<slug:slug>/leads/", landing_page_leads, name="landing-page-leads"),
+    path("api/landing-pages/admin/pages/", admin_landing_pages, name="landing-pages-admin-pages"),
+    path(
+        "api/landing-pages/admin/pages/<slug:slug>/",
+        admin_landing_page_detail,
+        name="landing-pages-admin-page-detail",
+    ),
+    path(
+        "api/landing-pages/admin/pages/<slug:slug>/images/",
+        admin_landing_page_images,
+        name="landing-pages-admin-page-images",
+    ),
+    path(
+        "api/landing-pages/admin/images/<int:image_id>/",
+        admin_landing_page_image_detail,
+        name="landing-pages-admin-image-detail",
+    ),
     path("api/authors/top/", top_authors, name="top-authors"),
     path("api/authors/top-month/", top_authors_month, name="top-authors-month"),
     path("api/auth/register/", register_user, name="auth-register"),

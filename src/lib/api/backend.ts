@@ -384,6 +384,30 @@ export const buildSpecial1001FilmsAdminFilmUrl = (id: number | string): string =
   return `${getBackendBaseUrl()}/api/special-projects/365-films/admin/films/${encodeURIComponent(id)}/`
 }
 
+export const buildLandingPageUrl = (slug: string): string => {
+  return `${getBackendBaseUrl()}/api/landing-pages/${encodeURIComponent(slug)}/`
+}
+
+export const buildLandingPageLeadsUrl = (slug: string): string => {
+  return `${getBackendBaseUrl()}/api/landing-pages/${encodeURIComponent(slug)}/leads/`
+}
+
+export const buildLandingPagesAdminUrl = (): string => {
+  return `${getBackendBaseUrl()}/api/landing-pages/admin/pages/`
+}
+
+export const buildLandingPageAdminUrl = (slug: string): string => {
+  return `${getBackendBaseUrl()}/api/landing-pages/admin/pages/${encodeURIComponent(slug)}/`
+}
+
+export const buildLandingPageAdminImagesUrl = (slug: string): string => {
+  return `${getBackendBaseUrl()}/api/landing-pages/admin/pages/${encodeURIComponent(slug)}/images/`
+}
+
+export const buildLandingPageAdminImageUrl = (id: number | string): string => {
+  return `${getBackendBaseUrl()}/api/landing-pages/admin/images/${encodeURIComponent(id)}/`
+}
+
 export const buildBackendPostPath = (post: { id: number; title: string }): string => {
   const slug = slugifyTitle(post.title)
   return slug ? `/b/post/${post.id}-${slug}` : `/b/post/${post.id}`

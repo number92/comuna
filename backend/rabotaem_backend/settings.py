@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     "editor.apps.EditorConfig",
     "telegram_integration.apps.TelegramIntegrationConfig",
     "special_projects.apps.SpecialProjectsConfig",
+    "landing_pages.apps.LandingPagesConfig",
 ]
 
 MIDDLEWARE = [

@@ -23,12 +23,15 @@ from django.db import models
 from django.utils import timezone
 
 
-MEDIA_URL_RE = re.compile(
+ABSOLUTE_MEDIA_URL_RE = re.compile(
     r"""(?:
-        https?://(?:www\.)?tambur\.pub/media/
-        |/media/
-        |https?://media\.tambur\.pub/
-    )([^"'<>\s]+)""",
+        https?://(?:www\.)?tambur\.pub/media/(?P<site>[^"'<>\s]+)
+        |https?://media\.tambur\.pub/(?P<media>[^"'<>\s]+)
+    )""",
+    re.IGNORECASE | re.VERBOSE,
+)
+LOCAL_MEDIA_PATH_RE = re.compile(
+    r"""(?<![A-Za-z0-9:/._-])/media/(?P<path>[^"'<>\s]+)""",
     re.IGNORECASE | re.VERBOSE,
 )
 
@@ -510,8 +513,12 @@ class Command(BaseCommand):
     def _extract_media_keys(self, value: Any) -> set[str]:
         keys: set[str] = set()
         if isinstance(value, str):
-            for match in MEDIA_URL_RE.finditer(value):
-                key = self._normalize_key(match.group(1))
+            for match in ABSOLUTE_MEDIA_URL_RE.finditer(value):
+                key = self._normalize_key(match.group("site") or match.group("media"))
+                if key:
+                    keys.add(key)
+            for match in LOCAL_MEDIA_PATH_RE.finditer(value):
+                key = self._normalize_key(match.group("path"))
                 if key:
                     keys.add(key)
             return keys
@@ -526,7 +533,7 @@ class Command(BaseCommand):
 
     @staticmethod
     def _normalize_key(value: str) -> str:
-        raw = str(value or "").strip()
+        raw = str(value or "").strip().rstrip(").,;")
         if not raw:
             return ""
         split = urlsplit(raw)

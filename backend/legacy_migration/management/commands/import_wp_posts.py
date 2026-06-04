@@ -6,7 +6,7 @@ from django.utils import timezone
 
 from feeds.models import Post
 from feeds.views import _generate_manual_message_id
-from legacy_migration.legacy_posts import articles_q
+from legacy_migration.legacy_posts import articles_q, wp_has_ez_toc
 from legacy_migration.models import LegacyWpPostMap, LegacyWpUserMap, WpPostmeta, WpPosts
 from legacy_migration.wp_content import (
     editor_payload_to_content_string,
@@ -25,14 +25,6 @@ def _parse_wp_ids(raw: str) -> list[int]:
             raise CommandError(f"Некорректный WP ID: {part!r}")
         ids.append(int(part))
     return ids
-
-
-def _wp_has_ez_toc(wp_post_id: int) -> bool:
-    return WpPostmeta.objects.filter(
-        post_id=wp_post_id,
-        meta_key="_ez-toc-insert",
-        meta_value="1",
-    ).exists()
 
 
 class Command(BaseCommand):
@@ -134,7 +126,7 @@ class Command(BaseCommand):
                 f"(сначала import_wp_authors)"
             )
 
-        include_toc = _wp_has_ez_toc(wp_id)
+        include_toc = wp_has_ez_toc(wp_id)
         payload = gutenberg_to_editor_payload(
             wp_post.post_content or "",
             post_excerpt=wp_post.post_excerpt or "",

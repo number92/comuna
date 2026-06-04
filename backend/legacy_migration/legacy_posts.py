@@ -38,3 +38,13 @@ def articles_q() -> Q:
 
 def articles_queryset() -> QuerySet[WpPosts]:
     return WpPosts.objects.filter(articles_q()).order_by("-post_date")
+
+
+def wp_has_ez_toc(wp_post_id: int) -> bool:
+    from legacy_migration.models import WpPostmeta
+
+    return WpPostmeta.objects.filter(
+        post_id=wp_post_id,
+        meta_key="_ez-toc-insert",
+        meta_value="1",
+    ).exists()

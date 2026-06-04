@@ -12,6 +12,10 @@ from django.utils.text import slugify
 
 from feeds.models import Author
 from legacy_migration.models import LegacyWpUserMap, WpUsers
+from legacy_migration.wordpress_hasher import (
+    wordpress_password_field_value,
+    wp_password_hash_usable,
+)
 from users.models import SiteUserProfile
 
 User = get_user_model()
@@ -144,32 +148,75 @@ def wp_comment_body_to_text(html: str) -> str:
     return text.strip()
 
 
-def resolve_user_for_wp_user_id(wp_user_id: int) -> User:
-    wp_user_id = int(wp_user_id)
-    if wp_user_id <= 0:
-        raise ValueError("invalid wp user id")
-
-    map_row = LegacyWpUserMap.objects.filter(wp_user_id=wp_user_id).select_related("user").first()
-    if map_row and map_row.user_id:
-        return map_row.user
-
-    wp_user = WpUsers.objects.filter(id=wp_user_id).first()
-    if not wp_user:
-        raise LookupError(f"wp user {wp_user_id} not found")
-
-    display = (wp_user.display_name or wp_user.user_nicename or wp_user.user_login or "").strip()
-    base = wp_user_username(
-        wp_user_id=wp_user_id,
-        user_login=wp_user.user_login,
-        user_nicename=wp_user.user_nicename,
-    )
-    username = unique_django_username(base, wp_user_id=wp_user_id)
-    user = User.objects.create_user(
-        username=username,
-        email=(wp_user.user_email or "").strip() or None,
-    )
+def assign_wp_password_from_hash(user: User, user_pass: str) -> bool:
+    """Записать user_pass из WP в User.password (без set_password)."""
+    raw = (user_pass or "").strip()
+    if wp_password_hash_usable(raw):
+        user.password = wordpress_password_field_value(raw)
+        user.save(update_fields=["password"])
+        return True
     user.set_unusable_password()
     user.save(update_fields=["password"])
+    return False
+
+
+def _unique_email_for_wp_import(email: str, *, exclude_user_id: int | None) -> str:
+    cleaned = (email or "").strip()
+    if not cleaned:
+        return ""
+    qs = User.objects.filter(email__iexact=cleaned)
+    if exclude_user_id:
+        qs = qs.exclude(pk=exclude_user_id)
+    if qs.exists():
+        return ""
+    return cleaned
+
+
+def upsert_django_user_for_wp_user(
+    wp_user: WpUsers,
+    *,
+    force_password: bool = False,
+) -> tuple[User, bool, bool]:
+    """
+    Создать/обновить auth User + LegacyWpUserMap для строки wp_users.
+    Возвращает (user, user_created, password_updated).
+    """
+    wp_user_id = int(wp_user.id)
+    display = (wp_user.display_name or wp_user.user_nicename or wp_user.user_login or "").strip()
+    map_row = LegacyWpUserMap.objects.filter(wp_user_id=wp_user_id).select_related("user").first()
+
+    user_created = False
+    password_updated = False
+
+    if map_row and map_row.user_id:
+        user = map_row.user
+    else:
+        base = wp_user_username(
+            wp_user_id=wp_user_id,
+            user_login=wp_user.user_login,
+            user_nicename=wp_user.user_nicename,
+        )
+        username = unique_django_username(base, wp_user_id=wp_user_id)
+        email = _unique_email_for_wp_import(wp_user.user_email, exclude_user_id=None)
+        user = User.objects.create_user(username=username, email=email or None)
+        user_created = True
+
+    email = _unique_email_for_wp_import(wp_user.user_email, exclude_user_id=user.pk)
+    changed_user = False
+    if email and (user.email or "").lower() != email.lower():
+        user.email = email
+        changed_user = True
+
+    should_set_password = force_password or user_created or not user.has_usable_password()
+    if should_set_password and (force_password or wp_password_hash_usable(wp_user.user_pass)):
+        if assign_wp_password_from_hash(user, wp_user.user_pass):
+            password_updated = True
+        elif user_created:
+            password_updated = True
+
+    if changed_user:
+        user.save(update_fields=["email"])
+
     if display:
         SiteUserProfile.objects.update_or_create(
             user=user,
@@ -193,6 +240,28 @@ def resolve_user_for_wp_user_id(wp_user_id: int) -> User:
             "imported_at": timezone.now(),
         },
     )
+    return user, user_created, password_updated
+
+
+def resolve_user_for_wp_user_id(wp_user_id: int) -> User:
+    wp_user_id = int(wp_user_id)
+    if wp_user_id <= 0:
+        raise ValueError("invalid wp user id")
+
+    map_row = LegacyWpUserMap.objects.filter(wp_user_id=wp_user_id).select_related("user").first()
+    if map_row and map_row.user_id:
+        wp_user = WpUsers.objects.filter(id=wp_user_id).first()
+        if wp_user and wp_password_hash_usable(wp_user.user_pass):
+            stored = (map_row.user.password or "").strip()
+            if not stored.startswith("wordpress$") and not wp_password_hash_usable(stored):
+                assign_wp_password_from_hash(map_row.user, wp_user.user_pass)
+        return map_row.user
+
+    wp_user = WpUsers.objects.filter(id=wp_user_id).first()
+    if not wp_user:
+        raise LookupError(f"wp user {wp_user_id} not found")
+
+    user, _, _ = upsert_django_user_for_wp_user(wp_user, force_password=False)
     return user
 
 

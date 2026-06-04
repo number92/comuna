@@ -11,10 +11,10 @@ from legacy_migration.models import LegacyWpPostMap
 from legacy_migration.wp_media import (
     build_url_mapping,
     extract_wp_upload_urls_from_post_content,
-    public_media_url,
-    public_media_url_relative,
-    rewrite_absolute_media_urls_to_relative,
+    legacy_media_use_object_storage,
+    rewrite_legacy_media_urls_for_delivery,
     rewrite_post_content,
+    target_public_url,
     wp_thumbnail_attachment_url,
     wp_url_to_storage_path,
 )
@@ -24,7 +24,7 @@ from legacy_migration.management.commands.import_wp_posts import _parse_wp_ids
 class Command(BaseCommand):
     help = (
         "Скачать картинки posletitrov.ru/wp-content/uploads для импортированных постов "
-        "и переписать URL в Post.content на локальный /media/legacy-wp/..."
+        "и переписать URL в Post.content (S3/CDN на prod, /media/… локально на диске)"
     )
 
     def add_arguments(self, parser):
@@ -58,7 +58,12 @@ class Command(BaseCommand):
         parser.add_argument(
             "--rewrite-only",
             action="store_true",
-            help="Не скачивать; только заменить http://…/media/ на /media/ в уже импортированных постах",
+            help="Не скачивать; переписать URL медиа под текущую раздачу (/media/ или CDN)",
+        )
+        parser.add_argument(
+            "--local-disk",
+            action="store_true",
+            help="Писать в MEDIA_ROOT, не в S3 (даже если MEDIA_STORAGE_BACKEND=s3)",
         )
 
     def handle(self, *args, **options):
@@ -66,11 +71,16 @@ class Command(BaseCommand):
         dry_run: bool = options["dry_run"]
         skip_content: bool = options["skip_content"]
         rewrite_only: bool = options["rewrite_only"]
-        relative_urls: bool = not options["absolute_urls"]
+        use_object_storage = legacy_media_use_object_storage() and not options["local_disk"]
+        relative_urls = (
+            not options["absolute_urls"]
+            and not use_object_storage
+        )
         backend_base = (options["backend_base"] or "").strip() or os.environ.get(
             "LEGACY_MEDIA_BACKEND_BASE",
             "http://127.0.0.1:8000",
         )
+        storage_label = "S3" if use_object_storage else "MEDIA_ROOT"
 
         total_files = 0
         total_posts = 0
@@ -102,24 +112,28 @@ class Command(BaseCommand):
                 sp = wp_url_to_storage_path(u)
                 self.stdout.write(f"  {u}")
                 if sp:
-                    self.stdout.write(f"    → media/{sp}")
+                    self.stdout.write(f"    → {storage_label}:{sp}")
+                    if not dry_run and not rewrite_only:
+                        self.stdout.write(
+                            f"       URL: {target_public_url(sp, backend_base=backend_base, relative_urls=relative_urls)}"
+                        )
 
             if dry_run:
                 continue
 
             if rewrite_only:
                 with transaction.atomic():
-                    new_content = rewrite_absolute_media_urls_to_relative(post.content or "")
+                    new_content = rewrite_legacy_media_urls_for_delivery(post.content or "")
                     raw = dict(post.raw_data or {})
                     if isinstance(raw.get("legacy_cover_url"), str):
-                        raw["legacy_cover_url"] = rewrite_absolute_media_urls_to_relative(
+                        raw["legacy_cover_url"] = rewrite_legacy_media_urls_for_delivery(
                             raw["legacy_cover_url"]
                         )
                     post.content = new_content
                     post.raw_data = raw
                     post.save(update_fields=["content", "raw_data", "updated_at"])
                 total_posts += 1
-                self.stdout.write(self.style.SUCCESS("  rewrite-only: /media/…"))
+                self.stdout.write(self.style.SUCCESS("  rewrite-only: URL обновлены"))
                 continue
 
             try:
@@ -127,6 +141,7 @@ class Command(BaseCommand):
                     urls,
                     backend_base=backend_base,
                     relative_urls=relative_urls,
+                    use_object_storage=use_object_storage,
                 )
             except OSError as exc:
                 raise CommandError(f"wp:{wp_id}: {exc}") from exc
@@ -142,10 +157,10 @@ class Command(BaseCommand):
                 if thumb_url:
                     storage = wp_url_to_storage_path(thumb_url)
                     if storage:
-                        cover_url = (
-                            public_media_url_relative(storage)
-                            if relative_urls
-                            else public_media_url(storage, backend_base=backend_base)
+                        cover_url = target_public_url(
+                            storage,
+                            backend_base=backend_base,
+                            relative_urls=relative_urls,
                         )
                     elif thumb_url in mapping:
                         cover_url = mapping[thumb_url]
@@ -175,9 +190,14 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING("dry-run: файлы не скачаны, посты не изменены"))
             return
 
+        delivery = (
+            "S3/CDN (MEDIA_PUBLIC_URL_MODE)"
+            if use_object_storage
+            else f"{backend_base}/media/legacy-wp/uploads/..."
+        )
         self.stdout.write(
             self.style.SUCCESS(
                 f"Обработано постов: {total_posts}; файлов (уник. путей): ~{total_files}. "
-                f"Раздача: {backend_base}/media/legacy-wp/uploads/..."
+                f"Хранилище: {storage_label}. Раздача: {delivery}"
             )
         )

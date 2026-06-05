@@ -43,7 +43,7 @@ from feeds.models import (
     PostRead,
     Tag,
 )
-from rabotaem_backend.cache import anonymous_cache
+from rabotaem_backend.cache import anonymous_cache, bump_public_cache_prefix
 from ratings.service import calculate_author_rating, format_rating_value, user_max_author_rating
 from users.models import AuthorAdmin
 from users import views as user_views
@@ -72,6 +72,8 @@ _INTERNAL_COMUNA_HOSTS = {
 _COMUN_EXTERNAL_LINKS_FORBIDDEN_ERROR = (
     "В этом сообществе запрещены внешние ссылки. Удалите ссылки из текста и шаблона публикации."
 )
+_COMUNS_CATALOG_DEFAULT_LIMIT = 20
+_COMUNS_CATALOG_MAX_LIMIT = 50
 
 
 def _fv():
@@ -230,6 +232,49 @@ def _serialize_comun_knowledge_base(items: list[ComunKnowledgeBaseItem]) -> dict
     for root in roots:
         visit(root, 0)
     return {"items": roots, "flat_items": flat_items}
+
+
+def _parse_positive_int_param(value: object, *, default: int, maximum: int | None = None) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        parsed = default
+    parsed = max(parsed, 1)
+    if maximum is not None:
+        parsed = min(parsed, maximum)
+    return parsed
+
+
+def _serialize_comun_catalog_item(request: HttpRequest, comun: Comun) -> dict:
+    tags = [
+        {
+            "id": tag.id,
+            "name": tag.name,
+            "lemma": tag.lemma or _fv()._lemmatize_tag(tag.name) or tag.name,
+        }
+        for tag in comun.tags.all()
+        if getattr(tag, "is_active", True)
+    ]
+    try:
+        rating_score = round(float(getattr(comun, "rating_score", 0) or 0), 2)
+    except (TypeError, ValueError):
+        rating_score = 0.0
+    return {
+        "id": comun.id,
+        "name": comun.name,
+        "slug": comun.slug,
+        "logo_url": _comun_logo_url(request, comun),
+        "product_description": comun.product_description,
+        "subscribers_count": int(getattr(comun, "subscribers_count", 0) or 0),
+        "authors_count": int(getattr(comun, "authors_count", 0) or 0),
+        "rating": {
+            "score": rating_score,
+            "upvotes": int(getattr(comun, "votes_up", 0) or 0),
+            "downvotes": int(getattr(comun, "votes_down", 0) or 0),
+        },
+        "sort_order": int(getattr(comun, "sort_order", 0) or 0),
+        "tags": tags,
+    }
 
 
 def _parse_post_reference_to_id(value: object) -> int | None:
@@ -1331,6 +1376,9 @@ def comun_create_from_telegram_channel(request: HttpRequest) -> HttpResponse:
         only_moderators_can_post=True,
     )
     comun.moderators.add(current_user)
+    bump_public_cache_prefix("comuns-catalog")
+    bump_public_cache_prefix("comuns-sidebar")
+    bump_public_cache_prefix("top-comuns")
     comun = (
         Comun.objects.filter(id=comun.id)
         .select_related("creator", "welcome_post", "telegram_source_author")
@@ -1350,6 +1398,93 @@ def comun_create_from_telegram_channel(request: HttpRequest) -> HttpResponse:
                 include_activity=True,
             ),
         }
+    )
+
+
+def _comuns_catalog_queryset(query: str = ""):
+    queryset = (
+        Comun.objects.filter(is_active=True)
+        .exclude(slug__iexact="faq")
+        .only(
+            "id",
+            "name",
+            "slug",
+            "logo_url",
+            "product_description",
+            "subscribers_count",
+            "authors_count",
+            "rating_score",
+            "votes_up",
+            "votes_down",
+            "sort_order",
+            "is_active",
+        )
+        .prefetch_related(
+            Prefetch(
+                "tags",
+                queryset=Tag.objects.filter(is_active=True)
+                .only("id", "name", "lemma", "is_active")
+                .order_by("name"),
+            )
+        )
+        .order_by("-rating_score", "sort_order", "name", "id")
+    )
+    if query:
+        queryset = queryset.filter(
+            Q(name__icontains=query)
+            | Q(product_description__icontains=query)
+            | Q(tags__name__icontains=query)
+            | Q(tags__lemma__icontains=query)
+        ).distinct()
+    return queryset
+
+
+def _comuns_catalog_response(
+    request: HttpRequest,
+    queryset,
+    *,
+    page: int,
+    limit: int,
+    query: str,
+) -> HttpResponse:
+    total_comuns = queryset.count()
+    total_pages = math.ceil(total_comuns / limit) if total_comuns else 0
+    offset = (page - 1) * limit
+    comuns = list(queryset[offset : offset + limit])
+
+    return JsonResponse(
+        {
+            "ok": True,
+            "comuns": [_serialize_comun_catalog_item(request, comun) for comun in comuns],
+            "page": page,
+            "limit": limit,
+            "total_comuns": total_comuns,
+            "total_pages": total_pages,
+            "has_next": bool(offset + limit < total_comuns),
+            "has_previous": page > 1 and total_comuns > 0,
+            "query": query,
+        }
+    )
+
+
+@anonymous_cache(prefix="comuns-catalog", seconds=21_600, cache_authenticated=True)
+def comuns_catalog(request: HttpRequest) -> HttpResponse:
+    if request.method not in {"GET", "HEAD"}:
+        return JsonResponse({"ok": False, "error": "method not allowed"}, status=405)
+
+    page = _parse_positive_int_param(request.GET.get("page"), default=1)
+    limit = _parse_positive_int_param(
+        request.GET.get("limit"),
+        default=_COMUNS_CATALOG_DEFAULT_LIMIT,
+        maximum=_COMUNS_CATALOG_MAX_LIMIT,
+    )
+    query = re.sub(r"\s+", " ", str(request.GET.get("q") or "").strip())[:120]
+    return _comuns_catalog_response(
+        request,
+        _comuns_catalog_queryset(query),
+        page=page,
+        limit=limit,
+        query=query,
     )
 
 
@@ -1461,6 +1596,9 @@ def comuns_list_create(request: HttpRequest) -> HttpResponse:
         if welcome_post:
             comun.welcome_post = welcome_post
     comun.save()
+    bump_public_cache_prefix("comuns-catalog")
+    bump_public_cache_prefix("comuns-sidebar")
+    bump_public_cache_prefix("top-comuns")
 
     comun = (
         Comun.objects.filter(id=comun.id)
@@ -2693,6 +2831,7 @@ __all__ = [
     "comun_post_category_update",
     "comun_posts",
     "comun_vote",
+    "comuns_catalog",
     "comuns_composer",
     "comuns_list_create",
 ]

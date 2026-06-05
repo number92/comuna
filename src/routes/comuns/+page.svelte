@@ -3,20 +3,45 @@
   import { page } from '$app/stores'
   import Header from '$lib/components/ui/layout/pages/Header.svelte'
   import { Button, Modal, toast } from 'mono-svelte'
-  import { buildComunsUrl, buildTagsEnsureUrl, type BackendComun } from '$lib/api/backend'
+  import {
+    buildComunsSidebarUrl,
+    buildComunsUrl,
+    buildTagsEnsureUrl,
+    type BackendComun,
+  } from '$lib/api/backend'
   import { refreshSiteUser, siteToken, siteUser, uploadSiteImage } from '$lib/siteAuth'
   import { goto } from '$app/navigation'
   import { feedSettingsHydrated, subscribeToComunBySlug, userSettings } from '$lib/settings'
   import { onMount } from 'svelte'
+  import { cachedJson } from '$lib/api/publicCache'
+  import { sortComunsByRating } from '$lib/communitySidebar'
+  import RecommendedComunsPanel from '$lib/components/feeds/RecommendedComunsPanel.svelte'
 
   export let data
 
   const COMMUNITY_CREATION_MIN_AUTHOR_RATING = 0
   const COMMUNITIES_LANDING_HREF = '/lp/communities'
+  const COMUNS_PAGE_SIZE = 20
+  type CatalogScope = 'all' | 'mine'
 
   let comuns: BackendComun[] = data.comuns ?? []
-  let filteredComuns: BackendComun[] = []
-  let searchQuery = ''
+  let searchQuery = data.query ?? ''
+  let lastDataQuery = data.query ?? ''
+  let mineComuns: BackendComun[] = []
+  let mineBaseComuns: BackendComun[] = []
+  let mineSourceComuns: BackendComun[] = []
+  let mineHasBaseComuns = false
+  let minePage = 1
+  let mineTotalComuns = 0
+  let mineTotalPages = 0
+  let mineHasNext = false
+  let mineHasPrevious = false
+  let mineLoading = false
+  let mineError = ''
+  let sidebarIndexComuns: BackendComun[] = []
+  let sidebarIndexLoaded = false
+  let sidebarIndexLoading = false
+  let sidebarIndexError = ''
   let createOpen = false
   let insufficientOpen = false
   let creating = false
@@ -55,17 +80,57 @@
   $: myFeedComunSlugSet = new Set(
     ($userSettings.myFeedComuns ?? []).map(normalizeComunSlug).filter(Boolean)
   )
+  $: selectedMyFeedComuns = $userSettings.myFeedComuns ?? []
+  $: activeScope = (data.scope === 'mine' ? 'mine' : 'all') as CatalogScope
+  $: requestedPage = Math.max(Number(data.page ?? 1) || 1, 1)
+  $: mineBaseComuns = (() => {
+    if (!$siteToken || !$feedSettingsHydrated) return []
+    return sortComunsByRating(sidebarIndexComuns)
+      .filter((comun) => myFeedComunSlugSet.has(normalizeComunSlug(comun.slug)) || Boolean(comun.can_moderate))
+  })()
+  $: mineHasBaseComuns = mineBaseComuns.length > 0
+  $: mineSourceComuns = (() => {
+    const query = String(data.query ?? '').trim().toLowerCase()
+    return mineBaseComuns
+      .filter((comun) => {
+        if (!query) return true
+        const name = (comun.name || '').toLowerCase()
+        const description = (comun.product_description || '').toLowerCase()
+        return name.includes(query) || description.includes(query)
+      })
+  })()
+  $: if (activeScope === 'mine') {
+    mineTotalComuns = mineSourceComuns.length
+    mineTotalPages = Math.ceil(mineTotalComuns / COMUNS_PAGE_SIZE)
+    minePage = mineTotalPages > 0 ? Math.min(requestedPage, mineTotalPages) : requestedPage
+    mineHasPrevious = minePage > 1 && mineTotalComuns > 0
+    mineHasNext = minePage * COMUNS_PAGE_SIZE < mineTotalComuns
+    mineComuns = mineSourceComuns.slice(
+      (minePage - 1) * COMUNS_PAGE_SIZE,
+      minePage * COMUNS_PAGE_SIZE
+    )
+    mineLoading = Boolean($siteToken) && (!$feedSettingsHydrated || (!sidebarIndexLoaded && !sidebarIndexError))
+    mineError = !$siteToken ? 'auth_required' : sidebarIndexError
+  }
+  $: comuns = activeScope === 'mine' ? mineComuns : data.comuns ?? []
+  $: currentPage =
+    activeScope === 'mine' ? minePage : requestedPage
+  $: totalComuns =
+    activeScope === 'mine' ? mineTotalComuns : Math.max(Number(data.totalComuns ?? 0) || 0, 0)
+  $: totalPages =
+    activeScope === 'mine' ? mineTotalPages : Math.max(Number(data.totalPages ?? 0) || 0, 0)
+  $: hasNext = activeScope === 'mine' ? mineHasNext : Boolean(data.hasNext)
+  $: hasPrevious = activeScope === 'mine' ? mineHasPrevious : Boolean(data.hasPrevious)
+  $: if ((data.query ?? '') !== lastDataQuery) {
+    lastDataQuery = data.query ?? ''
+    searchQuery = lastDataQuery
+  }
 
   onMount(() => {
     if ($siteToken && !$siteUser) {
       void refreshSiteUser().catch(() => null)
     }
   })
-
-  const comunCategorySlugs = (comun: BackendComun) =>
-    (comun.categories ?? [])
-      .map((category) => String(category?.slug ?? '').trim())
-      .filter(Boolean)
 
   const toggleComunSubscription = (event: MouseEvent, comun: BackendComun) => {
     event.preventDefault()
@@ -105,16 +170,52 @@
     toast({ content: 'Посты этого сообщества будут попадать в "Мою ленту"' })
   }
 
-  $: filteredComuns = (() => {
-    const query = searchQuery.trim().toLowerCase()
-    if (!query) return comuns
-    return comuns.filter((comun) => {
-      const name = (comun.name || '').toLowerCase()
-      const description = (comun.product_description || '').toLowerCase()
-      const tags = (comun.tags ?? []).map((tag) => (tag.name || '').toLowerCase()).join(' ')
-      return name.includes(query) || description.includes(query) || tags.includes(query)
-    })
-  })()
+  const loadSidebarIndexComuns = async () => {
+    if (!browser || sidebarIndexLoading || sidebarIndexLoaded) return
+    sidebarIndexLoading = true
+    sidebarIndexError = ''
+    try {
+      const payload = await cachedJson<{ comuns?: BackendComun[] }>(
+        'public:sidebar-comuns',
+        buildComunsSidebarUrl(),
+        { ttlMs: 21_600_000 }
+      )
+      sidebarIndexComuns = payload.comuns ?? []
+      sidebarIndexLoaded = true
+    } catch (error) {
+      sidebarIndexError = error instanceof Error ? error.message : 'Не удалось загрузить мои сообщества'
+    } finally {
+      sidebarIndexLoading = false
+    }
+  }
+
+  $: if (browser && activeScope === 'mine' && $siteToken) {
+    void loadSidebarIndexComuns()
+  }
+
+  const gotoCatalogScope = (scope: CatalogScope) => {
+    const params = new URLSearchParams()
+    const query = searchQuery.trim()
+    if (scope === 'mine') params.set('scope', 'mine')
+    if (query) params.set('q', query)
+    const queryString = params.toString()
+    goto(`/comuns${queryString ? `?${queryString}` : ''}`)
+  }
+
+  const gotoCatalogPage = (pageNumber: number) => {
+    const nextPage = Math.max(pageNumber, 1)
+    const params = new URLSearchParams()
+    const query = searchQuery.trim()
+    if (activeScope === 'mine') params.set('scope', 'mine')
+    if (query) params.set('q', query)
+    if (nextPage > 1) params.set('page', String(nextPage))
+    const queryString = params.toString()
+    goto(`/comuns${queryString ? `?${queryString}` : ''}`)
+  }
+
+  const submitSearch = () => {
+    gotoCatalogPage(1)
+  }
 
   const currentUserMaxAuthorRating = (user = $siteUser) => {
     const authorRatings = (user?.authors ?? []).map((author) => Math.max(Number(author.author_rating ?? 0) || 0, 0))
@@ -303,21 +404,88 @@
     </Button>
   </div>
 
+  <div class="inline-flex w-fit rounded-xl border border-slate-200 bg-white p-1 text-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <button
+      type="button"
+      class={`rounded-lg px-4 py-2 font-medium transition ${
+        activeScope === 'all'
+          ? 'bg-slate-900 text-white dark:bg-zinc-100 dark:text-zinc-950'
+          : 'text-slate-600 hover:bg-slate-50 dark:text-zinc-300 dark:hover:bg-zinc-800'
+      }`}
+      on:click={() => gotoCatalogScope('all')}
+    >
+      Все сообщества
+    </button>
+    <button
+      type="button"
+      class={`rounded-lg px-4 py-2 font-medium transition ${
+        activeScope === 'mine'
+          ? 'bg-slate-900 text-white dark:bg-zinc-100 dark:text-zinc-950'
+          : 'text-slate-600 hover:bg-slate-50 dark:text-zinc-300 dark:hover:bg-zinc-800'
+      }`}
+      on:click={() => gotoCatalogScope('mine')}
+    >
+      Мои сообщества
+    </button>
+  </div>
+
   <section class="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white/95 dark:bg-zinc-900/85 p-4 sm:p-5">
-    <label>
-      <span class="sr-only">Поиск сообществ</span>
-      <input
-        bind:value={searchQuery}
-        type="text"
-        placeholder="Поиск сообществ"
-        class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-500"
-      />
-    </label>
+    <form class="flex flex-col gap-3 sm:flex-row" on:submit|preventDefault={submitSearch}>
+      <label class="min-w-0 flex-1">
+        <span class="sr-only">Поиск сообществ</span>
+        <input
+          bind:value={searchQuery}
+          type="text"
+          placeholder="Поиск сообществ"
+          class="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-slate-400 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:focus:border-zinc-500"
+        />
+      </label>
+      <div class="flex shrink-0 gap-2">
+        <button
+          type="submit"
+          class="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-zinc-300"
+        >
+          Найти
+        </button>
+        {#if data.query}
+          <button
+            type="button"
+            class="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+            on:click={() => {
+              searchQuery = ''
+              gotoCatalogPage(1)
+            }}
+          >
+            Сбросить
+          </button>
+        {/if}
+      </div>
+    </form>
   </section>
 
-  {#if filteredComuns.length}
+  {#if activeScope === 'mine' && mineLoading}
+    <div class="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white/95 dark:bg-zinc-900/85 p-6 text-slate-600 dark:text-zinc-400">
+      Загрузка...
+    </div>
+  {:else if activeScope === 'mine' && mineError === 'auth_required'}
+    <div class="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white/95 dark:bg-zinc-900/85 p-6 text-slate-600 dark:text-zinc-400">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <span>Войдите, чтобы открыть свои сообщества.</span>
+        <a
+          href={`/account?next=${encodeURIComponent('/comuns?scope=mine')}`}
+          class="rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-slate-700 dark:bg-zinc-100 dark:text-zinc-950 dark:hover:bg-zinc-300"
+        >
+          Войти
+        </a>
+      </div>
+    </div>
+  {:else if activeScope === 'mine' && mineError}
+    <div class="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white/95 dark:bg-zinc-900/85 p-6 text-red-600 dark:text-red-400">
+      {mineError}
+    </div>
+  {:else if comuns.length}
     <div class="grid gap-4 sm:grid-cols-2">
-      {#each filteredComuns as comun}
+      {#each comuns as comun}
         {@const subscribed = myFeedComunSlugSet.has(normalizeComunSlug(comun.slug))}
         {@const subscriptionsLoading = Boolean($siteToken && !$feedSettingsHydrated)}
         <div
@@ -381,13 +549,47 @@
         </div>
       {/each}
     </div>
+  {:else if activeScope === 'mine' && !mineHasBaseComuns}
+    <RecommendedComunsPanel
+      selectedSlugs={selectedMyFeedComuns}
+      title="Подпишитесь на сообщества"
+      description="Выберите несколько сообществ, чтобы они появились здесь и начали наполнять вашу ленту."
+    />
   {:else}
     <div class="rounded-2xl border border-slate-200 dark:border-zinc-800 bg-white/95 dark:bg-zinc-900/85 p-6 text-slate-600 dark:text-zinc-400">
-      {#if comuns.length}
+      {#if data.query}
         Ничего не найдено по вашему запросу.
+      {:else if activeScope === 'mine'}
+        У вас пока нет сообществ.
       {:else}
         Пока нет созданных сообществ.
       {/if}
+    </div>
+  {/if}
+
+  {#if totalComuns > 0}
+    <div class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white/95 p-3 text-sm text-slate-600 dark:border-zinc-800 dark:bg-zinc-900/85 dark:text-zinc-400">
+      <div>
+        {currentPage} / {Math.max(totalPages, 1)}
+      </div>
+      <div class="flex gap-2">
+        <button
+          type="button"
+          class="rounded-xl border border-slate-300 px-4 py-2 font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+          disabled={!hasPrevious}
+          on:click={() => gotoCatalogPage(currentPage - 1)}
+        >
+          Назад
+        </button>
+        <button
+          type="button"
+          class="rounded-xl border border-slate-300 px-4 py-2 font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+          disabled={!hasNext}
+          on:click={() => gotoCatalogPage(currentPage + 1)}
+        >
+          Вперед
+        </button>
+      </div>
     </div>
   {/if}
 </div>

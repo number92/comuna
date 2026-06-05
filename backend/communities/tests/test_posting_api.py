@@ -13,7 +13,7 @@ from communities.models import (
     ComunPostCategoryAssignment,
     ComunPostRatingContribution,
 )
-from feeds.models import Author, Post
+from feeds.models import Author, Post, Tag
 from my_feed.models import UserFeedSettings
 from users import service as user_service
 from users.models import AuthorAdmin
@@ -170,6 +170,69 @@ class ComunPostingApiTests(TestCase):
         self.assertEqual(float(rating_score), 7.2)
         self.comun.refresh_from_db()
         self.assertEqual(float(self.comun.rating_score), 7.2)
+
+    def test_comuns_catalog_returns_paginated_lightweight_top(self):
+        catalog_tag = Tag.objects.create(name="Catalog", lemma="catalog")
+        self.comun.rating_score = 100
+        self.comun.product_description = "Top catalog community"
+        self.comun.save(update_fields=["rating_score", "product_description"])
+        self.comun.tags.add(catalog_tag)
+        for index in range(25):
+            Comun.objects.create(
+                name=f"Catalog Community {index}",
+                slug=f"catalog-community-{index}",
+                creator=self.user,
+                rating_score=index,
+            )
+
+        response = self.client.get(reverse("comuns-catalog"), {"limit": "20"})
+
+        self.assertEqual(response.status_code, 200, response.content.decode())
+        payload = response.json()
+        self.assertTrue(payload.get("ok"))
+        self.assertEqual(payload["page"], 1)
+        self.assertEqual(payload["limit"], 20)
+        self.assertEqual(payload["total_comuns"], 26)
+        self.assertTrue(payload["has_next"])
+        self.assertEqual(len(payload["comuns"]), 20)
+        first_comun = payload["comuns"][0]
+        self.assertEqual(first_comun["slug"], self.comun.slug)
+        self.assertEqual(first_comun["rating"]["score"], 100.0)
+        self.assertEqual(first_comun["tags"][0]["name"], catalog_tag.name)
+        self.assertNotIn("template_type_options", first_comun)
+        self.assertNotIn("template_editor_blocks_by_template", first_comun)
+        self.assertNotIn("moderators", first_comun)
+        self.assertNotIn("can_post", first_comun)
+
+        second_page_response = self.client.get(reverse("comuns-catalog"), {"limit": "20", "page": "2"})
+        self.assertEqual(second_page_response.status_code, 200, second_page_response.content.decode())
+        second_page_payload = second_page_response.json()
+        self.assertEqual(second_page_payload["page"], 2)
+        self.assertFalse(second_page_payload["has_next"])
+        self.assertEqual(len(second_page_payload["comuns"]), 6)
+
+    def test_comuns_catalog_searches_on_backend(self):
+        Comun.objects.create(
+            name="Needle Community",
+            slug="needle-community",
+            creator=self.user,
+            product_description="Private search marker",
+            rating_score=10,
+        )
+        Comun.objects.create(
+            name="Another Community",
+            slug="another-community",
+            creator=self.user,
+            rating_score=20,
+        )
+
+        response = self.client.get(reverse("comuns-catalog"), {"q": "needle", "limit": "20"})
+
+        self.assertEqual(response.status_code, 200, response.content.decode())
+        payload = response.json()
+        slugs = [item["slug"] for item in payload["comuns"]]
+        self.assertEqual(slugs, ["needle-community"])
+        self.assertEqual(payload["total_comuns"], 1)
 
     def test_auth_posts_require_comun_for_published_post(self):
         response = self.client.post(

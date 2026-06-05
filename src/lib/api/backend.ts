@@ -96,6 +96,25 @@ export const buildComunsUrl = (): string => {
   return `${getBackendBaseUrl()}/api/comuns/`
 }
 
+export const buildComunsCatalogUrl = (options?: {
+  page?: number
+  limit?: number
+  q?: string
+}): string => {
+  const params = new URLSearchParams()
+  if (typeof options?.page === 'number') {
+    params.set('page', String(options.page))
+  }
+  if (typeof options?.limit === 'number') {
+    params.set('limit', String(options.limit))
+  }
+  if (options?.q) {
+    params.set('q', options.q)
+  }
+  const query = params.toString()
+  return `${getBackendBaseUrl()}/api/comuns/catalog/${query ? `?${query}` : ''}`
+}
+
 export const buildComunsComposerUrl = (): string => {
   return `${getBackendBaseUrl()}/api/comuns/composer/`
 }

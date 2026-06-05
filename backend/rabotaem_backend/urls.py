@@ -12,6 +12,7 @@ from communities.views import (
     comun_posts,
     comun_vote,
     comuns_composer,
+    comuns_catalog,
     comuns_list_create,
     comuns_sidebar,
 )
@@ -157,6 +158,7 @@ urlpatterns = [
     path("api/home/favorites/", favorites_feed, name="favorites-feed"),
     path("api/home/my/", my_feed, name="my-feed"),
     path("api/comuns/", comuns_list_create, name="comuns-list-create"),
+    path("api/comuns/catalog/", comuns_catalog, name="comuns-catalog"),
     path("api/comuns/composer/", comuns_composer, name="comuns-composer"),
     path("api/comuns/sidebar/", comuns_sidebar, name="comuns-sidebar"),
     path(

@@ -234,6 +234,35 @@ class ComunPostingApiTests(TestCase):
         self.assertEqual(slugs, ["needle-community"])
         self.assertEqual(payload["total_comuns"], 1)
 
+    def test_comuns_sidebar_returns_catalog_card_fields(self):
+        sidebar_tag = Tag.objects.create(name="Sidebar", lemma="sidebar")
+        self.comun.product_description = "Sidebar community description"
+        self.comun.subscribers_count = 12
+        self.comun.authors_count = 3
+        self.comun.rating_score = 42
+        self.comun.save(
+            update_fields=[
+                "product_description",
+                "subscribers_count",
+                "authors_count",
+                "rating_score",
+            ]
+        )
+        self.comun.tags.add(sidebar_tag)
+
+        response = self.client.get(reverse("comuns-sidebar"))
+
+        self.assertEqual(response.status_code, 200, response.content.decode())
+        payload = response.json()
+        first_comun = payload["comuns"][0]
+        self.assertEqual(first_comun["slug"], self.comun.slug)
+        self.assertEqual(first_comun["product_description"], "Sidebar community description")
+        self.assertEqual(first_comun["subscribers_count"], 12)
+        self.assertEqual(first_comun["authors_count"], 3)
+        self.assertEqual(first_comun["rating"]["score"], 42.0)
+        self.assertEqual(first_comun["tags"][0]["name"], sidebar_tag.name)
+        self.assertTrue(first_comun["can_moderate"])
+
     def test_auth_posts_require_comun_for_published_post(self):
         response = self.client.post(
             reverse("auth-posts"),

@@ -182,13 +182,6 @@
       min: '0',
     },
     {
-      key: 'community_post_rating_weight',
-      label: 'Посты в рейтинге сообщества',
-      description: 'Множитель суммы рейтингов постов для рейтинга сообщества.',
-      step: '0.01',
-      min: '0',
-    },
-    {
       key: 'community_post_rating_days',
       label: 'Окно рейтинга сообщества',
       description: 'Сколько первых дней жизни поста учитывать для рейтинга сообщества.',
@@ -671,7 +664,7 @@
       {:else if ratingSettings}
         <div class="formula-strip">
           <span>Пост = голоса + комментарии + лайки комментариев + сообщество + автор</span>
-          <span>Сообщество = посты за первые {ratingSettings.community_post_rating_days} дней * {ratingSettings.community_post_rating_weight}</span>
+          <span>Сообщество = накопительный рейтинг, пост влияет только первые {ratingSettings.community_post_rating_days} дней</span>
           <span>Главная = до {ratingSettings.home_posts_per_community_per_day} постов сообщества в день</span>
           <span>Автор = посты автора + лайки его комментариев</span>
         </div>

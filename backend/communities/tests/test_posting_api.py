@@ -1,4 +1,5 @@
 import json
+from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
@@ -6,7 +7,12 @@ from django.urls import reverse
 from django.utils import timezone
 
 from communities import service as community_service
-from communities.models import Comun, ComunCategory, ComunPostCategoryAssignment
+from communities.models import (
+    Comun,
+    ComunCategory,
+    ComunPostCategoryAssignment,
+    ComunPostRatingContribution,
+)
 from feeds.models import Author, Post
 from my_feed.models import UserFeedSettings
 from users import service as user_service
@@ -104,6 +110,66 @@ class ComunPostingApiTests(TestCase):
         self.assertFalse(incremented)
         self.comun.refresh_from_db()
         self.assertEqual(self.comun.authors_count, 0)
+
+    def test_comun_rating_post_delta_applies_only_in_first_rating_window(self):
+        author = Author.objects.create(username="rating-author", title="Rating Author")
+        post = Post.objects.create(
+            author=author,
+            message_id=991,
+            title="Рейтинговый пост",
+            content="{}",
+            raw_data={"source": "manual_comun", "comun_slug": self.comun.slug},
+            is_pending=False,
+            is_blocked=False,
+        )
+        self.comun.rating_score = 247
+        self.comun.save(update_fields=["rating_score"])
+
+        community_service._apply_comun_rating_delta_for_post(
+            post,
+            value_delta=7,
+            event_type="post_vote",
+        )
+        self.comun.refresh_from_db()
+        self.assertEqual(float(self.comun.rating_score), 254.0)
+        contribution = ComunPostRatingContribution.objects.get(comun=self.comun, post=post)
+        self.assertEqual(float(contribution.score), 7.0)
+
+        Post.objects.filter(id=post.id).update(created_at=timezone.now() - timedelta(days=8))
+        community_service._apply_comun_rating_delta_for_post(
+            post.id,
+            value_delta=-5,
+            event_type="post_vote",
+        )
+        self.comun.refresh_from_db()
+        self.assertEqual(float(self.comun.rating_score), 254.0)
+        contribution.refresh_from_db()
+        self.assertEqual(float(contribution.score), 7.0)
+
+    def test_comun_rating_rebuild_uses_stored_post_contributions(self):
+        author = Author.objects.create(username="rating-rebuild-author", title="Rating Rebuild Author")
+        post = Post.objects.create(
+            author=author,
+            message_id=992,
+            title="Пост для rebuild",
+            content="{}",
+            rating=7,
+            comments_count=2,
+            raw_data={"source": "manual_comun", "comun_slug": self.comun.slug},
+            is_pending=False,
+            is_blocked=False,
+        )
+        ComunPostRatingContribution.objects.create(
+            comun=self.comun,
+            post=post,
+            score=7.2,
+        )
+
+        _votes_up, _votes_down, rating_score = community_service._recalculate_comun_rating(self.comun.id)
+
+        self.assertEqual(float(rating_score), 7.2)
+        self.comun.refresh_from_db()
+        self.assertEqual(float(self.comun.rating_score), 7.2)
 
     def test_auth_posts_require_comun_for_published_post(self):
         response = self.client.post(

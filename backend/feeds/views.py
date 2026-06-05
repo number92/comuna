@@ -2565,7 +2565,11 @@ def post_comments(request: HttpRequest, post_id: int) -> HttpResponse:
     )
     Post.objects.filter(id=post.id).update(comments_count=F("comments_count") + 1)
     post.refresh_from_db(fields=["comments_count"])
-    community_service._recalculate_comun_ratings_for_post(post)
+    community_service._apply_comun_rating_delta_for_post(
+        post,
+        value_delta=1,
+        event_type="post_comment",
+    )
     _maybe_notify_post_comment(post, comment, parent=parent)
     _maybe_notify_comment_reply(post, parent, comment)
     _maybe_notify_author_comment(post, comment)
@@ -2638,7 +2642,11 @@ def comment_detail(request: HttpRequest, comment_id: int) -> HttpResponse:
     Post.objects.filter(id=comment.post_id, comments_count__gt=0).update(
         comments_count=F("comments_count") - 1
     )
-    community_service._recalculate_comun_ratings_for_post(comment.post_id)
+    community_service._apply_comun_rating_delta_for_post(
+        comment.post_id,
+        value_delta=-1,
+        event_type="post_comment",
+    )
 
     return JsonResponse({"ok": True, "comment_id": comment.id})
 
@@ -2684,7 +2692,11 @@ def comment_like(request: HttpRequest, comment_id: int) -> HttpResponse:
         delta = 1
 
     if delta:
-        community_service._recalculate_comun_ratings_for_post(comment.post_id)
+        community_service._apply_comun_rating_delta_for_post(
+            comment.post_id,
+            value_delta=delta,
+            event_type="comment_like",
+        )
 
     likes_count = PostCommentLike.objects.filter(comment=comment).count()
 
@@ -2751,7 +2763,11 @@ def post_like(request: HttpRequest, post_id: int) -> HttpResponse:
             actor_id=user.id,
             post_id=post.id,
         )
-        community_service._recalculate_comun_ratings_for_post(post.id)
+        community_service._apply_comun_rating_delta_for_post(
+            post.id,
+            value_delta=delta,
+            event_type="post_vote",
+        )
 
     liked = new_vote == 1
 

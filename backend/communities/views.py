@@ -2015,8 +2015,6 @@ def comun_detail_manage(request: HttpRequest, slug: str) -> HttpResponse:
         if custom_templates_error:
             return JsonResponse({"ok": False, "error": custom_templates_error}, status=400)
 
-    _recalculate_comun_rating(comun.id)
-
     comun = (
         Comun.objects.filter(id=comun.id)
         .select_related("creator", "welcome_post", "telegram_source_author")
@@ -2085,11 +2083,11 @@ def comun_vote(request: HttpRequest, slug: str) -> HttpResponse:
             ComunVote.objects.create(comun_id=comun.id, user_id=current_user.id, value=vote_value)
             new_vote = vote_value
 
-        votes_up, votes_down, rating_score = _recalculate_comun_rating(comun.id)
+        votes_up, votes_down = community_service._sync_comun_vote_counts(comun.id)
 
     comun.votes_up = votes_up
     comun.votes_down = votes_down
-    comun.rating_score = rating_score
+    comun.refresh_from_db(fields=["rating_score"])
 
     return JsonResponse(
         {
@@ -2246,7 +2244,12 @@ def comun_posts(request: HttpRequest, slug: str) -> HttpResponse:
             category=category,
         )
         community_service._maybe_increment_comun_author_count_for_post(post, comun=comun)
-        _recalculate_comun_rating(comun.id)
+        if post.rating:
+            community_service._apply_comun_rating_delta_for_post(
+                post,
+                value_delta=post.rating,
+                event_type="post_vote",
+            )
         serialized_post = editor_service._serialize_post_for_user(request, post, current_user)
         serialized_post["comun_category_id"] = category.id if category else None
         serialized_post["comun_category"] = _serialize_comun_category(category, comun) if category else None

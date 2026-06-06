@@ -164,7 +164,7 @@
       >
         <option value="">Мой аккаунт (@{$siteUser?.username})</option>
         {#each commentMasks as mask}
-          <option value={mask.key}>@{mask.username}</option>
+          <option value={mask.key}>{mask.display_name || `@${mask.username}`}</option>
         {/each}
       </select>
       <p class="text-xs text-slate-500 dark:text-zinc-500">

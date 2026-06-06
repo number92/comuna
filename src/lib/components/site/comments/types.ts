@@ -21,6 +21,7 @@ export type SiteComment = {
 export type SiteCommentMask = {
   key: string
   username: string
+  display_name?: string | null
 }
 
 export type SiteCommentNode = {

@@ -172,16 +172,16 @@ _COMUN_ACTIVITY_POINTS = {
     "read": 1,
 }
 _COMMENT_PERSONAS = (
-    {"key": "persona_1", "username": "anna_m", "display_name": "Анна М.", "bio": "Часто обсуждает новые релизы и сериалы."},
-    {"key": "persona_2", "username": "igor_p", "display_name": "Игорь П.", "bio": "Любит спорить о киноиндустрии и трендах."},
-    {"key": "persona_3", "username": "olga_v", "display_name": "Ольга В.", "bio": "Следит за фестивалями, кастом и премьерами."},
-    {"key": "persona_4", "username": "sergey_k", "display_name": "Сергей К.", "bio": "Собирает новости о продакшене и сериалах."},
-    {"key": "persona_5", "username": "maria_t", "display_name": "Мария Т.", "bio": "Комментирует актерские работы и сценарии."},
-    {"key": "persona_6", "username": "nikita_l", "display_name": "Никита Л.", "bio": "Следит за анонсами, кассой и стримингами."},
-    {"key": "persona_7", "username": "elena_s", "display_name": "Елена С.", "bio": "Пишет о любимых франшизах и премьерах."},
-    {"key": "persona_8", "username": "denis_r", "display_name": "Денис Р.", "bio": "Смотрит новинки и обсуждает их без спойлеров."},
-    {"key": "persona_9", "username": "kate_n", "display_name": "Катя Н.", "bio": "Любит разговоры про жанры, актеров и сериалы."},
-    {"key": "persona_10", "username": "alex_b", "display_name": "Алекс Б.", "bio": "Следит за индустрией и громкими релизами."},
+    {"key": "persona_1", "username": "anna_m", "display_name": "YARE YARE", "bio": "Часто обсуждает новые релизы и сериалы."},
+    {"key": "persona_2", "username": "igor_p", "display_name": "Банана Фан", "bio": "Любит спорить о киноиндустрии и трендах."},
+    {"key": "persona_3", "username": "olga_v", "display_name": "Юлия", "bio": "Следит за фестивалями, кастом и премьерами."},
+    {"key": "persona_4", "username": "sergey_k", "display_name": "Сергей", "bio": "Собирает новости о продакшене и сериалах."},
+    {"key": "persona_5", "username": "maria_t", "display_name": "Leonchik", "bio": "Комментирует актерские работы и сценарии."},
+    {"key": "persona_6", "username": "nikita_l", "display_name": "Akuta", "bio": "Следит за анонсами, кассой и стримингами."},
+    {"key": "persona_7", "username": "elena_s", "display_name": "Тот самый", "bio": "Пишет о любимых франшизах и премьерах."},
+    {"key": "persona_8", "username": "denis_r", "display_name": "Даниэль", "bio": "Смотрит новинки и обсуждает их без спойлеров."},
+    {"key": "persona_9", "username": "kate_n", "display_name": "NDA", "bio": "Любит разговоры про жанры, актеров и сериалы."},
+    {"key": "persona_10", "username": "alex_b", "display_name": "WeakKun", "bio": "Следит за индустрией и громкими релизами."},
 )
 _COMMENT_PERSONAS_BY_KEY = {item["key"]: item for item in _COMMENT_PERSONAS}
 _COMMENT_PERSONAS_BY_USERNAME = {
@@ -539,6 +539,11 @@ def _comment_personas_for_user(user: User | None) -> list[dict]:
             {
                 "key": item["key"],
                 "username": (getattr(persona_user, "username", "") or item["username"]).strip(),
+                "display_name": (
+                    getattr(getattr(persona_user, "site_profile", None), "display_name", "")
+                    or item.get("display_name")
+                    or item["username"]
+                ),
             }
         )
     return personas

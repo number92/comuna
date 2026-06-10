@@ -15,7 +15,7 @@
 1. **Post** — заголовок, даты, автор, JSON-контент из `post_content`, врезка из `post_excerpt`, обложка из `_thumbnail_id`. **`message_id`** — ID сообщения Telegram (уникальность с `author`); у переноса с ПТ подставляется синтетический отрицательный ID, связь с WP — `raw_data.legacy_wp_id` / `LegacyWpPostMap`.
 2. **URL** — у нас `/b/post/{id}`, на ПТ `/articles/…/{slug}/`; связь slug ↔ id в `LegacyWpPostMap`.
 3. **Картинки** — те же пути `uploads/YYYY/MM`, но хост и каталог Comuna: `/media/legacy-wp/uploads/…`.
-4. **Блоки** — большинство типов WP Gutenberg уже сопоставлены в таблице; **post_link**, **author**, **теги** — ещё нужно довести; **раздел Tambur** — см. ниже (поле `Post.rubric` на Comuna снято, вместо него **Comun** + теги).
+4. **Блоки** — Gutenberg сопоставлены; **post_link** / **author** — `rewrite_wp_post_content`; **теги** — `import_wp_post_tags`; **раздел Tambur** — `assign_wp_post_comuns` (см. ниже).
 
 5. **Комментарии и лайки** — см. раздел ниже и строки **Комментарий** в CSV; просмотры поста — `wp_post_views`.
 

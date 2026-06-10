@@ -9,4 +9,5 @@ pymorphy2>=0.9
 pymorphy2-dicts-ru>=2.4
 setuptools>=65.0
 google-auth>=2.38
+requests>=2.32,<3.0
 PyJWT[crypto]>=2.8

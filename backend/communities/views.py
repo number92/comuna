@@ -2203,11 +2203,11 @@ def comun_welcome_post_options(request: HttpRequest, slug: str) -> HttpResponse:
     if not _comun_is_moderator(current_user, comun):
         return JsonResponse({"ok": False, "error": "forbidden"}, status=403)
 
-    limit_raw = request.GET.get("limit", "10")
+    limit_raw = request.GET.get("limit", "5")
     try:
         limit = min(max(int(limit_raw), 1), 10)
     except (TypeError, ValueError):
-        limit = 10
+        limit = 5
 
     query = str(request.GET.get("q") or "").strip()
     posts_query = community_service._comun_posts_base_queryset(comun, timezone.now()).only(

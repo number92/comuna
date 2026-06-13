@@ -2498,8 +2498,11 @@
     for (const key of ['text', 'caption', 'title', 'description', 'quote', 'message']) {
       if (typeof value[key] === 'string') chunks.push(stripHtmlTags(value[key]));
     }
-    for (const key of ['items', 'content', 'rows']) {
-      if (Array.isArray(value[key])) chunks.push(collectEditorText(value[key]));
+    for (const key of ['blocks', 'data', 'items', 'content', 'rows', 'images', 'file', 'before', 'after']) {
+      const nested = value[key];
+      if (Array.isArray(nested) || (nested && typeof nested === 'object')) {
+        chunks.push(collectEditorText(nested));
+      }
     }
     return chunks.filter(Boolean).join(' ');
   }
@@ -2507,7 +2510,7 @@
   function extractSourcePlainText(rawContent: string): string {
     const editorContent = parseSerializedEditorModel(rawContent);
     if (editorContent) {
-      return normalizePreviewCompareText(collectEditorText(editorContent.blocks ?? []));
+      return normalizePreviewCompareText(collectEditorText(editorContent));
     }
     return normalizePreviewCompareText(
       rawContent

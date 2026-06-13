@@ -93,6 +93,9 @@
   $: backendPostRatings = (
     post.post as { post_ratings?: Record<string, BackendPostRating> | null }
   ).post_ratings ?? {}
+  $: backendHasFullContent = Boolean(
+    (post.post as { has_full_content?: boolean }).has_full_content
+  )
   $: backendVotePollParticipations = (
     post.post as { vote_poll_participations?: VotePollParticipation[] }
   ).vote_poll_participations ?? []
@@ -482,6 +485,7 @@
               clickThrough={false}
               {showFullBody}
               collapsible={true}
+              canExpandPreview={backendHasFullContent}
               externalPreviewImageUrl={post.post.url}
               class="relative text-slate-600 dark:text-zinc-400"
               on:expand={handleBackendPreviewExpand}

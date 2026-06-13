@@ -1020,6 +1020,7 @@ export type BackendPost = {
   post_rating?: BackendPostRating | null
   preview_image_url?: string | null
   thumbnail_url?: string | null
+  has_full_content?: boolean
   created_at: string
   source_url?: string | null
   channel_url?: string | null
@@ -1093,6 +1094,7 @@ export const backendPostToPostView = (
       post_ratings: post.post_ratings ?? {},
       post_rating: post.post_rating ?? null,
       url: options.includePreviewMedia === false ? '' : previewImageUrl,
+      has_full_content: Boolean(post.has_full_content),
       tags: post.tags ?? [],
       published: post.created_at,
       updated: post.created_at,

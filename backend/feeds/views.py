@@ -128,7 +128,7 @@ from .models import (
     StaticPageContent,
     Tag,
 )
-from .preview import build_post_preview
+from .preview import build_post_preview, post_preview_has_more
 from notifications.service import (
     create_grouped_user_notification,
     create_user_notification,
@@ -1217,6 +1217,14 @@ def _post_card_preview_content(post: Post) -> str:
     return rewrite_public_media_urls(
         build_post_preview(post.content or "", post.raw_data).get("preview_content", "")
     )
+
+
+def _post_card_preview_payload(post: Post) -> dict[str, object]:
+    preview_content = _post_card_preview_content(post)
+    return {
+        "content": preview_content,
+        "has_full_content": post_preview_has_more(post.content or "", preview_content),
+    }
 
 
 def _serialize_post_preview_image_fields(
@@ -2997,7 +3005,7 @@ def author_posts(request: HttpRequest, username: str) -> HttpResponse:
                 "can_manage_bug_report_status": _user_can_manage_bug_report_status(current_user, post),
                 "bug_report_confirmation": _serialize_bug_report_confirmation(post, current_user),
                 "comun": community_service._serialize_post_comun(request, post, current_user),
-                "content": _post_card_preview_content(post),
+                **_post_card_preview_payload(post),
                 "poll": poll_payload,
                 **_serialize_post_preview_image_fields(request, post, template_payload),
                 "source_url": post.source_url,
@@ -3187,7 +3195,7 @@ def tag_posts(request: HttpRequest, tag: str) -> HttpResponse:
                 "can_manage_bug_report_status": _user_can_manage_bug_report_status(current_user, post),
                 "bug_report_confirmation": _serialize_bug_report_confirmation(post, current_user),
                 "comun": community_service._serialize_post_comun(request, post, current_user),
-                "content": _post_card_preview_content(post),
+                **_post_card_preview_payload(post),
                 "poll": poll_payload,
                 **_serialize_post_preview_image_fields(request, post, template_payload),
                 "source_url": post.source_url,
@@ -3581,7 +3589,7 @@ def favorites_feed(request: HttpRequest) -> HttpResponse:
                 "template": template_payload,
                 "bug_report_confirmation": _serialize_bug_report_confirmation(post, user),
                 "comun": community_service._serialize_post_comun(request, post, user),
-                "content": _post_card_preview_content(post),
+                **_post_card_preview_payload(post),
                 "poll": poll_payload,
                 **_serialize_post_preview_image_fields(request, post, template_payload),
                 "source_url": post.source_url,
@@ -3630,7 +3638,7 @@ def _serialize_backend_post_card(
         "can_manage_bug_report_status": _user_can_manage_bug_report_status(current_user, post),
         "bug_report_confirmation": _serialize_bug_report_confirmation(post, current_user),
         "comun": community_service._serialize_post_comun(request, post, current_user),
-        "content": _post_card_preview_content(post),
+        **_post_card_preview_payload(post),
         "poll": poll_payload,
         "post_ratings": _serialize_post_ratings(post, current_user),
         "post_rating": _serialize_post_rating(post, current_user, template_payload=template_payload),
@@ -3679,7 +3687,7 @@ def _serialize_lightweight_post_card(
         "can_manage_bug_report_status": _user_can_manage_bug_report_status(current_user, post),
         "bug_report_confirmation": _serialize_bug_report_confirmation(post, current_user),
         "comun": community_service._serialize_post_comun(request, post, current_user),
-        "content": _post_card_preview_content(post),
+        **_post_card_preview_payload(post),
         "poll": poll_payload,
         "post_ratings": _serialize_post_ratings(post, current_user),
         "post_rating": _serialize_post_rating(post, current_user, template_payload=template_payload),
@@ -3962,7 +3970,7 @@ def search_content(request: HttpRequest) -> HttpResponse:
                     "can_manage_bug_report_status": _user_can_manage_bug_report_status(current_user, post),
                     "bug_report_confirmation": _serialize_bug_report_confirmation(post, current_user),
                     "comun": community_service._serialize_post_comun(request, post, current_user),
-                    "content": _post_card_preview_content(post),
+                    **_post_card_preview_payload(post),
                     "poll": poll_payload,
                     **_serialize_post_preview_image_fields(request, post, template_payload),
                     "source_url": post.source_url,

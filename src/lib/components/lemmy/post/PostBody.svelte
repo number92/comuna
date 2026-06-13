@@ -107,6 +107,7 @@
   export let clickThrough = false
   export let showFullBody = false
   export let collapsible = false
+  export let canExpandPreview = false
   export let externalPreviewImageUrl: string | null | undefined = null
   export let ratingVoteUrl: string | null = null
   $: void view
@@ -3132,6 +3133,7 @@
       const previewText = normalizePreviewCompareText(processedBody);
       const sourceText = extractSourcePlainText(body);
       previewCanExpand =
+        canExpandPreview ||
         previewWasTrimmed ||
         Boolean(postId && looksTrimmedPreview(processedBody)) ||
         Boolean(sourceText && sourceText.length > previewText.length + 8);
@@ -3139,6 +3141,7 @@
       previewCanExpand = false;
     }
     void externalPreviewImageUrl
+    void canExpandPreview
     void pollRenderState
     void postRatingsRenderState
     void expanded
